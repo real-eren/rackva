@@ -1,61 +1,114 @@
 #lang racket
+(provide (combine-out make-lens
+                      lens-view
+                      lens-set
+                      lens-transform
+                      identity-lens
+                      lens-compose
+                      car-lens
+                      cdr-lens
+                      first-lens
+                      second-lens))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;; A bare-bones implementation of the lens library ;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; mostly adheres to the API found at                    ;;
+;; https://docs.racket-lang.org/lens/lens-reference.html ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; takes a getter and a setter
 (define make-lens cons)
+;; returns the getter of a lens
 (define getter car)
+;; returns the setter of a lens
 (define setter cdr)
 
-
+;; applies l's getter to t
 (define lens-view
   (lambda (l t)
     ((getter l) t)))
-    
+
+;; applies l's setter to t with val
 (define lens-set
   (lambda (l t val)
     ((setter l) t val)))
 
+;; transforms the view (via l) of t with mapping function f
 (define lens-transform
   (lambda (l t f)
     (lens-set (setter l)
               t
               (f (lens-view l t)))))
 
-
+;; performs no destructuring
+;; (combine2 l identity-lens) -> l
+;; (combine2 identity-lens l) -> l
 (define identity-lens
   (make-lens (lambda (t) t)
              (lambda (t val) val)))
 
 
-; apply outer lens to result of inner lens
+;; first-lens accepts the view of second-lens
+;; ex: second-lens = (combine2 car-lens cdr-lens)
+;; views the car of the cdr
 (define combine2
-  (lambda (outer-lens inner-lens)
+  (lambda (first-lens second-lens)
     (cond
-      [(eq? outer-lens identity-lens)      inner-lens]
-      [(eq? inner-lens identity-lens)      outer-lens]
+      [(eq? second-lens identity-lens)      first-lens]
+      [(eq? first-lens identity-lens)      second-lens]
       [else
        (make-lens (lambda (t)
-                    (lens-view outer-lens
-                               (lens-view inner-lens
+                    (lens-view first-lens
+                               (lens-view second-lens
                                           t)))
                   (lambda (t val)
-                    (lens-set outer-lens
-                              (lens-set t
+                    (lens-set second-lens
+                              t
+                              (lens-set first-lens
+                                        (lens-view second-lens
+                                                   t)
                                         val))))])))
 
-(define combine
+;; combines the lenses such that
+;; 'eye' -> first lens -> ... -> last lens -> target
+;; lens i consumes the view of lens i+1
+;; ex: lens into 3-dimensional matrix for elem at x=1,y=2,z=3
+;; where each dimension is a row. x.y.z
+;; (lens-compose '(third-lens second-lens first-lens))
+(define lens-compose
   (lambda (lenses)
+    ; (foldr combine2 identity-lens lenses)
     (cond
-      [(null? lenses)         identity-lens]
-      [(null? (cdr lenses)    (car lenses))]
-      [else                   (combine2 (car lenses) (combine (cdr lenses)))])))
+      [(null? lenses)           identity-lens]
+      [(null? (cdr lenses))     (car lenses)]
+      [else                     (combine2 (car lenses)
+                                          (lens-compose (cdr lenses)))])))
 
+;; combines the lenses such that
+;; 'eye' -> last lens -> ... -> first lens -> target
+;; lens i consumes the view of lens i-1
+;; opposite order of lens-compose
+(define lens-thrush
+  (lambda (lenses)
+    (foldl combine2 identity-lens lenses)))
 
+;;;;;;;; basic lenses ;;;;;;;;
 
 (define car-lens
   (make-lens car
              (lambda (p c)
                (cons c (cdr p)))))
 
+
+(define first-lens car-lens)
+
+
 (define cdr-lens
   (make-lens cdr
              (lambda (p c)
                (cons (car p) c))))
+
+
+(define second-lens (combine2 first-lens cdr-lens))
+
