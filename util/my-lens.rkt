@@ -125,5 +125,5 @@
   (lambda (k)
     (if (= k 1)
         car-lens
-        (lens-compose (list-kth-elem-lens (- k 1) cdr-lens)))))
+        (combine2 (list-kth-elem-lens (- k 1)) cdr-lens))))
 
