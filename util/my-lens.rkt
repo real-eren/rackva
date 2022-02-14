@@ -1,17 +1,23 @@
 #lang racket
 (provide (combine-out make-lens
+                      getter
+                      setter
+                      
                       lens-view
                       lens-set
                       lens-transform
+                      
                       identity-lens
                       lens-compose
+                      
                       car-lens
                       cdr-lens
                       first-lens
-                      second-lens))
+                      second-lens
+                      list-kth-elem-lens))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;; A bare-bones implementation of the lens library ;;;;;
+;;;;; A bare-bones implementation of the lens pattern ;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; mostly adheres to the API found at                    ;;
 ;; https://docs.racket-lang.org/lens/lens-reference.html ;;
@@ -30,6 +36,8 @@
     ((getter l) t)))
 
 ;; applies l's setter to t with val
+;; note: does NOT mutate t.
+;; Returns a copy of t with val replacing the view via l
 (define lens-set
   (lambda (l t val)
     ((setter l) t val)))
@@ -100,15 +108,21 @@
              (lambda (p c)
                (cons c (cdr p)))))
 
-
-(define first-lens car-lens)
-
-
 (define cdr-lens
   (make-lens cdr
              (lambda (p c)
                (cons (car p) c))))
 
 
+(define first-lens car-lens)
+
 (define second-lens (combine2 first-lens cdr-lens))
+
+;; produces a lens that views the k-th element of a list
+;; passing 1 returns car-lens, 2 cadr-lens, etc
+(define list-kth-elem-lens
+  (lambda (k)
+    (if (= k 1)
+        car-lens
+        (lens-compose (list-kth-elem-lens (- k 1) cdr-lens)))))
 
