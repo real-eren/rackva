@@ -9,6 +9,7 @@
                       
                       identity-lens
                       lens-compose
+                      lens-thrush
                       
                       car-lens
                       cdr-lens
