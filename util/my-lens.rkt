@@ -67,7 +67,7 @@
 ;; get, transform, set
 (define lens-transform
   (lambda (lenz target transform)
-    (lens-set (setter lenz)
+    (lens-set lenz
               target
               (transform (lens-view lenz target)))))
 
@@ -133,9 +133,9 @@
              (lambda (p v)
                (cons (car p) v))))
 
-
+;; lens for the first item in a list
 (define first-lens car-lens)
-
+;; lens for the second item in a list
 (define second-lens (combine2 first-lens cdr-lens))
 
 ;; produces a lens that views the k-th element of a list
@@ -145,3 +145,4 @@
     (if (= k 1)
         car-lens
         (combine2 (list-kth-elem-lens (- k 1)) cdr-lens))))
+
