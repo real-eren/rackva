@@ -2,7 +2,8 @@
 
 (require "map.rkt")
 
-(provide (prefix-out state-
+(provide new-state
+         (prefix-out state-
                      (combine-out declare-var
                                   assign-var
                                   var-declared?
