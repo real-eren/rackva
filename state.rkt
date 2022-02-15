@@ -1,24 +1,20 @@
 #lang racket
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;; STATE ;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(require (combine-in "util/structures.rkt"
+                     (only-in "util/map.rkt"
+                              map:empty)))
+
+(provide (combine-out new-state
+                      state-bindings-lens
+                      default-state))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; represents the state of the program being interpreted
+
+(define new-state struc-1)
+
+(define state-bindings-lens e1-lens)
 
 ;; creates a default state
 ;; no bindings, return=false, value=undefined
-(define init-state
-  (lambda (init-map)
-    ('((init-map)      ;; vars name:value bindings
-       (init-map)))))  ;; registers name:value bindings
-
-;; retrieves the var bindings of the state
-(define bindings-lens
-  (lambda (state)
-    (car state)))
-
-;; retrieves the registers of the state
-(define registers-lens
-  (lambda (state)
-    (cadr state)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define default-state (new-state map:empty))
