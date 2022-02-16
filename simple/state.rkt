@@ -11,17 +11,10 @@
                                   var-value
                                   set-return?
                                   return?
-                                  set-value
-                                  value)))
+                                  set-return-value
+                                  get-return-value)))
 (define return?-name "return?")
 (define value-name "value")
-
-;; creates a new state with return? = false and value = null
-(define new-state (assign-var value-name
-                                    null
-                                    (assign-var return?-name
-                                                      #f
-                                                      map-empty)))
 
 (define declare-var
   (lambda (var-name state)
@@ -33,7 +26,7 @@
 
 (define var-declared?
   (lambda (var-name state)
-    (map-result:has-value? (map-get var-name state))))
+    (map-contains? var-name state)))
 
 (define var-initialized?
   (lambda (var-name state)
@@ -42,6 +35,14 @@
 (define var-value
   (lambda (var-name state)
     (map-result:get-value (map-get var-name state))))
+
+
+;; creates a new state with return? = false and value = null
+(define new-state (assign-var value-name
+                              null
+                              (assign-var return?-name
+                                          #f
+                                          map-empty)))
 
 
 (define set-return?
@@ -53,11 +54,10 @@
     (var-value return?-name state)))
 
 
-(define set-value
-  (lambda (value state)
-    (assign-var value-name value state)))
-
-(define value
+(define get-return-value
   (lambda (state)
     (var-value value-name state)))
 
+(define set-return-value
+  (lambda (value state)
+    (assign-var value-name value state)))

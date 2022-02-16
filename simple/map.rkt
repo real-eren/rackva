@@ -3,6 +3,7 @@
 (provide (prefix-out map-
                      (combine-out empty
                                   empty?
+                                  contains?
                                   get
                                   result:has-value?
                                   result:get-value
@@ -38,6 +39,11 @@
 
 
 ;;;;;;;; map functions ;;;;;;;;
+
+; returns whether an entry with the given key exists
+(define contains?
+  (lambda (key map)
+    (result:has-value? (get key map))))
 
 ;; returns, if present, the entry in the map-list with the given key
 (define get
