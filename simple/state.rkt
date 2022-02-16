@@ -9,7 +9,6 @@
                                   var-declared?
                                   var-initialized?
                                   var-value
-                                  set-return?
                                   return?
                                   set-return-value
                                   get-return-value)))
@@ -38,20 +37,13 @@
 
 
 ;; creates a new state with return? = false and value = null
-(define new-state (assign-var value-name
-                              null
-                              (assign-var return?-name
-                                          #f
-                                          map-empty)))
-
-
-(define set-return?
-  (lambda (return? state)
-    (assign-var return?-name return? state)))
+(define new-state (assign-var return?-name
+                              #f
+                              map-empty))
 
 (define return?
   (lambda (state)
-    (var-value return?-name state)))
+    (map-contains? value-name state)))
 
 
 (define get-return-value

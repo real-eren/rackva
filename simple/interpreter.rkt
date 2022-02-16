@@ -14,7 +14,7 @@
 ;; takes a file name and prints the result 
 (define interpret
   (lambda (file-name)
-    (print-result (execute ( file-name) new-state))))
+    (print-result (execute (parser file-name) new-state))))
 
 ;; takes a state and prints the output
 (define print-result
@@ -96,6 +96,7 @@
 ;; these take a symbol and return whether they are of a particular class
 (define action-is-assign? (checker-of '=))
 (define action-is-declare? (checker-of 'var))
+(define action-is-return? (checker-of 'return))
 (define action-is-if? (checker-of 'if))
 (define action-is-while? (checker-of 'while))
 
@@ -113,7 +114,10 @@
 ;;  returns what should be a list of the inner expressions
 (define inner-expr-list cdr)
 
+(define return-expression second)
 
+(define while-condition second)
+(define while-statement third)
 ; takes a list reresenting an if statement
 (define if-condition second)
 (define if-stmt1 third)
@@ -126,33 +130,66 @@
 (define Mstate-statement
   (lambda (statement state)
     (cond
-      [(state-return? state)          state] ; exit early on return
-      [(null? statement)                   (error "called Mstate on null expr")]
+      [(state-return? state)                       state] ; exit early on return
+      [(null? statement)                          (error "called Mstate on null expr")]
+      [(action-is-return? (action statement))     (Mstate-return (return-expression statement)
+                                                                 state)]
+      ; while
+      [(action-is-while? (action statement))      (Mstate-while (while-condition statement)
+                                                                (while-statement statement)
+                                                                state)]
       ; if
       [(action-is-if? (action statement))         (Mstate-if (if-condition statement)
                                                              (if-stmt1 statement)
                                                              (maybe-if-stmt2 statement)
                                                              state)]
+      ; x = expr
+      [(action-is-assign? (action statement))     (Mstate-assign (first (inner-expr-list statement))
+                                                                 (second (inner-expr-list statement))
+                                                                 state)]
       ; must be a list. first word is either a key-word or a function/op
       ; var x | var x = expr
       [(action-is-declare? (action statement))    (Mstate-decl (first (inner-expr-list statement))
-                                                               (second (inner-expr-list statement))
+                                                               (rest (inner-expr-list statement))
                                                               state)]
-      ; x = expr
-      [(action-is-assign? (action statement))     (Mstate-assign (inner-expr-list statement)
-                                                     state)]
-      
-      [(action-is-op? (action statement))      (Mstate-op (op-of-symbol (action statement))
-                                                 (inner-expr-list statement)
-                                                 state)]
       [else                           (error "undefined action")])))
 
 
 (define Mstate-expr
   (lambda (expr state)
-    (cond)))
+    (cond
+      ; x = expr
+      [(action-is-assign? (action expr))     (Mstate-assign (first (inner-expr-list expr))
+                                                            (second (inner-expr-list expr))
+                                                            state)]
+      
+      [(null? expr)                      (error "called Mstate on null expr")]
+      [(action-is-op? (action expr))     (Mstate-op (op-of-symbol (action expr))
+                                                         (inner-expr-list expr)
+                                                         state)]
+      ; base case
+      ; 1 | x
+      [(not (list? expr))                  state]
+      ; else nested
+      [else                                (error "unreachable")])))
 
-;; takes TODO
+;; Mstate for while statment
+(define Mstate-while
+  (lambda (while-cond while-body state)
+    (if (Mbool while-cond state)
+        (Mstate-while while-cond
+                      while-body
+                      (Mstate-statement while-body
+                                        (Mstate-statement while-cond state)))
+        (Mstate-statement while-cond state))))
+
+;; Mstate for return
+(define Mstate-return
+  (lambda (return-expr state)
+    (state-set-return-value (Mvalue return-expr state)
+                            (Mstate-expr return-expr state))))
+
+;; takes
 (define Mstate-if
   (lambda (condition stmt1 stmt2 state)
     (cond
