@@ -64,22 +64,29 @@
 (define is-if? (checker-of 'if))
 (define is-while? (checker-of 'while))
 
-;; Takes an expression and returns whether it contains an entry in the op-table
+;; returns whether a nested expression is of the boolean variety
+(define is-boolean?
+  (lambda (nested-expr)
+    (map-contains? (action nested-expr) boolean-op-table)))
+
+(define is-&&? (checker-of '&&))
+(define is-||? (checker-of '||))
+
+;; Takes a nested expression and returns whether it contains a recognized operation
 (define has-op?
   (lambda (expr)
-    (map-contains? (action expr) op-table)))
+    (or (map-contains? (action expr) arithmetic-op-table)
+        (map-contains? (action expr) boolean-op-table))))
 
-;; associative list from op-symbols to functions
+
+;; associative lists from op-symbols to functions
 ; the alternative is a (hard-coded) cond
 ; which is a less flexible design
-(define op-table
+; consider these to be constants
+
+(define boolean-op-table
   (map-from-interlaced-entry-list
-   (list '+  +
-         '-  -
-         '/  quotient
-         '*  *
-         '%  modulo
-         '&& (lambda (a b) (and a b))
+   (list '&& (lambda (a b) (and a b))
          '|| (lambda (a b) (or a b))
          '!  not
          '== eq?
@@ -90,10 +97,21 @@
          '>= >=)
    map-empty))
 
+(define arithmetic-op-table
+  (map-from-interlaced-entry-list
+   (list '+  +
+         '-  -
+         '/  quotient
+         '*  *
+         '%  modulo)
+   map-empty))
+
 ;; assuming the atom is an op-symbol, returns the associated function
 (define op-of-symbol
   (lambda (op-symbol)
-    (map-get op-symbol op-table)))
+    (if (map-contains? op-symbol arithmetic-op-table)
+        (map-get op-symbol arithmetic-op-table)
+        (map-get op-symbol boolean-op-table))))
 
 
 ;; takes a nested expr (list), returns what should be an action symbol
@@ -129,8 +147,6 @@
       [(is-while? statement)                (Mstate-while statement state)]
       [(is-if? statement)                   (Mstate-if statement state)]
       [(is-assign? statement)               (Mstate-assign statement state)]
-      ; must be a list. first word is either a key-word or a function/op
-      ; var x | var x = expr
       [(is-declaration? statement)          (Mstate-decl statement state)]
       [else                                 (error "unrecognized stmt:" statement)])))
 
@@ -243,11 +259,9 @@
                                                                         (symbol->string var-name)
                                                                         "."))]
       [(null? maybe-expr)                         (state-declare-var var-name state)]
-      [else                                       (Mstate-assign-impl var-name
-                                                                      (unbox maybe-expr)
-                                                                      (Mstate-decl-impl var-name
-                                                                                        null
-                                                                                        state))])))
+      [else                                       (state-assign-var var-name
+                                                                    (Mvalue (unbox maybe-expr) state)
+                                                                    (Mstate-expr (unbox maybe-expr) state))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ASSIGN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -266,11 +280,11 @@
                         state)))
 
 (define Mstate-assign-impl
-  (lambda (var-name expr state)
+  (lambda (var-name val-expr state)
     (if (state-var-declared? var-name state)
         (state-assign-var var-name
-                          (Mvalue expr state)
-                          (Mstate-expr expr state))
+                          (Mvalue val-expr state)
+                          (Mstate-expr val-expr state))
         ; else assigning to undeclared var
         (error (string-append "tried to assign to "
                               (symbol->string var-name)
@@ -287,12 +301,34 @@
 ;; takes an expression containing an operator
 ;; returns the state resulting from evaluating
 ;; the given expression in order of its operator's associativity
+;; also handles short-circuiting
 (define Mstate-op
   (lambda (expr state)
-    (state-after-expr-list
-     (sort-list-to-associativity-of-op (op-op-symbol expr)
-                                       (op-param-list expr))
-     state)))
+    (cond
+      [(is-||? expr)          (Mstate-|| (op-param-list expr) state)]
+      [(is-&&? expr)          (Mstate-&& (op-param-list expr) state)]
+      [else                   (state-after-expr-list
+                               (sort-list-to-associativity-of-op (op-op-symbol expr)
+                                                                 (op-param-list expr))
+                               state)])))
+
+;; takes a list of two expressions and a state
+;; returns state resulting from performing short-circuit or
+;; if the first expression evals to true, doesn't eval second
+(define Mstate-||
+  (lambda (exprs state)
+    (if (Mbool (first exprs) state)
+        (Mstate-expr (first exprs) state)
+        (Mstate-expr (second exprs) (Mstate-expr (first exprs) state)))))
+
+;; takes a list of two expressions and a state
+;; returns state resulting from performing short-circuit and
+;; if the first expression evals to false, doesn't eval second
+(define Mstate-&&
+  (lambda (exprs state)
+    (if (Mbool (first exprs) state)
+        (Mstate-expr (second exprs) (Mstate-expr (first exprs) state))
+        (Mstate-expr (first exprs) state))))
 
 
 ;; takes an operator and a list of params
@@ -320,11 +356,25 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; Takes a nested boolean expression (with two args)
+(define bool-left-op second)
+(define bool-right-op third)
+
 ;; takes an expression and evaluates it
 ;; error if not bool
 (define Mbool
   (lambda (expr state)
-    (assert-bool (Mvalue expr state))))
+    (cond
+      [(not (nested? expr))      (assert-bool (Mvalue-base expr state))]
+      [(is-||? expr)             (or (Mbool (bool-left-op expr)
+                                            state)
+                                     (Mbool (bool-right-op expr)
+                                            (Mstate-expr (bool-left-op expr) state)))]
+      [(is-&&? expr)             (and (Mbool (bool-left-op expr)
+                                             state)
+                                      (Mbool (bool-right-op expr)
+                                             (Mstate-expr (bool-left-op expr) state)))]
+      [else                      (assert-bool (Mvalue-op expr state))])))
 
 
 ; error if not bool, else allows through
@@ -348,8 +398,9 @@
       [(null? expr)                        (error "called Mvalue on a null expression")]
       [(not (nested? expr))                (Mvalue-base expr state)]
       ; else nested expr
-      [(has-op? expr)                      (Mvalue-op expr state)]
       [(is-assign? expr)                   (Mvalue (assign-expr expr) state)]
+      [(is-boolean? expr)                  (Mbool expr state)]
+      [(has-op? expr)                      (Mvalue-op expr state)]
       [else                                (error "unreachable in Mvalue")])))
 
 
@@ -378,15 +429,15 @@
       [else                                               (state-var-value var-symbol state)])))
 
 
-;; takes an expression containing an op
+;; takes a nested expression containing an op
 ;; and evaluates it
 (define Mvalue-op
   (lambda (expr state)
     (op-apply (op-of-symbol (op-op-symbol expr))
-              (map-expr-list-to-value-list
-               (sort-list-to-associativity-of-op (op-op-symbol expr)
-                                                 (op-param-list expr))
-               state))))
+                  (map-expr-list-to-value-list
+                   (sort-list-to-associativity-of-op (op-op-symbol expr)
+                                                     (op-param-list expr))
+                   state))))
 
 
 ;; takes a list of exprs and maps them to values,
