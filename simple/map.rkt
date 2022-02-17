@@ -80,9 +80,7 @@
     (insert-entry (entry-of key value) map)))
 
 ;; inserts the entry into the map
-(define insert-entry
-  (lambda (entry map)
-    (cons entry map)))
+(define insert-entry cons)
 
 ;; removes the first entry with matching key
 (define remove
@@ -116,6 +114,6 @@
     (if (null? lis)
         map
         (from-interlaced-entry-list (cdr (cdr lis))
-                                        (insert (first lis) (second lis) map)))))
+                                    (insert (first lis) (second lis) map)))))
 
 
