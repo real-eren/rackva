@@ -52,13 +52,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-
-
-;; returns a function that returns whether a input matches a symbol
+;; produces a function that returns whether a statement's 'action' symbol matches symbl
 (define checker-of
   (lambda (symbl)
     (lambda (statement) (eq? (action statement) symbl))))
-
 
 ;; these take a statement and return whether it is a particular construct
 (define is-assign? (checker-of '=))
@@ -102,6 +99,10 @@
 ;; use is-___ functions to determine whether the
 ;;  returned symbol actually represents a particular action
 (define action car)
+
+;; takes an expression and returns whether it contains other expressions
+(define nested? list?)
+
 ;; takes a maybe-value and extracts the value
 ;; throws error if maybe-value was `empty`
 (define unbox car)
@@ -124,16 +125,13 @@
       [(state-return? state)                state] ; exit early on return
       [(null? statement)                    (error "called Mstate on null statement")]
       [(is-return? statement)               (Mstate-return statement state)]
-      ; while
       [(is-while? statement)                (Mstate-while2 statement state)]
-      ; if
       [(is-if? statement)                   (Mstate-if2 statement state)]
-      ; x = expr
       [(is-assign? statement)               (Mstate-assign2 statement state)]
       ; must be a list. first word is either a key-word or a function/op
       ; var x | var x = expr
       [(is-declaration? statement)          (Mstate-decl2 statement state)]
-      [else                                 (error "unrecognized stmt" statement)])))
+      [else                                 (error "unrecognized stmt:" statement)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSION ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -144,9 +142,8 @@
 (define Mstate-expr
   (lambda (expr state)
     (cond
-      ; base case
-      ; 1 | x
-      [(not (list? expr))                    state]
+      ; base case: 1 | x
+      [(not (nested? expr))                    state]
       ; else nested
       ; x = expr
       [(is-assign? expr)                     (Mstate-assign2 expr state)]
@@ -168,7 +165,6 @@
                   (while-statement statement)
                   state)))
 
-;; Mstate for while statment
 (define Mstate-while
   (lambda (while-cond while-body state)
     (if (Mbool while-cond state)
@@ -211,6 +207,7 @@
 ; takes a statement representing a return statement
 ; extracts the expression portion
 (define return-expression second)
+
 ; takes a statement representing a return statement
 ; returns the resulting state,
 ;  which will have also set a special var in state corresponding to the return value
@@ -355,8 +352,8 @@
   (lambda (expr state)
     (cond
       [(null? expr)                        (error "called Mvalue on a null expression")]
-      [(not (list? expr))                  (Mvalue-base expr state)]
-      ; else non-empty list, nested expr
+      [(not (nested? expr))                (Mvalue-base expr state)]
+      ; else nested expr
       [(symbol-is-op? (action expr))       (Mvalue-op2 expr state)]
       [(is-assign? expr)                   (Mvalue (assign-expr expr) state)]
       [else                                (error "unreachable in Mvalue")])))
@@ -401,7 +398,7 @@
 ;; and returns the resulting value
 (define Mvalue-op
   (lambda (op-symbol param-list state)
-    (Mvalue-op-helper (op-of-symbol op-symbol)
+    (op-apply (op-of-symbol op-symbol)
                       (map-expr-list-to-value-list (sort-list-to-associativity-of-op op-symbol
                                                                                      param-list)
                                                    state))))
@@ -418,11 +415,9 @@
                                            (Mstate-expr (car expr-list) state))))))
 
 
-; fulfills the role of `let`.
-; i.e., not rewriting the lengthy expression above for every case
 ;; takes an op-symbol and a val-list * already in order of associativity
 ;; returns the value of the op applied to the list of values
-(define Mvalue-op-helper
+(define op-apply
   (lambda (op val-list)
     (cond
       [(eq? 1 (length val-list))                  (op (first val-list))]
