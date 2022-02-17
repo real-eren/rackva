@@ -5,11 +5,9 @@
                                   empty?
                                   contains?
                                   get
-                                  result:has-value?
-                                  result:get-value
                                   get-default
                                   insert
-                                  remove
+                                  remove-first
                                   remove-every
                                   replace
                                   from-interlaced-entry-list)))
@@ -44,22 +42,16 @@
 ; returns whether an entry with the given key exists
 (define contains?
   (lambda (key map)
-    (result:has-value? (get key map))))
+    (ormap (lambda (entry) (equal? key (entry-key entry))) map)))
 
-;; returns, if present, the entry in the map-list with the given key
+;; returns, if present, the value of the entry in the map-list with the given key
+;; else null
 (define get
   (lambda (key map)
     (cond
-      [(empty? map)                                     (result #f '())]
-      [(equal? key (entry-key (first-entry map)))       (result #t (entry-value (first-entry map)))]
-      [else                                             (get key (rest map))])))
-
-
-(define result:has-value? car)
-; returns the value from lookup. undefined if has-value is false
-(define result:get-value cdr) ; can add has-value? check for debugging
-; constructs a result for a lookup
-(define result cons)
+      [(empty? map)                                    null]
+      [(equal? key (entry-key (first-entry map)))      (entry-value (first-entry map))]
+      [else                                            (get key (rest map))])))
 
 
 ;; returns value of first encountered entry with key,
@@ -67,12 +59,12 @@
 (define get-default
   (lambda (key default map)
     (cond
-      [(empty? map)                                   default]
-      [(equal? key (entry-key (first-entry map)))           (entry-value (first-entry map))]
-      [else                                           (get-default key default (rest map))])))
+      [(empty? map)                                    default]
+      [(equal? key (entry-key (first-entry map)))      (entry-value (first-entry map))]
+      [else                                            (get-default key default (rest map))])))
 
 
-;; inserts the key-value pair into the map
+;; adds the key-value pair to the map
 ;; does not check if an entry with the same key exists
 (define insert
   (lambda (key value map)
@@ -82,13 +74,13 @@
 (define insert-entry cons)
 
 ;; removes the first entry with matching key
-(define remove
+(define remove-first
   (lambda (key map)
     (cond
       [(empty? map)                                    map]
-      [(equal? key (entry-key (first-entry map)))            (rest map)]
+      [(equal? key (entry-key (first-entry map)))      (rest map)]
       [else                                            (insert-entry (first-entry map)
-                                                                     (remove key (rest map)))])))
+                                                                     (remove-first key (rest map)))])))
 
 ;; removes every entry whose key matches 
 (define remove-every

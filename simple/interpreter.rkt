@@ -9,7 +9,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;; Mvalue functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;; High-level functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -64,13 +64,14 @@
 (define is-if? (checker-of 'if))
 (define is-while? (checker-of 'while))
 
-;; returns whether the symbol matches an entry in the op-table
-(define symbol-is-op?
-  (lambda (symbl)
-    (map-contains? symbl op-table)))
+;; Takes an expression and returns whether it contains an entry in the op-table
+(define has-op?
+  (lambda (expr)
+    (map-contains? (action expr) op-table)))
 
 ;; associative list from op-symbols to functions
-; the alternative is a repetitive cond 
+; the alternative is a (hard-coded) cond
+; which is a less flexible design
 (define op-table
   (map-from-interlaced-entry-list
    (list '+  +
@@ -92,7 +93,7 @@
 ;; assuming the atom is an op-symbol, returns the associated function
 (define op-of-symbol
   (lambda (op-symbol)
-    (map-result:get-value (map-get op-symbol op-table))))
+    (map-get op-symbol op-table)))
 
 
 ;; takes a nested expr (list), returns what should be an action symbol
@@ -125,12 +126,12 @@
       [(state-return? state)                state] ; exit early on return
       [(null? statement)                    (error "called Mstate on null statement")]
       [(is-return? statement)               (Mstate-return statement state)]
-      [(is-while? statement)                (Mstate-while2 statement state)]
-      [(is-if? statement)                   (Mstate-if2 statement state)]
-      [(is-assign? statement)               (Mstate-assign2 statement state)]
+      [(is-while? statement)                (Mstate-while statement state)]
+      [(is-if? statement)                   (Mstate-if statement state)]
+      [(is-assign? statement)               (Mstate-assign statement state)]
       ; must be a list. first word is either a key-word or a function/op
       ; var x | var x = expr
-      [(is-declaration? statement)          (Mstate-decl2 statement state)]
+      [(is-declaration? statement)          (Mstate-decl statement state)]
       [else                                 (error "unrecognized stmt:" statement)])))
 
 
@@ -142,13 +143,13 @@
 (define Mstate-expr
   (lambda (expr state)
     (cond
+      [(null? expr)                          (error "called Mstate on null expr")]
       ; base case: 1 | x
-      [(not (nested? expr))                    state]
+      [(not (nested? expr))                  state]
       ; else nested
       ; x = expr
-      [(is-assign? expr)                     (Mstate-assign2 expr state)]
-      [(null? expr)                          (error "called Mstate on null expr")]
-      [(symbol-is-op? (action expr))         (Mstate-op expr state)]
+      [(is-assign? expr)                     (Mstate-assign expr state)]
+      [(has-op? expr)                        (Mstate-op expr state)]
       [else                                  (error "unrecognized expr" expr)])))
 
 
@@ -158,20 +159,20 @@
 (define while-condition second)
 (define while-statement third)
 
-;; takes a statement represnting a while statement
-(define Mstate-while2
-  (lambda (statement state)
-    (Mstate-while (while-condition statement)
-                  (while-statement statement)
-                  state)))
-
+;; takes a statement representing a while statement
 (define Mstate-while
+  (lambda (statement state)
+    (Mstate-while-impl (while-condition statement)
+                       (while-statement statement)
+                       state)))
+
+(define Mstate-while-impl
   (lambda (while-cond while-body state)
     (if (Mbool while-cond state)
-        (Mstate-while while-cond
-                      while-body
-                      (Mstate-statement while-body
-                                        (Mstate-expr while-cond state)))
+        (Mstate-while-impl while-cond
+                           while-body
+                           (Mstate-statement while-body
+                                             (Mstate-expr while-cond state)))
         (Mstate-expr while-cond state))))
 
 
@@ -185,14 +186,14 @@
 
 ;; takes a statement representing an if statement
 ;; returns the resulting state
-(define Mstate-if2
-  (lambda (statement state)
-    (Mstate-if (if-condition statement)
-               (if-stmt1 statement)
-               (if-maybe-stmt2 statement)
-               state)))
-
 (define Mstate-if
+  (lambda (statement state)
+    (Mstate-if-impl (if-condition statement)
+                    (if-stmt1 statement)
+                    (if-maybe-stmt2 statement)
+                    state)))
+
+(define Mstate-if-impl
   (lambda (condition stmt1 maybe-stmt2 state)
     (cond
       [(Mbool condition state)            (Mstate-statement stmt1
@@ -226,27 +227,27 @@
 
 ;; takes a declaration statement
 ;; returns the resulting state
-(define Mstate-decl2
+(define Mstate-decl
   (lambda (statement state)
-    (Mstate-decl (decl-var statement)
-                 (decl-maybe-expr statement)
-                 state)))
+    (Mstate-decl-impl (decl-var statement)
+                      (decl-maybe-expr statement)
+                      state)))
 
 ;; declares the variable,
 ;; error if already declared
 ;; initializes if expr is provided
-(define Mstate-decl
+(define Mstate-decl-impl
   (lambda (var-name maybe-expr state)
     (cond
       [(state-var-declared? var-name state)       (error (string-append "attempted to re-declare "
                                                                         (symbol->string var-name)
                                                                         "."))]
       [(null? maybe-expr)                         (state-declare-var var-name state)]
-      [else                                       (Mstate-assign var-name
-                                                                 (unbox maybe-expr)
-                                                                 (Mstate-decl var-name
-                                                                              null
-                                                                              state))])))
+      [else                                       (Mstate-assign-impl var-name
+                                                                      (unbox maybe-expr)
+                                                                      (Mstate-decl-impl var-name
+                                                                                        null
+                                                                                        state))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ASSIGN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -258,13 +259,13 @@
 
 ;; assigns the value resulting from evaluating expr
 ;;  onto the state resulting from evaluating expr
-(define Mstate-assign2
-  (lambda (expr state)
-    (Mstate-assign (assign-var expr)
-                   (assign-expr expr)
-                   state)))
-
 (define Mstate-assign
+  (lambda (expr state)
+    (Mstate-assign-impl (assign-var expr)
+                        (assign-expr expr)
+                        state)))
+
+(define Mstate-assign-impl
   (lambda (var-name expr state)
     (if (state-var-declared? var-name state)
         (state-assign-var var-name
@@ -288,17 +289,10 @@
 ;; the given expression in order of its operator's associativity
 (define Mstate-op
   (lambda (expr state)
-    (Mstate-op-helper (op-op-symbol expr)
-                      (op-param-list expr)
-                      state)))
-
-;; returns the state resulting from evaluating
-;; the given list of expressions in order of the given op's associativity
-(define Mstate-op-helper
-  (lambda (op-symbol param-list state)
-    (state-after-expr-list (sort-list-to-associativity-of-op op-symbol
-                                                             param-list)
-                           state)))
+    (state-after-expr-list
+     (sort-list-to-associativity-of-op (op-op-symbol expr)
+                                       (op-param-list expr))
+     state)))
 
 
 ;; takes an operator and a list of params
@@ -354,7 +348,7 @@
       [(null? expr)                        (error "called Mvalue on a null expression")]
       [(not (nested? expr))                (Mvalue-base expr state)]
       ; else nested expr
-      [(symbol-is-op? (action expr))       (Mvalue-op2 expr state)]
+      [(has-op? expr)                      (Mvalue-op expr state)]
       [(is-assign? expr)                   (Mvalue (assign-expr expr) state)]
       [else                                (error "unreachable in Mvalue")])))
 
@@ -370,42 +364,33 @@
       [else                       (read-var token state)])))
 
 
-;; retrieves value of var from state
+;; retrieves value of a var from state
 ;; throws appropriate errors if undeclared or uninitialized
 (define read-var
-  (lambda (var-name state)
+  (lambda (var-symbol state)
     (cond
-      [(not (state-var-declared? var-name state))       (error (string-append "referenced "
-                                                                              (symbol->string var-name)
-                                                                              " before declaring it."))]
-      [(not (state-var-initialized? var-name state))    (error (string-append "accessed "
-                                                                              (symbol->string var-name)
-                                                                              " before initializing it."))]
-      [else                                             (state-var-value var-name state)])))
+      [(not (state-var-declared? var-symbol state))       (error (string-append "referenced "
+                                                                                (symbol->string var-symbol)
+                                                                                " before declaring it."))]
+      [(not (state-var-initialized? var-symbol state))    (error (string-append "accessed "
+                                                                                (symbol->string var-symbol)
+                                                                                " before initializing it."))]
+      [else                                               (state-var-value var-symbol state)])))
 
 
-;; takes the params in order of the op's associativity
-;; and returns the resulting value
-(define Mvalue-op2
-  (lambda (expr state)
-    (Mvalue-op (op-op-symbol expr)
-               (op-param-list expr)
-               state)))
-
-; ( (x == 1) or (x < 1) 
-;; takes an (assumed to be valid) op-symbol and a list of its parameters
-;; evals the params in order of the op's associativity
-;; and returns the resulting value
+;; takes an expression containing an op
+;; and evaluates it
 (define Mvalue-op
-  (lambda (op-symbol param-list state)
-    (op-apply (op-of-symbol op-symbol)
-                      (map-expr-list-to-value-list (sort-list-to-associativity-of-op op-symbol
-                                                                                     param-list)
-                                                   state))))
+  (lambda (expr state)
+    (op-apply (op-of-symbol (op-op-symbol expr))
+              (map-expr-list-to-value-list
+               (sort-list-to-associativity-of-op (op-op-symbol expr)
+                                                 (op-param-list expr))
+               state))))
 
 
 ;; takes a list of exprs and maps them to values,
-;; passing along the updated states
+;; propagating the state changes (so that they evaluate correctly)
 (define map-expr-list-to-value-list
   (lambda (expr-list state)
     (if (null? expr-list)
@@ -423,8 +408,8 @@
       [(eq? 1 (length val-list))                  (op (first val-list))]
       [(eq? 2 (length val-list))                  (op (first val-list) (second val-list))]
       [else                                       (error op val-list)])))
-    ; todo:
-    ; check types
-    ; check # params expected by op
+; todo:
+; check types
+; check # params expected by op (more-so for functions)
     
 

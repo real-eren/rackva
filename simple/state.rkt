@@ -40,7 +40,7 @@
 
 (define var-value
   (lambda (var-name state)
-    (map-result:get-value (map-get var-name state))))
+    (map-get var-name state)))
 
 
 (define return-value-name "return-value")
