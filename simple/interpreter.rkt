@@ -1,4 +1,12 @@
 #lang racket
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; CSDS 343 Interpreter Part 1
+;; 2022 Spring
+;; Group 1
+;; Duc Huy Nguyen, Eren Kahriman, Loc Nguyen
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (require "state.rkt"
          "map.rkt"
          "simpleParser.rkt")
@@ -226,15 +234,15 @@
 
 ; takes a statement representing a return statement
 ; extracts the expression portion
-(define return-expression second)
+(define return-expr-part second)
 
 ; takes a statement representing a return statement
 ; returns the resulting state,
 ;  which will have also set a special var in state corresponding to the return value
 (define Mstate-return
   (lambda (statement state)
-    (state-set-return-value (Mvalue (return-expression statement) state)
-                            (Mstate-expr (return-expression statement) state))))
+    (state-set-return-value (Mvalue (return-expr-part statement) state)
+                            (Mstate-expr (return-expr-part statement) state))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -385,7 +393,7 @@
   (lambda (val)
     (if (boolean? val)
         val
-        (error "" val " not a bool"))))
+        (error "" val " is not a bool"))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
