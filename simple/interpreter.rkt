@@ -243,7 +243,7 @@
                                                                                (symbol->string var-name)
                                                                                " before initializing it."))]
       [else                                             (state-var-value var-name state)])))
-
+(define op-param-list cdr)
 ;; returns the value of an expression, in the context of the given state
 (define Mvalue
   (lambda (expr state)
@@ -252,11 +252,14 @@
       [(not (list? expr))                  (Mvalue-base expr state)]
       ; else non-empty list, nested expr
       [(action-is-op? (action expr))       (Mvalue-op (action expr)
-                                                      (cdr expr)
+                                                      (op-param-list expr)
                                                       state)]
-      [(action-is-assign? (action expr))   (Mvalue (assign-expr expr) state)])))
+      [(action-is-assign? (action expr))   (Mvalue (assign-expr expr) state)]
+      [else                                (error "unreachable in Mvalue")])))
 
 
+;; takes an expression and evaluates it
+;; error if not bool
 (define Mbool
   (lambda (expr state)
     (assert-bool (Mvalue expr state))))
