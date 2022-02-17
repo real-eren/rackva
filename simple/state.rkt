@@ -12,8 +12,8 @@
                                   return?
                                   set-return-value
                                   get-return-value)))
-(define return?-name "return?")
-(define value-name "value")
+
+(define return-value-name "value")
 
 (define declare-var
   (lambda (var-name state)
@@ -29,27 +29,25 @@
 
 (define var-initialized?
   (lambda (var-name state)
-    (null? var-value)))
+    (not (null? var-value))))
 
 (define var-value
   (lambda (var-name state)
     (map-result:get-value (map-get var-name state))))
 
 
-;; creates a new state with return? = false and value = null
-(define new-state (assign-var return?-name
-                              #f
-                              map-empty))
+;; creates a new state with no var bindings
+(define new-state map-empty)
 
 (define return?
   (lambda (state)
-    (map-contains? value-name state)))
+    (map-contains? return-value-name state)))
 
 
 (define get-return-value
   (lambda (state)
-    (var-value value-name state)))
+    (var-value return-value-name state)))
 
 (define set-return-value
   (lambda (value state)
-    (assign-var value-name value state)))
+    (assign-var return-value-name value state)))
