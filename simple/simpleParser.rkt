@@ -337,5 +337,3 @@
           ((eq? (car firstsymbol) 'ID) (cdr firstsymbol))
           ((eq? (car firstsymbol) 'BOOLEAN) (cdr firstsymbol))
           (else (error 'parser "Unknown statmement")))));)
-
-(print (parser "if-test.txt"))
