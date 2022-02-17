@@ -6,11 +6,7 @@
 (provide interpret
          execute)
 
-; (= y (= x 2))
-; Mstate (y = (x = 2))
-; Mstate (x = 2) -> (new state . 2)
 
-;  2+2;
 ;; takes a file name and prints the result 
 (define interpret
   (lambda (file-name)
@@ -40,11 +36,8 @@
       [else                            (execute (cdr statement-list)
                                                 (Mstate-statement (car statement-list) state))])))
 
-(define int->int 0)
-(define int-int->int 1)
-(define int-int->bool 2)
-(define bool-bool->bool 3)
-(define bool->bool 4)
+
+
 
 (define ops-and-funs-list (list '+ +
                                 '- -
@@ -62,6 +55,13 @@
                                 '>= >=))
 ;; add typing by wrapping each function
 ;; assoc in-types and out-types
+
+
+(define int->int 0)
+(define int-int->int 1)
+(define int-int->bool 2)
+(define bool-bool->bool 3)
+(define bool->bool 4)
 
 ;; treats the first and second elems as key and value
 ;; returns a map with the entries
@@ -106,14 +106,24 @@
       
 
 ;; takes a nested expr (list), returns what should be an action symbol
-;; use action-is-___ checks to determine whether the
+;; use action-is-___ functions to determine whether the
 ;;  returned symbol actually represents a particular action
 (define action car)
 
-;; takes a nested expr (list),
-;;  returns what should be a list of the inner expressions
-(define inner-expr-list cdr)
 
+;; takes a list representing a declaration statement
+; var x; | var x = expr
+(define decl-var second)
+(define decl-maybe-expr cddr)
+
+;; takes a list representing a declaration statement
+; x = expr
+(define assign-var second)
+(define assign-expr third)
+
+
+
+; takes a list representing a return statement
 (define return-expression second)
 
 (define while-condition second)
@@ -144,34 +154,33 @@
                                                              (maybe-if-stmt2 statement)
                                                              state)]
       ; x = expr
-      [(action-is-assign? (action statement))     (Mstate-assign (first (inner-expr-list statement))
-                                                                 (second (inner-expr-list statement))
+      [(action-is-assign? (action statement))     (Mstate-assign (assign-var statement)
+                                                                 (assign-expr statement)
                                                                  state)]
       ; must be a list. first word is either a key-word or a function/op
       ; var x | var x = expr
-      [(action-is-declare? (action statement))    (Mstate-decl (first (inner-expr-list statement))
-                                                               (rest (inner-expr-list statement))
-                                                              state)]
-      [else                           (error "undefined action")])))
+      [(action-is-declare? (action statement))    (Mstate-decl (decl-var statement)
+                                                               (decl-maybe-expr statement)
+                                                               state)]
+      [else                                       (error "undefined action")])))
 
 
 (define Mstate-expr
   (lambda (expr state)
     (cond
-      ; x = expr
-      [(action-is-assign? (action expr))     (Mstate-assign (first (inner-expr-list expr))
-                                                            (second (inner-expr-list expr))
-                                                            state)]
-      
-      [(null? expr)                      (error "called Mstate on null expr")]
-      [(action-is-op? (action expr))     (Mstate-op (op-of-symbol (action expr))
-                                                         (inner-expr-list expr)
-                                                         state)]
       ; base case
       ; 1 | x
-      [(not (list? expr))                  state]
+      [(not (list? expr))                    state]
       ; else nested
-      [else                                (error "unreachable")])))
+      ; x = expr
+      [(action-is-assign? (action expr))     (Mstate-assign (assign-var expr)
+                                                            (assign-expr expr)
+                                                            state)]
+      [(null? expr)                          (error "called Mstate on null expr")]
+      [(action-is-op? (action expr))         (Mstate-op (op-of-symbol (action expr))
+                                                        (cdr expr)
+                                                        state)]
+      [else                                  (error "unreachable")])))
 
 ;; Mstate for while statment
 (define Mstate-while
@@ -191,12 +200,12 @@
 
 ;; takes
 (define Mstate-if
-  (lambda (condition stmt1 stmt2 state)
+  (lambda (condition stmt1 maybe-stmt2 state)
     (cond
       [(Mbool condition state)      (Mstate-statement stmt1
                                                       (Mstate-statement condition state))]
-      [(null? stmt2)                (Mstate-statement condition state)]
-      [else                         (Mstate-statement (car stmt2)
+      [(null? maybe-stmt2)                (Mstate-statement condition state)]
+      [else                         (Mstate-statement (car maybe-stmt2)
                                                       (Mstate-statement condition state))])))
 
 ;(define Mstate-e
@@ -247,12 +256,16 @@
       [(null? expr)                        (error "called Mvalue on a null expression")]
       [(not (list? expr))                  (Mvalue-base expr state)]
       ; else non-empty list, nested expr
-      [(action-is-op? (action expr))       (Mvalue-op (action expr) (inner-expr-list expr) state)]
-      [(action-is-assign? (action expr))   (Mvalue (inner-expr-list expr) state)])))
+      [(action-is-op? (action expr))       (Mvalue-op (action expr)
+                                                      (cdr expr)
+                                                      state)]
+      [(action-is-assign? (action expr))   (Mvalue (assign-expr expr) state)])))
+
 
 (define Mbool
   (lambda (expr state)
     (assert-bool (Mvalue expr state))))
+
 
 ; error if not bool, else allows through
 (define assert-bool
@@ -269,8 +282,8 @@
   (lambda (op-symbol param-list state)
     (Mvalue-op-helper op-symbol
                       (map-expr-list-to-value-list (sort-list-to-associativity-of-op op-symbol
-                                                                                     param-list
-                                                   )))))
+                                                                                     param-list)
+                                                   state))))
 
 ;; fulfills the role of `let`.
 ;; i.e., not rewriting the lengthy expression above for every case
@@ -279,6 +292,7 @@
 (define Mvalue-op-helper
   (lambda (op-symbol val-list)
     (cond
+      [(eq? 1 (length val-list))                  (op-of-symbol op-symbol)]
       ; check types
       ; check # params
       )))
@@ -287,7 +301,18 @@
 ;; the given list of expressions in order of the given op
 (define Mstate-op
   (lambda (op-symbol param-list state)
-    (state-result-of-expr-list (sort-list-to-associativity-of-op op-symbol param-list))))
+    (state-result-of-expr-list (sort-list-to-associativity-of-op op-symbol param-list) state)))
+
+
+;; takes an operator and a list of params
+;; returns a list of the same params in order
+;; of associativity, according to the given op
+(define sort-list-to-associativity-of-op
+  (lambda (op-symbol lis)
+    ;; eval in order, pass state along
+    lis)) ; all given ops are left associative
+
+
 
 ;; returns the state resulting from
 ;; evaluating the list of expressions
@@ -309,13 +334,6 @@
               (map-expr-list-to-value-list (cdr expr-list)
                                            (Mstate-expr (car expr-list) state))))))
 
-;; takes an operator and a list of params
-;; returns a list of the same params in order
-;; of associativity, according to the given op
-(define sort-list-to-associativity-of-op
-  (lambda (op-symbol lis)
-    ;; eval in order, pass state along
-    lis)) ; all given ops are left associative
 
 
 ;; returns the value of the token given the state
