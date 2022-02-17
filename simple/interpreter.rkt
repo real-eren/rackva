@@ -4,7 +4,8 @@
          "simpleParser.rkt")
 
 (provide interpret
-         execute)
+         extract-result
+         Mstate-stmt-list)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -18,7 +19,7 @@
 ;; and returns the result
 (define interpret
   (lambda (file-name)
-    (extract-result (execute (parser file-name) new-state))))
+    (extract-result (Mstate-stmt-list (parser file-name) new-state))))
 
 ;; takes a state and returns its return value
 ;; modifies booleans
@@ -30,19 +31,6 @@
       [(number? (state-get-return-value state))        (state-get-return-value state)]
       [else                                            (error "returned a value, but unsupported type: "
                                                               (state-get-return-value state))])))
-
-
-;; executes a list of statements with a given initial state
-;; and returns the resulting state
-;; error if the statement list terminates w/out return
-(define execute
-  (lambda (statement-list state)
-    (cond
-      [(state-return? state)              state] 
-      [(null? statement-list)             (error "program ended without reaching a return statement")]
-      [else                               (execute (cdr statement-list)
-                                                   (Mstate-statement (car statement-list)
-                                                                     state))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -132,6 +120,21 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;; Mstate functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; executes a list of statements with a given initial state
+;; and returns the resulting state
+;; error if the statement list terminates w/out return
+(define Mstate-stmt-list
+  (lambda (statement-list state)
+    (cond
+      [(state-return? state)              state] 
+      [(null? statement-list)             (error "program ended without reaching a return statement")]
+      [else                               (Mstate-stmt-list (cdr statement-list)
+                                                   (Mstate-statement (car statement-list)
+                                                                     state))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -462,5 +465,6 @@
 ; todo:
 ; check types
 ; check # params expected by op (more-so for functions)
+; generalize to N params with `values` and `call-with-values`
     
 
