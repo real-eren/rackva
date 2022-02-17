@@ -11,7 +11,8 @@
                                   insert
                                   remove
                                   remove-every
-                                  replace)))
+                                  replace
+                                  from-interlaced-entry-list)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;; A list-backed map ;;;;;;;;;;;;;
 ;; aka an association-list            
@@ -105,4 +106,16 @@
 (define replace
   (lambda (key value map)
     (insert key value (remove-every key map))))
+
+
+
+;; treats the first and second elems as key and value
+;; returns a map with the entries
+(define from-interlaced-entry-list
+  (lambda (lis map)
+    (if (null? lis)
+        map
+        (from-interlaced-entry-list (cdr (cdr lis))
+                                        (insert (first lis) (second lis) map)))))
+
 

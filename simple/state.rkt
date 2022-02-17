@@ -17,11 +17,11 @@
 
 (define declare-var
   (lambda (var-name state)
-    (map-insert var-name null state)))
+    (map-replace var-name null state)))
 
 (define assign-var
   (lambda (var-name value state)
-    (map-insert var-name value state)))
+    (map-replace var-name value state)))
 
 (define var-declared?
   (lambda (var-name state)

@@ -63,15 +63,6 @@
 (define bool-bool->bool 3)
 (define bool->bool 4)
 
-;; treats the first and second elems as key and value
-;; returns a map with the entries
-(define map-from-interlaced-entry-list
-  (lambda (lis map)
-    (if (null? lis)
-        map
-        (map-from-interlaced-entry-list (cdr (cdr lis))
-                                        (map-insert (first lis) (second lis) map)))))
-
 ;; associative list from op-symbols to functions
 (define op-table
   (map-from-interlaced-entry-list ops-and-funs-list map-empty))
@@ -101,8 +92,6 @@
 (define action-is-while? (checker-of 'while))
 
 
-
-(define var-of-assign-expr second)
       
 
 ;; takes a nested expr (list), returns what should be an action symbol
@@ -133,14 +122,14 @@
 (define if-stmt1 third)
 ; returns list of size 0 or 1
 (define maybe-if-stmt2 cdddr)
-  ; if (cond) return true
-;(if (cond) (stmt))
+
+
 ;; takes a statement
 ;; returns the state resulting from evaluating it
 (define Mstate-statement
   (lambda (statement state)
     (cond
-      [(state-return? state)                       state] ; exit early on return
+      [(state-return? state)                      state] ; exit early on return
       [(null? statement)                          (error "called Mstate on null expr")]
       [(action-is-return? (action statement))     (Mstate-return (return-expression statement)
                                                                  state)]
@@ -164,7 +153,9 @@
                                                                state)]
       [else                                       (error "undefined action")])))
 
-
+;; takes an expression and a state
+;; returns the state after evaluating the expression
+;;  in the context of the given initial state
 (define Mstate-expr
   (lambda (expr state)
     (cond
@@ -208,7 +199,7 @@
       [else                         (Mstate-statement (car maybe-stmt2)
                                                       (Mstate-statement condition state))])))
 
-;(define Mstate-e
+
 ;; declares the variable,
 ;; error if already declared
 ;; initializes if expr is provided
@@ -229,12 +220,16 @@
 ;;  onto the state resulting from evaluating expr
 (define Mstate-assign
   (lambda (var-name expr state)
-    ; correct but redundant work.
-    ; can use let or lambda to remove redundant work
-    (state-assign-var var-name
-                      (Mvalue expr state) ; value result of evaluating expr
-                      (Mstate-expr expr state)))) ; state after evaluating expr
-
+    (if (state-var-declared? var-name state)
+        ; correct but redundant work.
+        ; can use let or lambda to remove redundant work
+        (state-assign-var var-name
+                          (Mvalue expr state) ; value result of evaluating expr
+                          (Mstate-expr expr state)) ; state after evaluating expr
+        (error (string-append "tried to assign to "
+                              (symbol->string var-name)
+                              " before declaring it.")))))
+  
 
 ;; retrieves value of var from state
 ;; throws appropriate errors if undeclared or undefined
@@ -280,7 +275,7 @@
 ;; and returns the resulting value
 (define Mvalue-op
   (lambda (op-symbol param-list state)
-    (Mvalue-op-helper op-symbol
+    (Mvalue-op-helper (op-of-symbol op-symbol)
                       (map-expr-list-to-value-list (sort-list-to-associativity-of-op op-symbol
                                                                                      param-list)
                                                    state))))
@@ -290,9 +285,11 @@
 ;; takes an op-symbol and a val-list * already in order of associativity
 ;; returns the value of the op applied to the list of values
 (define Mvalue-op-helper
-  (lambda (op-symbol val-list)
+  (lambda (op val-list)
     (cond
-      [(eq? 1 (length val-list))                  (op-of-symbol op-symbol)]
+      [(eq? 1 (length val-list))                  (op (first val-list))]
+      [(eq? 2 (length val-list))                  (op (first val-list) (second val-list))]
+      [else                                       (error val-list)]
       ; check types
       ; check # params
       )))
