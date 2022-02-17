@@ -180,8 +180,8 @@
         (Mstate-while while-cond
                       while-body
                       (Mstate-statement while-body
-                                        (Mstate-statement while-cond state)))
-        (Mstate-statement while-cond state))))
+                                        (Mstate-expr while-cond state)))
+        (Mstate-expr while-cond state))))
 
 ;; Mstate for return
 (define Mstate-return
@@ -194,10 +194,10 @@
   (lambda (condition stmt1 maybe-stmt2 state)
     (cond
       [(Mbool condition state)      (Mstate-statement stmt1
-                                                      (Mstate-statement condition state))]
-      [(null? maybe-stmt2)                (Mstate-statement condition state)]
+                                                      (Mstate-expr condition state))]
+      [(null? maybe-stmt2)                (Mstate-expr condition state)]
       [else                         (Mstate-statement (car maybe-stmt2)
-                                                      (Mstate-statement condition state))])))
+                                                      (Mstate-expr condition state))])))
 
 
 ;; declares the variable,
@@ -229,7 +229,7 @@
         (error (string-append "tried to assign to "
                               (symbol->string var-name)
                               " before declaring it.")))))
-  
+
 
 ;; retrieves value of var from state
 ;; throws appropriate errors if undeclared or undefined
@@ -243,7 +243,10 @@
                                                                                (symbol->string var-name)
                                                                                " before initializing it."))]
       [else                                             (state-var-value var-name state)])))
+
+
 (define op-param-list cdr)
+
 ;; returns the value of an expression, in the context of the given state
 (define Mvalue
   (lambda (expr state)
@@ -271,7 +274,7 @@
     (if (boolean? val)
         val
         (error "not a bool"))))
-             
+
      ; ( (x == 1) or (x < 1) 
 ;; takes an (assumed to be valid) op-symbol and a list of its parameters
 ;; evals the params in order of the op's associativity
