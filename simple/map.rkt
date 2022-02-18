@@ -6,15 +6,12 @@
                                   contains?
                                   get
                                   get-default
-                                  insert
-                                  remove-first
-                                  remove-every
-                                  replace
+                                  put
+                                  remove
                                   from-interlaced-entry-list)))
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;; A list-backed map ;;;;;;;;;;;;;
-;; aka an association-list            
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;; A list-backed map ;;;;;;;;;;;;;            
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;;;;;;;;; map entry ;;;;;;;;;;;;;;;;;;;
 (define entry-of cons)
@@ -48,11 +45,7 @@
 ;; else null
 (define get
   (lambda (key map)
-    (cond
-      [(empty? map)                                    null]
-      [(equal? key (entry-key (first-entry map)))      (entry-value (first-entry map))]
-      [else                                            (get key (rest map))])))
-
+    (get-default key null map)))
 
 ;; returns value of first encountered entry with key,
 ;; returns default if no entries found
@@ -74,28 +67,25 @@
 (define insert-entry cons)
 
 ;; removes the first entry with matching key
-(define remove-first
+(define remove
   (lambda (key map)
     (cond
       [(empty? map)                                    map]
       [(equal? key (entry-key (first-entry map)))      (rest map)]
       [else                                            (insert-entry (first-entry map)
-                                                                     (remove-first key (rest map)))])))
+                                                                     (remove key (rest map)))])))
 
-;; removes every entry whose key matches 
-(define remove-every
-  (lambda (key map)
-    (cond
-      [(empty? map)                                         map]
-      [(equal? key (entry-key (first-entry map)))           (remove-every key (rest map))]
-      [else                                                 (insert-entry (first-entry map)
-                                                                          (remove-every key (rest map)))])))
-
-;; inserts the entry, removing any entries with matching keys
-(define replace
+;; inserts the entry, removing any previosu with a matching key
+(define put
   (lambda (key value map)
-    (insert key value (remove-every key map))))
+    (insert key value (remove key map))))
 
+;; inserts the entry iff there is not already an entry with the key
+(define put-if-absent
+  (lambda (key value map)
+    (if (contains? key map)
+        map
+        (put key value map))))
 
 
 ;; treats the first and second elems as key and value
