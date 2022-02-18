@@ -34,6 +34,7 @@
 (define extract-result
   (lambda (state)
     (cond
+      [(not (state-return? state))                     (error "program ended without reaching a return statement")]
       [(eq? #t (state-get-return-value state))         'true]
       [(eq? #f (state-get-return-value state))         'false]
       [(number? (state-get-return-value state))        (state-get-return-value state)]
@@ -134,15 +135,14 @@
 
 ;; executes a list of statements with a given initial state
 ;; and returns the resulting state
-;; error if the statement list terminates w/out return
 (define Mstate-stmt-list
   (lambda (statement-list state)
     (cond
-      [(state-return? state)              state] 
-      [(null? statement-list)             (error "program ended without reaching a return statement")]
+      [(state-return? state)              state]
+      [(null? statement-list)             state]
       [else                               (Mstate-stmt-list (cdr statement-list)
-                                                   (Mstate-statement (car statement-list)
-                                                                     state))])))
+                                                            (Mstate-statement (car statement-list)
+                                                                              state))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -342,7 +342,7 @@
         (Mstate-expr (first exprs) state))))
 
 
-;; takes an operator and a list of params
+;; takes an op-symbol and a list of params
 ;; returns a list of the same params in order
 ;; of associativity, according to the given op
 (define sort-list-to-associativity-of-op
@@ -462,7 +462,7 @@
                                            (Mstate-expr (car expr-list) state))))))
 
 
-;; takes an op-symbol and a val-list * already in order of associativity
+;; takes an op and a val-list * already in order of associativity
 ;; returns the value of the op applied to the list of values
 (define op-apply
   (lambda (op val-list)
