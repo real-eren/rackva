@@ -75,7 +75,7 @@
       [else                                            (insert-entry (first-entry map)
                                                                      (remove key (rest map)))])))
 
-;; inserts the entry, removing any previosu with a matching key
+;; inserts the entry, removing any previous entry with a matching key
 (define put
   (lambda (key value map)
     (insert key value (remove key map))))
