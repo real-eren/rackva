@@ -20,18 +20,13 @@
 
 (define interp
   (lambda (stmt-list mm)
-    (state-get-return-value (execute stmt-list new-state))))
+    (extract-result (Mstate-stmt-list stmt-list new-state))))
 
 ; ; Number Tests
-(print 1)
 (check-equal? (interp (parser "1.txt") '()) 150)
-(print 2)
 (check-equal? (interp (parser "2.txt") '()) -4)
-(print 3)
 (check-equal? (interp (parser "3.txt") '()) 10)
-(print 4)
 (check-equal? (interp (parser "4.txt") '()) 16)
-(print 5)
 (check-equal? (interp (parser "5.txt") '()) 220)
 (check-equal? (interp (parser "6.txt") '()) 5)
 (check-equal? (interp (parser "7.txt") '()) 6)
@@ -41,10 +36,10 @@
 
 ; ; Error Tests
 ; ; NOTE THAT THIS DOES NOT TEST THAT YOU THROW THE CORRECT ERRORS
-;(check-exn exn:fail? (lambda () (interp (parser "11.txt") '())))
-;(check-exn exn:fail? (lambda () (interp (parser "12.txt") '())))
-;(check-exn exn:fail? (lambda () (interp (parser "13.txt") '())))
-;(check-exn exn:fail? (lambda () (interp (parser "14.txt") '())))
+(check-exn exn:fail? (lambda () (interp (parser "11.txt") '())))
+(check-exn exn:fail? (lambda () (interp (parser "12.txt") '())))
+(check-exn exn:fail? (lambda () (interp (parser "13.txt") '())))
+(check-exn exn:fail? (lambda () (interp (parser "14.txt") '())))
 
 ; ; Boolean, If, While Tests
 (check-equal? (interp (parser "15.txt") '()) 'true)
@@ -53,3 +48,15 @@
 (check-equal? (interp (parser "18.txt") '()) 'true)
 (check-equal? (interp (parser "19.txt") '()) 128)
 (check-equal? (interp (parser "20.txt") '()) 12)
+
+
+; ; Advanced Tests
+; ; Advanced Test Cases
+(check-equal? (interp (parser "21.txt") '()) 30)
+(check-equal? (interp (parser "22.txt") '()) 11)
+(check-equal? (interp (parser "23.txt") '()) 1106)
+(check-equal? (interp (parser "24.txt") '()) 12)
+(check-equal? (interp (parser "25.txt") '()) 16)
+(check-equal? (interp (parser "26.txt") '()) 72)
+(check-equal? (interp (parser "27.txt") '()) 21)
+(check-equal? (interp (parser "28.txt") '()) 164)
