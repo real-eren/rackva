@@ -48,11 +48,13 @@
 (define empty (construct '() equal?))
 ;; returns an empty map that will use your
 ;; given equality function to compare keys
-;; your eq-fun should take two keys and
+;; your eq-fun should take two keys
+;; the first being the key being looked up
+;; and the second being the map's entries' keys
 ;; return whether they are equal
 (define empty-custom
-  (lambda (eq-fun)
-    (construct '() eq-fun)))
+  (lambda (eq-fun?)
+    (construct '() eq-fun?)))
 
 ;; returns whether the map is empty
 (define empty?
@@ -93,11 +95,11 @@
                   (eq-fun map))))
 
 (define _get-default
-  (lambda (key default entry-list eq-fun)
+  (lambda (key default entry-list eq-fun?)
     (cond
       [(null? entry-list)                                     default]
-      [(eq-fun key (entry-key (first entry-list)))            (entry-value (first entry-list))]
-      [else                                                   (_get-default key default (rest entry-list) eq-fun)])))
+      [(eq-fun? key (entry-key (first entry-list)))           (entry-value (first entry-list))]
+      [else                                                   (_get-default key default (rest entry-list) eq-fun?)])))
 
 
 ;; adds the key-value pair to the map
@@ -121,12 +123,12 @@
                (eq-fun map))))
 
 (define _remove
-  (lambda (key entry-list eq-fun)
+  (lambda (key entry-list eq-fun?)
     (cond
       [(null? entry-list)                               entry-list]
-      [(eq-fun key (entry-key (first entry-list)))      (rest entry-list)]
+      [(eq-fun? key (entry-key (first entry-list)))     (rest entry-list)]
       [else                                             (cons (first entry-list)
-                                                              (_remove key (rest entry-list) eq-fun))])))
+                                                              (_remove key (rest entry-list) eq-fun?))])))
 
 ;; inserts the entry, removing any previous entry with a matching key
 (define put
