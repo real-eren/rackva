@@ -48,11 +48,13 @@
 (define empty (construct '() equal?))
 ;; returns an empty map that will use your
 ;; given equality function to compare keys
-;; your eq-fun should take two keys and
+;; your eq-fun should take two keys
+;; the first being the key being looked up
+;; and the second being the map's entries' keys
 ;; return whether they are equal
 (define empty-custom
-  (lambda (eq-fun)
-    (construct '() eq-fun)))
+  (lambda (eq-fun?)
+    (construct '() eq-fun?)))
 
 ;; returns whether the map is empty
 (define empty?

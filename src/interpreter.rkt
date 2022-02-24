@@ -8,7 +8,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (require "state.rkt"
-         "map.rkt"
+         "util/map.rkt"
          "simpleParser.rkt")
 
 (provide interpret
@@ -44,88 +44,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;; Helper functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-;; produces a function that returns whether a statement's 'action' symbol matches symbl
-(define checker-of
-  (lambda (symbl)
-    (lambda (statement) (eq? (action statement) symbl))))
-
-;; these take a statement and return whether it is a particular construct
-(define is-assign? (checker-of '=))
-(define is-declaration? (checker-of 'var))
-(define is-return? (checker-of 'return))
-(define is-if? (checker-of 'if))
-(define is-while? (checker-of 'while))
-
-;; returns whether a nested expression is of the boolean variety
-(define is-boolean?
-  (lambda (nested-expr)
-    (map-contains? (action nested-expr) boolean-op-table)))
-
-(define is-&&? (checker-of '&&))
-(define is-||? (checker-of '||))
-
-;; Takes a nested expression and returns whether it contains a recognized operation
-(define has-op?
-  (lambda (expr)
-    (or (map-contains? (action expr) arithmetic-op-table)
-        (map-contains? (action expr) boolean-op-table))))
-
-
-;; associative lists from op-symbols to functions
-; the alternative is a (hard-coded) cond
-; which is a less flexible design
-; consider these to be constants
-
-(define boolean-op-table
-  (map-from-interlaced-entry-list
-   (list '&& (lambda (a b) (and a b))
-         '|| (lambda (a b) (or a b))
-         '!  not
-         '== eq?
-         '!= (lambda (a b) (not (eq? a b)))
-         '<  <
-         '>  >
-         '<= <=
-         '>= >=)
-   map-empty))
-
-(define arithmetic-op-table
-  (map-from-interlaced-entry-list
-   (list '+  +
-         '-  -
-         '/  quotient
-         '*  *
-         '%  modulo)
-   map-empty))
-
-;; assuming the atom is an op-symbol, returns the associated function
-(define op-of-symbol
-  (lambda (op-symbol)
-    (if (map-contains? op-symbol arithmetic-op-table)
-        (map-get op-symbol arithmetic-op-table)
-        (map-get op-symbol boolean-op-table))))
-
-
-;; takes a nested expr (list), returns what should be an action symbol
-;; use is-___ functions to determine whether the
-;;  returned symbol actually represents a particular action
-(define action car)
-
-;; takes an expression and returns whether it contains other expressions
-(define nested? list?)
-
-;; takes a maybe-value and extracts the value
-;; throws error if maybe-value was `empty`
-(define unbox car)
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;; Mstate functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -154,11 +72,7 @@
     (cond
       [(state-return? state)                state] ; exit early on return
       [(null? statement)                    (error "called Mstate on null statement")]
-      [(is-return? statement)               (Mstate-return statement state)]
-      [(is-while? statement)                (Mstate-while statement state)]
-      [(is-if? statement)                   (Mstate-if statement state)]
-      [(is-assign? statement)               (Mstate-assign statement state)]
-      [(is-declaration? statement)          (Mstate-decl statement state)]
+      [(is-construct? statement)            ((get-Mstate statement) statement state)]
       [else                                 (error "unrecognized stmt:" statement)])))
 
 
@@ -254,7 +168,7 @@
 
 ;; takes a declaration statement
 ;; returns the resulting state
-(define Mstate-decl
+(define Mstate-declare
   (lambda (statement state)
     (Mstate-decl-impl (decl-var statement)
                       (decl-maybe-expr statement)
@@ -475,4 +389,113 @@
 ; check # params expected by op (more-so for functions)
 ; generalize to N params with `values` and `call-with-values`
     
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;; Helper functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;; takes a nested expr (list), returns what should be an action symbol
+;; use is-___ functions to determine whether the
+;;  returned symbol actually represents a particular action
+(define action car)
+
+;; takes an expression and returns whether it contains other expressions
+(define nested? list?)
+
+;; takes a maybe-value and extracts the value
+;; throws error if maybe-value was `empty`
+(define unbox car)
+
+;; produces a function that returns whether a statement's 'action' symbol matches symbl
+(define checker-of
+  (lambda (symbl)
+    (lambda (statement) (eq? (action statement) symbl))))
+
+;; these take a statement and return whether it is a particular construct
+(define is-assign? (checker-of '=))
+(define is-declare? (checker-of 'var))
+(define is-return? (checker-of 'return))
+(define is-if? (checker-of 'if))
+(define is-while? (checker-of 'while))
+(define is-break? (checker-of 'break))
+(define is-continue? (checker-of 'continue))
+
+;; keys are checker functions that take a statement and return a bool
+;; values are the corresponding constructs
+(define constructs-table (map-from-interlaced-entry-list
+                          (list is-return?  Mstate-return
+                                is-while?   Mstate-while
+                                is-if?      Mstate-if
+                                is-declare? Mstate-declare
+                                is-assign?  Mstate-assign)
+                          (map-empty-custom (lambda (key checker) (checker key)))))
+
+;; returns whether the statement is a recognized construct
+(define is-construct?
+  (lambda (statement)
+    (map-contains? statement constructs-table)))
+
+;; returns the Mstate function that goes with this statement,
+;; assuming it is a valid construct
+(define get-Mstate
+  (lambda (statement)
+    (map-get statement constructs-table)))
+
+
+
+;; returns whether a nested expression is of the boolean variety
+(define is-boolean?
+  (lambda (nested-expr)
+    (map-contains? (action nested-expr) boolean-op-table)))
+
+(define is-&&? (checker-of '&&))
+(define is-||? (checker-of '||))
+
+;; Takes a nested expression and returns whether it contains a recognized operation
+(define has-op?
+  (lambda (expr)
+    (or (map-contains? (action expr) arithmetic-op-table)
+        (map-contains? (action expr) boolean-op-table))))
+
+
+;; associative lists from op-symbols to functions
+; the alternative is a (hard-coded) cond
+; which is a less flexible design
+; consider these to be constants
+
+(define boolean-op-table
+  (map-from-interlaced-entry-list
+   (list '&& (lambda (a b) (and a b))
+         '|| (lambda (a b) (or a b))
+         '!  not
+         '== eq?
+         '!= (lambda (a b) (not (eq? a b)))
+         '<  <
+         '>  >
+         '<= <=
+         '>= >=)
+   map-empty))
+
+(define arithmetic-op-table
+  (map-from-interlaced-entry-list
+   (list '+  +
+         '-  -
+         '/  quotient
+         '*  *
+         '%  modulo)
+   map-empty))
+
+;; assuming the atom is an op-symbol, returns the associated function
+(define op-of-symbol
+  (lambda (op-symbol)
+    (if (map-contains? op-symbol arithmetic-op-table)
+        (map-get op-symbol arithmetic-op-table)
+        (map-get op-symbol boolean-op-table))))
+
+
 
