@@ -445,10 +445,10 @@
 (define Mvalue-op
   (lambda (expr state)
     (op-apply (op-of-symbol (op-op-symbol expr))
-                  (map-expr-list-to-value-list
-                   (sort-list-to-associativity-of-op (op-op-symbol expr)
-                                                     (op-param-list expr))
-                   state))))
+              (map-expr-list-to-value-list
+               (sort-list-to-associativity-of-op (op-op-symbol expr)
+                                                 (op-param-list expr))
+               state))))
 
 
 ;; takes a list of exprs and maps them to values,
