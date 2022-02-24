@@ -1,6 +1,6 @@
 #lang racket
 
-(require "map.rkt")
+(require "util/map.rkt")
 
 (provide new-state
          (prefix-out state-

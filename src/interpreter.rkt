@@ -8,7 +8,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (require "state.rkt"
-         "map.rkt"
+         "util/map.rkt"
          "simpleParser.rkt")
 
 (provide interpret
