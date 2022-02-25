@@ -11,6 +11,14 @@
   (lambda (expected str)
     (check-equal? (interpret-str str) expected)))
 
+(define error-file
+  (lambda (file)
+    (check-exn exn:fail? (lambda () (interpret file)))))
+
+(define error-str
+  (lambda (str)
+    (check-exn exn:fail? (lambda () (interpret-str str)))))
+
 ; ; Number Tests
 (test-file 150  "1.txt")
 (test-file  -4  "2.txt")
@@ -25,10 +33,10 @@
 
 ; ; Error Tests
 ; ; NOTE THAT THIS DOES NOT TEST THAT YOU THROW THE CORRECT ERRORS
-(check-exn exn:fail? (lambda () (interpret "11.txt")))
-(check-exn exn:fail? (lambda () (interpret "12.txt")))
-(check-exn exn:fail? (lambda () (interpret "13.txt")))
-(check-exn exn:fail? (lambda () (interpret "14.txt")))
+(error-file "11.txt")
+(error-file "12.txt")
+(error-file "13.txt")
+(error-file "14.txt")
 
 ; ; Boolean, If, While Tests
 (test-file 'true   "15.txt")
