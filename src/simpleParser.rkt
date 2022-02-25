@@ -10,18 +10,29 @@
 ;
 ; To call the parser, use:
 ;     (parser filename)
+;   | (parser-str str)
 ;
 ; The return value is a parse tree in list format
 
 ; (load "lex.scm")
 (require "lex.rkt")
 
+(define __parser
+  (lambda (input start-lex-fun)
+    (begin
+      (start-lex-fun input)
+      (let ((parse-tree (program-parse)))
+        (end-lex)
+        parse-tree))))
+
+; takes a filename as a string
 (define parser
   (lambda (filename)
-    (begin (start-lex filename)
-           (let ((parse-tree (program-parse)))
-             (end-lex)
-             parse-tree))))
+    (__parser filename start-lex)))
+; takes a string representing a program
+(define parser-str
+  (lambda (str)
+    (__parser str start-lex-str)))
 
 ;===============================================
 ; The recursive descent parser
@@ -29,11 +40,11 @@
 (define program-parse
   (lambda ()
     (if (eq? (car (get-next-symbol)) 'EOF)
-       '()
-       (begin
-         (unget-next-symbol)
-         (let ((parsetree (statement-parse)))
-           (cons parsetree (program-parse)))))))
+        '()
+        (begin
+          (unget-next-symbol)
+          (let ((parsetree (statement-parse)))
+            (cons parsetree (program-parse)))))))
 
 ; parse a statement that can be an if-statement, a while-statement, or a compound statement
 ; and if none of the above, it is a simple statement
@@ -63,9 +74,9 @@
               ((eq? (car nextsymbol) 'continue) (set! parse-statement (list 'continue)))
               ((eq? (car nextsymbol) 'throw) (set! parse-statement (list 'throw (value-parse))))
               (else (begin (unget-next-symbol) (set! parse-statement (assign-parse)))))
-         (if (eq? (car (get-next-symbol)) 'SEMICOLON)
-             parse-statement
-             (error 'parser "Missing semicolon"))))))
+        (if (eq? (car (get-next-symbol)) 'SEMICOLON)
+            parse-statement
+            (error 'parser "Missing semicolon"))))))
 
 ; parse a compound statement.  We already saw the left brace so continue until we see a right brace.
 
@@ -91,14 +102,14 @@
     (if (not (eq? (car (get-next-symbol)) 'LEFTPAREN))
         (error 'parser "Missing opening parenthesis")
         (let ((condition (value-parse)))  ; changed
-           (if (not (eq? (car (get-next-symbol)) 'RIGHTPAREN))
-               (error 'parser "Missing closing parenthesis")
-               (let ((if-statement (statement-parse)))
-                  (if (eq? (car (get-next-symbol)) 'else)
-                      (list 'if condition if-statement (statement-parse))
-                      (begin
-                        (unget-next-symbol)
-                        (list 'if condition if-statement)))))))))
+          (if (not (eq? (car (get-next-symbol)) 'RIGHTPAREN))
+              (error 'parser "Missing closing parenthesis")
+              (let ((if-statement (statement-parse)))
+                (if (eq? (car (get-next-symbol)) 'else)
+                    (list 'if condition if-statement (statement-parse))
+                    (begin
+                      (unget-next-symbol)
+                      (list 'if condition if-statement)))))))))
 
 ; parse a while statement: a condition followed by a statement
 
@@ -162,16 +173,16 @@
 
 (define cond-parse
   (lambda ()
-     (let* ((firstoperand (value-parse))
-	    (op (get-next-symbol)))
-       (if (and (eq? (car op) 'BINARY-OP) 
-                (or (eq? (cdr op) '==) 
-                    (eq? (cdr op) '<)
-                    (eq? (cdr op) '>)
-                    (eq? (cdr op) '<=)
-                    (eq? (cdr op) '>=)
-                    (eq? (cdr op) '!=)))
-	  (list (cdr op) firstoperand (value-parse))
+    (let* ((firstoperand (value-parse))
+           (op (get-next-symbol)))
+      (if (and (eq? (car op) 'BINARY-OP) 
+               (or (eq? (cdr op) '==) 
+                   (eq? (cdr op) '<)
+                   (eq? (cdr op) '>)
+                   (eq? (cdr op) '<=)
+                   (eq? (cdr op) '>=)
+                   (eq? (cdr op) '!=)))
+          (list (cdr op) firstoperand (value-parse))
           (error 'parser "Unknown comparison operator")))))
 
 ; parse a variable declaration: var then left-hand-side with optional = followed by a value
@@ -203,8 +214,8 @@
   (lambda ()
     (let ((lhs (get-next-symbol)))
       (if (eq? (car lhs) 'ID)
-         (list (cdr lhs))
-         (error 'parser "Illegal left hand side of assignment")))))
+          (list (cdr lhs))
+          (error 'parser "Illegal left hand side of assignment")))))
 
 ; parse a value.  The top level of the parse is the assignment operator.
 
@@ -313,27 +324,27 @@
 
 (define multterm-parse-helper
   (lambda (firstoperand)
-     (let ((op (get-next-symbol)))
-       (if (and (eq? (car op) 'BINARY-OP) (or (eq? (cdr op) '*) (eq? (cdr op) '/) (eq? (cdr op) '%)))
-           (multterm-parse-helper (list (cdr op) firstoperand (operand-parse (get-next-symbol))))
-           (begin
-             (unget-next-symbol)
-             firstoperand)))))
+    (let ((op (get-next-symbol)))
+      (if (and (eq? (car op) 'BINARY-OP) (or (eq? (cdr op) '*) (eq? (cdr op) '/) (eq? (cdr op) '%)))
+          (multterm-parse-helper (list (cdr op) firstoperand (operand-parse (get-next-symbol))))
+          (begin
+            (unget-next-symbol)
+            firstoperand)))))
 
 ; continue parsing the value.  The final level is the unary operators, variables, numbers, and nested parentheses.
 
 (define operand-parse
   (lambda (firstsymbol)
-     ;(let ((firstsymbol (get-next-symbol)))
-       (cond
-          ((eq? (car firstsymbol) 'LEFTPAREN)
-             (let ((retvalue (value-parse)))
-               (if (eq? (car (get-next-symbol)) 'RIGHTPAREN)
-                  retvalue
-                  (error 'parser "Unmatched left parenthesis"))))
-          ((and (eq? (car firstsymbol) 'BINARY-OP) (eq? (cdr firstsymbol) '-)) (list '- (operand-parse (get-next-symbol))))  ; this is a new line
-          ((and (eq? (car firstsymbol) 'BINARY-OP) (eq? (cdr firstsymbol) '!)) (list '! (operand-parse (get-next-symbol))))  ; this is a new line
-          ((eq? (car firstsymbol) 'NUMBER) (cdr firstsymbol))
-          ((eq? (car firstsymbol) 'ID) (cdr firstsymbol))
-          ((eq? (car firstsymbol) 'BOOLEAN) (cdr firstsymbol))
-          (else (error 'parser "Unknown statmement")))));)
+    ;(let ((firstsymbol (get-next-symbol)))
+    (cond
+      ((eq? (car firstsymbol) 'LEFTPAREN)
+       (let ((retvalue (value-parse)))
+         (if (eq? (car (get-next-symbol)) 'RIGHTPAREN)
+             retvalue
+             (error 'parser "Unmatched left parenthesis"))))
+      ((and (eq? (car firstsymbol) 'BINARY-OP) (eq? (cdr firstsymbol) '-)) (list '- (operand-parse (get-next-symbol))))  ; this is a new line
+      ((and (eq? (car firstsymbol) 'BINARY-OP) (eq? (cdr firstsymbol) '!)) (list '! (operand-parse (get-next-symbol))))  ; this is a new line
+      ((eq? (car firstsymbol) 'NUMBER) (cdr firstsymbol))
+      ((eq? (car firstsymbol) 'ID) (cdr firstsymbol))
+      ((eq? (car firstsymbol) 'BOOLEAN) (cdr firstsymbol))
+      (else (error 'parser "Unknown statmement")))));)
