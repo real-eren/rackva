@@ -15,14 +15,30 @@
 ;; these include return, next, break, continue
 
 (define empty map-empty)
-                      
+
+;; takes an initial conts and returns a new conts
+;; with the changes applied
+; ex: (conts-of oldconts #:next mynext #:return myreturn)
+(define conts-of
+  (lambda (conts
+           #:return   [ret (return conts)]
+           #:break    [brk (break conts)]
+           #:continue [con (continue conts)]
+           #:next     [nxt (next conts)])
+    (map-from-interlaced-entry-list
+     (list return-key   ret
+           break-key    brk
+           continue-key con
+           next-key     nxt)
+     map-empty)))
+
 (define setter
   (lambda (key)
-    (lambda (value map) (map-put key value map))))
+    (lambda (value conts) (map-put key value conts))))
 
 (define getter
   (lambda (key)
-    (lambda (map) (map-get key map))))
+    (lambda (conts) (map-get key conts))))
 
 
 (define return-key 'return)
