@@ -2,20 +2,15 @@
 
 (require rackunit 
   "interpreter.rkt"
-  "state.rkt"
   "simpleParser.rkt")
 
 (define test-file
   (lambda (expected file)
-    (check-equal? (interp (parser file)) expected)))
+    (check-equal? (interpret (parser file)) expected)))
 
 (define test-str
   (lambda (expected str)
-    (check-equal? (interp (parser-str str)) expected)))
-
-(define interp
-  (lambda (stmt-list)
-    (extract-result (Mstate-stmt-list stmt-list new-state))))
+    (check-equal? (interpret (parser-str str)) expected)))
 
 ; ; Number Tests
 (test-file 150  "1.txt")
@@ -31,10 +26,10 @@
 
 ; ; Error Tests
 ; ; NOTE THAT THIS DOES NOT TEST THAT YOU THROW THE CORRECT ERRORS
-(check-exn exn:fail? (lambda () (interp (parser "11.txt"))))
-(check-exn exn:fail? (lambda () (interp (parser "12.txt"))))
-(check-exn exn:fail? (lambda () (interp (parser "13.txt"))))
-(check-exn exn:fail? (lambda () (interp (parser "14.txt"))))
+(check-exn exn:fail? (lambda () (interpret (parser "11.txt"))))
+(check-exn exn:fail? (lambda () (interpret (parser "12.txt"))))
+(check-exn exn:fail? (lambda () (interpret (parser "13.txt"))))
+(check-exn exn:fail? (lambda () (interpret (parser "14.txt"))))
 
 ; ; Boolean, If, While Tests
 (test-file 'true   "15.txt")
