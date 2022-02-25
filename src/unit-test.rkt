@@ -1,16 +1,15 @@
 #lang racket/base
 
 (require rackunit 
-  "interpreter.rkt"
-  "simpleParser.rkt")
+  "interpreter.rkt")
 
 (define test-file
   (lambda (expected file)
-    (check-equal? (interpret (parser file)) expected)))
+    (check-equal? (interpret file) expected)))
 
 (define test-str
   (lambda (expected str)
-    (check-equal? (interpret (parser-str str)) expected)))
+    (check-equal? (interpret-str str) expected)))
 
 ; ; Number Tests
 (test-file 150  "1.txt")
@@ -26,10 +25,10 @@
 
 ; ; Error Tests
 ; ; NOTE THAT THIS DOES NOT TEST THAT YOU THROW THE CORRECT ERRORS
-(check-exn exn:fail? (lambda () (interpret (parser "11.txt"))))
-(check-exn exn:fail? (lambda () (interpret (parser "12.txt"))))
-(check-exn exn:fail? (lambda () (interpret (parser "13.txt"))))
-(check-exn exn:fail? (lambda () (interpret (parser "14.txt"))))
+(check-exn exn:fail? (lambda () (interpret "11.txt")))
+(check-exn exn:fail? (lambda () (interpret "12.txt")))
+(check-exn exn:fail? (lambda () (interpret "13.txt")))
+(check-exn exn:fail? (lambda () (interpret "14.txt")))
 
 ; ; Boolean, If, While Tests
 (test-file 'true   "15.txt")
