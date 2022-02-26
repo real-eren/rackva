@@ -12,6 +12,7 @@
          "simpleParser.rkt")
 
 (provide interpret
+         interpret-str
          extract-result
          Mstate-stmt-list)
 
@@ -28,6 +29,12 @@
 (define interpret
   (lambda (file-name)
     (extract-result (Mstate-stmt-list (parser file-name) new-state))))
+
+;; takes a string representing a program, intreprets it
+;; returns the result
+(define interpret-str
+  (lambda (str)
+    (extract-result (Mstate-stmt-list (parser-str str) new-state))))
 
 ;; takes a state and returns its return value
 ;; modifies booleans

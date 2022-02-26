@@ -1,6 +1,10 @@
 ; If you are not using racket, comment these two lines
 #lang racket
-(provide (all-defined-out))
+(provide start-lex
+         start-lex-str
+         end-lex
+         get-next-symbol
+         unget-next-symbol)
 
 ;;===============================================================
 ;; The Lexical Analyzer
@@ -66,6 +70,10 @@
 (define start-lex
   (lambda (filename)
      (set! file-port (open-input-file filename))))
+
+(define start-lex-str
+  (lambda (str)
+    (set! file-port (open-input-string str))))
 
 ; close the input file
 
