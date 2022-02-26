@@ -137,6 +137,33 @@ if (x < y && (x % 2) == 0)
 else
   return 200;")
 
+; 16 w/ block
+(test-str 100 "
+var x = 10;
+var y = 20;
+if (x < y && (x % 2) == 0) {
+  return 100;
+} else {
+  return 200;
+}")
+
+; take empty then block
+(test-str 5 "
+var x = 10;
+if ((x = x / 2) == 5) {}
+return x;
+")
+
+; take empty else block
+(test-str 10 "
+var x = 10;
+if (false) {
+  x = 0;
+} else {
+}
+return x;
+")
+
 ; 17
 (test-str 'false "
 var x = 100 % 2 == 0;
@@ -166,6 +193,14 @@ while (x < 100)
   x = x * 2;
 return x;")
 
+; 19 w/ block
+(test-str 128 "
+var x = 2;
+while (x < 100) {
+  x = x * 2;
+}
+return x;")
+
 ; 20
 (test-str 12 "
 var x = 20;
@@ -174,6 +209,23 @@ while (x * x > 128)
   x = x - 1;
 x = x + 1;
 return x;")
+
+; 20 w/ multi-line block
+(test-str 12 "
+var x = 20;
+var y = 128;
+while (x * x > 128) {
+  x = x + 1;
+  x = x - 2;
+}
+x = x + 1;
+return x;")
+
+(test-str 15 "
+var x = 0;
+while ((x = x + 1) < 15) {}
+return x;
+")
 
 
 ; ; Advanced Tests

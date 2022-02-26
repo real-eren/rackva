@@ -12,9 +12,7 @@
          "simpleParser.rkt")
 
 (provide interpret
-         interpret-str
-         extract-result
-         Mstate-stmt-list)
+         interpret-str)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -103,51 +101,63 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; WHILE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; takes a statement represnting a while statement
+;;;; takes a while statement
+; returns an expression
 (define while-condition second)
-(define while-statement third)
+; returns a statement list
+(define while-body
+  (lambda (statement)
+    (simple-or-block-to-list (third statement))))
 
 ;; takes a statement representing a while statement
 (define Mstate-while
   (lambda (statement state)
     (Mstate-while-impl (while-condition statement)
-                       (while-statement statement)
+                       (while-body statement)
                        state)))
 
 (define Mstate-while-impl
-  (lambda (while-cond while-body state)
-    (if (Mbool while-cond state)
-        (Mstate-while-impl while-cond
-                           while-body
-                           (Mstate-statement while-body
-                                             (Mstate-expr while-cond state)))
-        (Mstate-expr while-cond state))))
+  (lambda (condition body state)
+    (if (Mbool condition state)
+        (Mstate-while-impl condition
+                           body
+                           (Mstate-stmt-list body
+                                             (Mstate-expr condition state)))
+        (Mstate-expr condition state))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; IF ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; takes a statement reresenting an if statement
+;;;; takes an if statement
+; returns an expression
 (define if-condition second)
-(define if-stmt1 third)
-; returns list of size 0 or 1
-(define if-maybe-stmt2 cdddr)
+; returns a statement list
+(define if-then-body
+  (lambda (statement)
+    (simple-or-block-to-list (third statement))))
+; returns a statement list, possibly empty
+(define if-else-body
+  (lambda (statement)
+    (if (null? (cdddr statement))
+        '()
+        (simple-or-block-to-list (cadddr statement)))))
 
 ;; takes a statement representing an if statement
 ;; returns the resulting state
 (define Mstate-if
   (lambda (statement state)
     (Mstate-if-impl (if-condition statement)
-                    (if-stmt1 statement)
-                    (if-maybe-stmt2 statement)
+                    (if-then-body statement)
+                    (if-else-body statement)
                     state)))
 
 (define Mstate-if-impl
-  (lambda (condition stmt1 maybe-stmt2 state)
+  (lambda (condition then-block else-block state)
     (cond
-      [(Mbool condition state)            (Mstate-statement stmt1
+      [(Mbool condition state)            (Mstate-stmt-list then-block
                                                             (Mstate-expr condition state))]
-      [(null? maybe-stmt2)                (Mstate-expr condition state)]
-      [else                               (Mstate-statement (unbox maybe-stmt2)
+      [(null? else-block)                 (Mstate-expr condition state)]
+      [else                               (Mstate-stmt-list else-block
                                                             (Mstate-expr condition state))])))
 
 
@@ -413,6 +423,18 @@
 
 ;; takes an expression and returns whether it contains other expressions
 (define nested? list?)
+
+;; returns whether a simple statement / block statement is a block statement
+(define block?
+  (lambda (s)
+    (eq? (car s) 'begin)))
+
+;; takes a simple or block statement and produces a statement list
+(define simple-or-block-to-list
+  (lambda (s)
+    (if (block? s)
+        (cdr s)
+        (list s))))
 
 ;; takes a maybe-value and extracts the value
 ;; throws error if maybe-value was `empty`
