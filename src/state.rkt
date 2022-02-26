@@ -35,7 +35,7 @@
 
 (define var-initialized?
   (lambda (var-name state)
-    (not (null? var-value))))
+    (not (null? (var-value var-name state)))))
 
 
 (define var-value
