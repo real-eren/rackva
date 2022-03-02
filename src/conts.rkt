@@ -2,7 +2,8 @@
 
 (require "util/map.rkt")
 
-(provide (combine-out return
+(provide (combine-out conts-of
+                      return
                       set-return
                       break
                       set-break
@@ -12,7 +13,7 @@
                       set-continue))
 
 ;;;; Container of continuations used by the interpreter
-;; these include return, next, break, continue
+;; these include return, next, break, continue, throw, catch, finally
 
 (define empty map-empty)
 
@@ -20,7 +21,7 @@
 ;; with the changes applied
 ; ex: (conts-of oldconts #:next mynext #:return myreturn)
 (define conts-of
-  (lambda (conts
+  (lambda ([conts empty]
            #:return   [ret (return conts)]
            #:break    [brk (break conts)]
            #:continue [con (continue conts)]
