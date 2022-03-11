@@ -37,6 +37,8 @@
            break-key    brk
            continue-key con
            next-key     nxt
+           throw-key    thr
+           catch-key    cat
            )
      map-empty)))
 
