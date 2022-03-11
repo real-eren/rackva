@@ -80,6 +80,16 @@
       [(is-construct? statement)            ((get-Mstate statement) statement state)]
       [else                                 (error "unrecognized stmt:" statement)])))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; returns a list of the statements in a block statement
+(define block-stmt-list cdr)
+
+;; takes a block statement
+;; returns the state resulting from evaluating it
+(define Mstate-block
+  (lambda (statement state)
+    (state-pop-frame (Mstate-stmt-list (block-stmt-list statement) (state-push-new-frame state)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSION ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -105,9 +115,7 @@
 ; returns an expression
 (define while-condition second)
 ; returns a statement list
-(define while-body
-  (lambda (statement)
-    (simple-or-block-to-list (third statement))))
+(define while-body third)
 
 ;; takes a statement representing a while statement
 (define Mstate-while
@@ -121,7 +129,7 @@
     (if (Mbool condition state)
         (Mstate-while-impl condition
                            body
-                           (Mstate-stmt-list body
+                           (Mstate-statement body
                                              (Mstate-expr condition state)))
         (Mstate-expr condition state))))
 
@@ -132,15 +140,9 @@
 ; returns an expression
 (define if-condition second)
 ; returns a statement list
-(define if-then-body
-  (lambda (statement)
-    (simple-or-block-to-list (third statement))))
-; returns a statement list, possibly empty
-(define if-else-body
-  (lambda (statement)
-    (if (null? (cdddr statement))
-        '()
-        (simple-or-block-to-list (cadddr statement)))))
+(define if-then-body third)
+; returns a maybe-statement
+(define if-else-body cdddr)
 
 ;; takes a statement representing an if statement
 ;; returns the resulting state
@@ -152,12 +154,12 @@
                     state)))
 
 (define Mstate-if-impl
-  (lambda (condition then-block else-block state)
+  (lambda (condition then-body maybe-else-body state)
     (cond
-      [(Mbool condition state)            (Mstate-stmt-list then-block
+      [(Mbool condition state)            (Mstate-statement then-body
                                                             (Mstate-expr condition state))]
-      [(null? else-block)                 (Mstate-expr condition state)]
-      [else                               (Mstate-stmt-list else-block
+      [(null? maybe-else-body)            (Mstate-expr condition state)]
+      [else                               (Mstate-statement (get maybe-else-body)
                                                             (Mstate-expr condition state))])))
 
 
@@ -197,13 +199,14 @@
 (define Mstate-decl-impl
   (lambda (var-name maybe-expr state)
     (cond
-      [(state-var-declared? var-name state)       (error (string-append "attempted to re-declare "
-                                                                        (symbol->string var-name)
-                                                                        "."))]
-      [(null? maybe-expr)                         (state-declare-var var-name state)]
-      [else                                       (state-assign-var var-name
-                                                                    (Mvalue (unbox maybe-expr) state)
-                                                                    (Mstate-expr (unbox maybe-expr) state))])))
+      [(state-var-declared-top-frame? var-name state)   (error (string-append "attempted to re-declare "
+                                                                              (symbol->string var-name)
+                                                                              "."))]
+      [(null? maybe-expr)                               (state-declare-var var-name state)]
+      [else                                             (state-assign-var var-name
+                                                                          (Mvalue (get maybe-expr) state)
+                                                                          (Mstate-expr (get maybe-expr)
+                                                                                       (state-declare-var var-name state)))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ASSIGN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -424,21 +427,10 @@
 ;; takes an expression and returns whether it contains other expressions
 (define nested? list?)
 
-;; returns whether a simple statement / block statement is a block statement
-(define block?
-  (lambda (s)
-    (eq? (car s) 'begin)))
-
-;; takes a simple or block statement and produces a statement list
-(define simple-or-block-to-list
-  (lambda (s)
-    (if (block? s)
-        (cdr s)
-        (list s))))
 
 ;; takes a maybe-value and extracts the value
 ;; throws error if maybe-value was `empty`
-(define unbox car)
+(define get car)
 
 ;; produces a function that returns whether a statement's 'action' symbol matches symbl
 (define checker-of
@@ -453,6 +445,7 @@
 (define is-while? (checker-of 'while))
 (define is-break? (checker-of 'break))
 (define is-continue? (checker-of 'continue))
+(define is-block? (checker-of 'begin))
 
 ;; keys are checker functions that take a statement and return a bool
 ;; values are the corresponding constructs
@@ -461,7 +454,8 @@
                                 is-while?   Mstate-while
                                 is-if?      Mstate-if
                                 is-declare? Mstate-declare
-                                is-assign?  Mstate-assign)
+                                is-assign?  Mstate-assign
+                                is-block?   Mstate-block)
                           (map-empty-custom (lambda (key checker) (checker key)))))
 
 ;; returns whether the statement is a recognized construct
