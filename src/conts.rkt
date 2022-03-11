@@ -7,30 +7,37 @@
                       set-return
                       break
                       set-break
+                      continue
+                      set-continue
                       next
                       set-next
-                      continue
-                      set-continue))
+                      throw
+                      set-throw
+                      catch
+                      set-catch))
 
 ;;;; Container of continuations used by the interpreter
 ;; these include return, next, break, continue, throw, catch, finally
 
-(define empty map-empty)
+(define empty-conts map-empty)
 
 ;; takes an initial conts and returns a new conts
 ;; with the changes applied
 ; ex: (conts-of oldconts #:next mynext #:return myreturn)
 (define conts-of
-  (lambda ([conts empty]
+  (lambda ([conts empty-conts]
            #:return   [ret (return conts)]
            #:break    [brk (break conts)]
            #:continue [con (continue conts)]
-           #:next     [nxt (next conts)])
+           #:next     [nxt (next conts)]
+           #:throw    [thr (throw conts)]
+           #:catch    [cat (catch conts)])
     (map-from-interlaced-entry-list
      (list return-key   ret
            break-key    brk
            continue-key con
-           next-key     nxt)
+           next-key     nxt
+           )
      map-empty)))
 
 (define setter
@@ -57,3 +64,11 @@
 (define next-key 'next)
 (define next (getter next-key))
 (define set-next (setter next-key))
+
+(define throw-key 'throw)
+(define throw (getter throw-key))
+(define set-throw (setter throw-key))
+
+(define catch-key 'catch)
+(define catch (getter catch-key))
+(define set-catch (setter catch-key))
