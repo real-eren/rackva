@@ -26,13 +26,13 @@
 ;; and returns the result
 (define interpret
   (lambda (file-name)
-    (extract-result (Mstate-stmt-list (parser file-name) new-state))))
+    (extract-result (Mstate-stmt-list (parser file-name) new-state (lambda (s) s)))))
 
 ;; takes a string representing a program, intreprets it
 ;; returns the result
 (define interpret-str
   (lambda (str)
-    (extract-result (Mstate-stmt-list (parser-str str) new-state))))
+    (extract-result (Mstate-stmt-list (parser-str str) new-state (lambda (s) s)))))
 
 ;; takes a state and returns its return value
 ;; modifies booleans
@@ -59,13 +59,16 @@
 ;; executes a list of statements with a given initial state
 ;; and returns the resulting state
 (define Mstate-stmt-list
-  (lambda (statement-list state)
+  (lambda (statement-list state evaluate)
     (cond
-      [(state-return? state)              state]
-      [(null? statement-list)             state]
-      [else                               (Mstate-stmt-list (cdr statement-list)
-                                                            (Mstate-statement (car statement-list)
-                                                                              state))])))
+      [(state-return? state)              (evaluate state)]
+      [(null? statement-list)             (evaluate state)]
+      [else                               (Mstate-statement (car statement-list)
+                                                            state
+                                                            (lambda (s)
+                                                                (Mstate-stmt-list (cdr statement-list) 
+                                                                                  s
+                                                                                  evaluate)))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -73,11 +76,11 @@
 ;; takes a statement
 ;; returns the state resulting from evaluating it
 (define Mstate-statement
-  (lambda (statement state)
+  (lambda (statement state evaluate)
     (cond
-      [(state-return? state)                state] ; exit early on return
+      [(state-return? state)                (evaluate state)] ; exit early on return
       [(null? statement)                    (error "called Mstate on null statement")]
-      [(is-construct? statement)            ((get-Mstate statement) statement state)]
+      [(is-construct? statement)            ((get-Mstate statement) statement state evaluate)]
       [else                                 (error "unrecognized stmt:" statement)])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -88,8 +91,11 @@
 ;; takes a block statement
 ;; returns the state resulting from evaluating it
 (define Mstate-block
-  (lambda (statement state)
-    (state-pop-frame (Mstate-stmt-list (block-stmt-list statement) (state-push-new-frame state)))))
+  (lambda (statement state evaluate)
+    (Mstate-stmt-list (block-stmt-list statement)
+                      (state-push-new-frame state)
+                      (lambda (s)
+                        (evaluate (state-pop-frame s))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSION ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -97,15 +103,15 @@
 ;; returns the state after evaluating the expression
 ;;  in the context of the given initial state
 (define Mstate-expr
-  (lambda (expr state)
+  (lambda (expr state evaluate)
     (cond
       [(null? expr)                          (error "called Mstate on null expr")]
       ; base case: 1 | x
-      [(not (nested? expr))                  state]
+      [(not (nested? expr))                  (evaluate state)]
       ; else nested
       ; x = expr
-      [(is-assign? expr)                     (Mstate-assign expr state)]
-      [(has-op? expr)                        (Mstate-op expr state)]
+      [(is-assign? expr)                     (Mstate-assign expr state evaluate)]
+      [(has-op? expr)                        (Mstate-op expr state evaluate)]
       [else                                  (error "unrecognized expr" expr)])))
 
 
@@ -119,19 +125,25 @@
 
 ;; takes a statement representing a while statement
 (define Mstate-while
-  (lambda (statement state)
+  (lambda (statement state evaluate)
     (Mstate-while-impl (while-condition statement)
                        (while-body statement)
-                       state)))
+                       state
+                       evaluate)))
 
 (define Mstate-while-impl
-  (lambda (condition body state)
-    (if (Mbool condition state)
-        (Mstate-while-impl condition
-                           body
-                           (Mstate-statement body
-                                             (Mstate-expr condition state)))
-        (Mstate-expr condition state))))
+  (lambda (condition body state evaluate)
+    (Mbool condition state (lambda (b s1)
+                              (if b
+                                  (Mstate-statement body 
+                                                    s1 
+                                                    (lambda (s2)
+                                                      (Mstate-while-impl condition
+                                                                          body
+                                                                          s2
+                                                                          evaluate)))
+                                  
+                                  (evaluate s1))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; IF ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -147,20 +159,20 @@
 ;; takes a statement representing an if statement
 ;; returns the resulting state
 (define Mstate-if
-  (lambda (statement state)
+  (lambda (statement state evaluate)
     (Mstate-if-impl (if-condition statement)
                     (if-then-body statement)
                     (if-else-body statement)
-                    state)))
+                    state
+                    evaluate)))
 
 (define Mstate-if-impl
-  (lambda (condition then-body maybe-else-body state)
-    (cond
-      [(Mbool condition state)            (Mstate-statement then-body
-                                                            (Mstate-expr condition state))]
-      [(null? maybe-else-body)            (Mstate-expr condition state)]
-      [else                               (Mstate-statement (get maybe-else-body)
-                                                            (Mstate-expr condition state))])))
+  (lambda (condition then-body maybe-else-body state evaluate)
+    (Mbool condition state (lambda (b s)
+                              (cond
+                                  [b                        (Mstate-statement then-body s evaluate)]
+                                  [(null? maybe-else-body)  (evaluate s)]
+                                  [else                     (Mstate-statement (get maybe-else-body) s evaluate)])))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; RETURN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -172,10 +184,11 @@
 ; takes a statement representing a return statement
 ; returns the resulting state,
 ;  which will have also set a special var in state corresponding to the return value
+; TODO: working on a return continuous stuff
 (define Mstate-return
-  (lambda (statement state)
-    (state-set-return-value (Mvalue (return-expr-part statement) state)
-                            (Mstate-expr (return-expr-part statement) state))))
+  (lambda (statement state evaluate)
+    (Mvalue  (return-expr-part statement) state (lambda (v s) 
+                                                  (evaluate (state-set-return-value v s))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -188,25 +201,26 @@
 ;; takes a declaration statement
 ;; returns the resulting state
 (define Mstate-declare
-  (lambda (statement state)
+  (lambda (statement state evaluate)
     (Mstate-decl-impl (decl-var statement)
                       (decl-maybe-expr statement)
-                      state)))
+                      state
+                      evaluate)))
 
 ;; declares the variable,
 ;; error if already declared
 ;; initializes if expr is provided
 (define Mstate-decl-impl
-  (lambda (var-name maybe-expr state)
+  (lambda (var-name maybe-expr state evaluate)
     (cond
       [(state-var-declared-top-frame? var-name state)   (error (string-append "attempted to re-declare "
                                                                               (symbol->string var-name)
                                                                               "."))]
-      [(null? maybe-expr)                               (state-declare-var var-name state)]
-      [else                                             (state-assign-var var-name
-                                                                          (Mvalue (get maybe-expr) state)
-                                                                          (Mstate-expr (get maybe-expr)
-                                                                                       (state-declare-var var-name state)))])))
+      [(null? maybe-expr)                               (evaluate (state-declare-var var-name state))]
+      [else                                             (Mvalue (get maybe-expr) state (lambda (v s)
+                                                            (evaluate (state-assign-var var-name 
+                                                                                        v 
+                                                                                        (state-declare-var var-name s)))))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ASSIGN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -219,17 +233,17 @@
 ;; assigns the value resulting from evaluating expr
 ;;  onto the state resulting from evaluating expr
 (define Mstate-assign
-  (lambda (expr state)
+  (lambda (expr state evaluate)
     (Mstate-assign-impl (assign-var expr)
                         (assign-expr expr)
-                        state)))
+                        state
+                        evaluate)))
 
 (define Mstate-assign-impl
-  (lambda (var-name val-expr state)
+  (lambda (var-name val-expr state evaluate)
     (if (state-var-declared? var-name state)
-        (state-assign-var var-name
-                          (Mvalue val-expr state)
-                          (Mstate-expr val-expr state))
+        (Mvalue val-expr state (lambda (v s)
+                                  (evaluate (state-assign-var var-name v s))))
         ; else assigning to undeclared var
         (error (string-append "tried to assign to "
                               (symbol->string var-name)
@@ -248,32 +262,35 @@
 ;; the given expression in order of its operator's associativity
 ;; also handles short-circuiting
 (define Mstate-op
-  (lambda (expr state)
+  (lambda (expr state evaluate)
     (cond
-      [(is-||? expr)          (Mstate-|| (op-param-list expr) state)]
-      [(is-&&? expr)          (Mstate-&& (op-param-list expr) state)]
+      [(is-||? expr)          (Mstate-|| (op-param-list expr) state evaluate)]
+      [(is-&&? expr)          (Mstate-&& (op-param-list expr) state evaluate)]
       [else                   (state-after-expr-list
                                (sort-list-to-associativity-of-op (op-op-symbol expr)
                                                                  (op-param-list expr))
-                               state)])))
+                               state
+                               evaluate)])))
 
 ;; takes a list of two expressions and a state
 ;; returns state resulting from performing short-circuit or
-;; if the first expression evals to true, doesn't eval second
+;; if the first expression evaluates to true, doesn't evaluate second
 (define Mstate-||
-  (lambda (exprs state)
-    (if (Mbool (first exprs) state)
-        (Mstate-expr (first exprs) state)
-        (Mstate-expr (second exprs) (Mstate-expr (first exprs) state)))))
+  (lambda (exprs state evaluate)
+    (Mbool (first exprs) state (lambda (b s) 
+                                  (if b
+                                      (evaluate s)
+                                      (Mbool (second exprs) s (lambda (b s) (evaluate s))))))))
 
 ;; takes a list of two expressions and a state
 ;; returns state resulting from performing short-circuit and
-;; if the first expression evals to false, doesn't eval second
+;; if the first expression evaluates to false, doesn't evaluate second
 (define Mstate-&&
-  (lambda (exprs state)
-    (if (Mbool (first exprs) state)
-        (Mstate-expr (second exprs) (Mstate-expr (first exprs) state))
-        (Mstate-expr (first exprs) state))))
+  (lambda (exprs state evaluate)
+    (Mbool (first exprs) state (lambda (b s) 
+                                  (if b
+                                      (Mbool (second exprs) s (lambda (b s) (evaluate s)))
+                                      (evaluate s))))))
 
 
 ;; takes an op-symbol and a list of params
@@ -288,11 +305,11 @@
 ;; evaluating the list of expressions
 ;; in the order they were given
 (define state-after-expr-list
-  (lambda (expr-list state)
+  (lambda (expr-list state evaluate)
     (if (null? expr-list)
-        state
-        (state-after-expr-list (cdr expr-list)
-                               (Mstate-expr (car expr-list) state)))))
+        (evaluate state)
+        (Mstate-expr (car expr-list) state (lambda (s) 
+                                              (state-after-expr-list (cdr expr-list) s evaluate))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -305,21 +322,31 @@
 (define bool-left-op second)
 (define bool-right-op third)
 
-;; takes an expression and evaluates it
+;; takes an expression and evaluateuates it
 ;; error if not bool
 (define Mbool
-  (lambda (expr state)
+  (lambda (expr state evaluate)
     (cond
-      [(not (nested? expr))      (assert-bool (Mvalue-base expr state))]
-      [(is-||? expr)             (or (Mbool (bool-left-op expr)
-                                            state)
-                                     (Mbool (bool-right-op expr)
-                                            (Mstate-expr (bool-left-op expr) state)))]
-      [(is-&&? expr)             (and (Mbool (bool-left-op expr)
-                                             state)
-                                      (Mbool (bool-right-op expr)
-                                             (Mstate-expr (bool-left-op expr) state)))]
-      [else                      (assert-bool (Mvalue-op expr state))])))
+      [(not (nested? expr))      (Mvalue-base expr state (lambda (v s)
+                                                            (evaluate (assert-bool v) s)))]
+      [(is-||? expr)             (Mbool (bool-left-op expr) 
+                                        state 
+                                        (lambda (b1 s1)
+                                          (Mbool (bool-right-op expr) 
+                                                 s1 
+                                                 (lambda (b2 s2)
+                                                    (evaluate (or b1 b2) s2)))))]
+      [(is-&&? expr)             (Mbool (bool-left-op expr) 
+                                        state 
+                                        (lambda (b1 s1)
+                                          (Mbool (bool-right-op expr) 
+                                                 s1 
+                                                 (lambda (b2 s2)
+                                                    (evaluate (and b1 b2) s2)))))]
+      [else                      (Mvalue-op expr 
+                                            state 
+                                            (lambda (b s)
+                                              (evaluate (assert-bool b) s)))])))
 
 
 ; error if not bool, else allows through
@@ -338,26 +365,29 @@
 
 ;; returns the value of an expression, in the context of the given state
 (define Mvalue
-  (lambda (expr state)
+  (lambda (expr state evaluate)
     (cond
       [(null? expr)                        (error "called Mvalue on a null expression")]
-      [(not (nested? expr))                (Mvalue-base expr state)]
+      [(not (nested? expr))                (Mvalue-base expr state evaluate)]
       ; else nested expr
-      [(is-assign? expr)                   (Mvalue (assign-expr expr) state)]
-      [(is-boolean? expr)                  (Mbool expr state)]
-      [(has-op? expr)                      (Mvalue-op expr state)]
+      [(is-assign? expr)                   (Mvalue (assign-expr expr) 
+                                                   state 
+                                                   (lambda (v s) 
+                                                    (evaluate v (state-assign-var (assign-var expr) v s))))]
+      [(is-boolean? expr)                  (Mbool expr state evaluate)]
+      [(has-op? expr)                      (Mvalue-op expr state evaluate)]
       [else                                (error "unreachable in Mvalue")])))
 
 
 ;; returns the value of the token given the state
 ;; token = 1 | 'x | 'true 
 (define Mvalue-base
-  (lambda (token state)
+  (lambda (token state evaluate)
     (cond
-      [(number? token)            token]
-      [(eq? 'true token)          #t]
-      [(eq? 'false token)         #f]
-      [else                       (read-var token state)])))
+      [(number? token)            (evaluate token state)]
+      [(eq? 'true token)          (evaluate #t state)]
+      [(eq? 'false token)         (evaluate #f state)]
+      [else                       (evaluate (read-var token state) state)])))
 
 
 ;; retrieves value of a var from state
@@ -375,34 +405,43 @@
 
 
 ;; takes a nested expression containing an op
-;; and evaluates it
+;; and evaluateuates it
 (define Mvalue-op
-  (lambda (expr state)
-    (op-apply (op-of-symbol (op-op-symbol expr))
-              (map-expr-list-to-value-list
+  (lambda (expr state evaluate)
+
+    (map-expr-list-to-value-list
                (sort-list-to-associativity-of-op (op-op-symbol expr)
                                                  (op-param-list expr))
-               state))))
+               state
+               (lambda (v1 s) 
+                (op-apply (op-of-symbol (op-op-symbol expr)) 
+                          v1
+                          (lambda (v2)
+                            (evaluate v2 s)))))))
 
 
 ;; takes a list of exprs and maps them to values,
-;; propagating the state changes (so that they evaluate correctly)
+;; propagating the state changes (so that they evaluateuate correctly)
 (define map-expr-list-to-value-list
-  (lambda (expr-list state)
+  (lambda (expr-list state evaluate)
     (if (null? expr-list)
-        expr-list
-        (cons (Mvalue (car expr-list) state)
-              (map-expr-list-to-value-list (cdr expr-list)
-                                           (Mstate-expr (car expr-list) state))))))
+        (evaluate expr-list state)
+        (Mvalue 
+            (car expr-list) 
+            state 
+            (lambda (v1 s1)
+                (map-expr-list-to-value-list (cdr expr-list)
+                        s1
+                        (lambda (v2 s2) (evaluate (cons v1 v2) s2))))))))
 
 
 ;; takes an op and a val-list * already in order of associativity
 ;; returns the value of the op applied to the list of values
 (define op-apply
-  (lambda (op val-list)
+  (lambda (op val-list evaluate)
     (cond
-      [(eq? 1 (length val-list))                  (op (first val-list))]
-      [(eq? 2 (length val-list))                  (op (first val-list) (second val-list))]
+      [(eq? 1 (length val-list))                  (evaluate (op (first val-list)))]
+      [(eq? 2 (length val-list))                  (evaluate (op (first val-list) (second val-list)))]
       [else                                       (error op val-list)])))
 ; todo:
 ; check types
