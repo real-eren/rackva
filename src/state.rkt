@@ -11,10 +11,7 @@
                                   var-declared?
                                   var-declared-top-frame?
                                   var-initialized?
-                                  var-value
-                                  return?
-                                  set-return-value
-                                  get-return-value)))
+                                  var-value)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; State is a stack of frames
@@ -112,21 +109,3 @@
                                                                       (peek-frame state))]
       [else                                          (var-value var-name
                                                                 (pop-frame state))])))
-
-;; Deprecated, will be replaced with continuations
-(define return-value-name 'return-value)
-
-
-(define return?
-  (lambda (state)
-    (var-initialized? return-value-name state)))
-
-
-(define get-return-value
-  (lambda (state)
-    (var-value return-value-name state)))
-
-
-(define set-return-value
-  (lambda (value state)
-    (assign-var return-value-name value state)))
