@@ -203,7 +203,7 @@
 (define return-expr-part second)
 
 ; takes a statement representing a return statement
-; returns the resulting state
+; invokes the return continuation
 (define Mstate-return
   (lambda (statement state conts)
     (Mvalue (return-expr-part statement)
@@ -211,6 +211,41 @@
             conts
             (lambda (v s)
               ((return conts) v)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; THROW ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; takes a statement representing a throw statement
+; extracts the expression portion
+(define throw-expr-part second)
+
+; takes a statement representing a throw statement
+; invokes the throw continuation
+(define Mstate-throw
+  (lambda (statement state conts)
+    (Mvalue (throw-expr-part statement)
+            state
+            conts
+            (lambda (v s)
+              ((throw conts) v s)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BREAK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; takes a statement representing a break statement
+; invokes the break continuation
+(define Mstate-break
+  (lambda (statement state conts)
+    ((break conts) state)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CONTINUE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; takes a statement representing a continue statement
+; invokes the continue continuation
+(define Mstate-continue
+  (lambda (statement state conts)
+    ((continue conts) state)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -524,6 +559,9 @@
 (define is-return? (checker-of 'return))
 (define is-if? (checker-of 'if))
 (define is-while? (checker-of 'while))
+(define is-try? (checker-of 'try))
+(define is-throw? (checker-of 'throw))
+(define is-catch? (checker-of 'catch))
 (define is-break? (checker-of 'break))
 (define is-continue? (checker-of 'continue))
 (define is-block? (checker-of 'begin))
