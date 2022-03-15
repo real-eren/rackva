@@ -329,6 +329,52 @@ while (r != 0)
   r = (a = b) % (b = r);
 return b;")
 
+; ; Short-circuit side-effects
+
+(test-str #:id "short-circuit or, should evaluate second arg"
+          12 "
+var x = 1;
+if (false || ((x = 2) == 2)) {
+  x = x + 10;
+}
+return x;
+")
+
+(test-str #:id "short-circuit or, should not evaluate second arg"
+          11 "
+var x = 1;
+if (true || ((x = 2) == 2)) {
+  x = x + 10;
+}
+return x;
+")
+
+(test-str #:id "short-circuit and, should evaluate second arg (false)"
+          2 "
+var x = 1;
+if (true && ((x = 2) == 0)) {
+  x = x + 10;
+}
+return x;
+")
+
+(test-str #:id "short-circuit and, should evaluate second arg (true)"
+          12 "
+var x = 1;
+if (true && ((x = 2) == 2)) {
+  x = x + 10;
+}
+return x;
+")
+
+(test-str #:id "short-circuit and, should not evaluate second arg"
+          1 "
+var x = 1;
+if (false && ((x = 2) == 2)) {
+  x = x + 10;
+}
+return x;
+")
 
 ;;;; Static scoping
 
