@@ -404,20 +404,24 @@
                                         state
                                         conts
                                         (lambda (b1 s1)
-                                          (Mbool (bool-right-op expr)
-                                                 s1
-                                                 conts
-                                                 (lambda (b2 s2)
-                                                   (evaluate (or b1 b2) s2)))))]
+                                          (if b1
+                                              (evaluate b1 s1)
+                                              (Mbool (bool-right-op expr)
+                                                     s1
+                                                     conts
+                                                     (lambda (b2 s2)
+                                                       (evaluate b2 s2))))))]
       [(is-&&? expr)             (Mbool (bool-left-op expr)
                                         state
                                         conts
                                         (lambda (b1 s1)
-                                          (Mbool (bool-right-op expr)
-                                                 s1
-                                                 conts
-                                                 (lambda (b2 s2)
-                                                   (evaluate (and b1 b2) s2)))))]
+                                          (if (not b1)
+                                              (evaluate b1 s1)
+                                              (Mbool (bool-right-op expr)
+                                                     s1
+                                                     conts
+                                                     (lambda (b2 s2)
+                                                       (evaluate b2 s2))))))]
       [else                      (Mvalue-op expr
                                             state
                                             conts
@@ -567,7 +571,7 @@
 (define is-block? (checker-of 'begin))
 
 ;; keys are checker functions that take a statement and return a bool
-;; values are the corresponding constructs
+;; values are the corresponding constructs (type of statement)
 (define constructs-table (map-from-interlaced-entry-list
                           (list is-return?  Mstate-return
                                 is-while?   Mstate-while
