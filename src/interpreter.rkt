@@ -27,19 +27,25 @@
 ;; and returns the result
 (define interpret
   (lambda (file-name)
-    (Mstate-stmt-list (parser file-name)
-                      new-state
-                      (conts-of
-                       #:return (lambda (v) (prep-val-for-output v))))))
+    (interpret-helper (parser file-name))))
 
 ;; takes a string representing a program, intreprets it
 ;; returns the result
 (define interpret-str
   (lambda (str)
-    (Mstate-stmt-list (parser-str str)
+    (interpret-helper (parser-str str))))
+
+(define interpret-helper
+  (lambda (parse-tree)
+    (Mstate-stmt-list parse-tree
                       new-state
                       (conts-of
-                       #:return (lambda (v) (prep-val-for-output v))))))
+                       #:return (lambda (v) (prep-val-for-output v))
+                       #:next (lambda (s) (error "reached end of program without return"))
+                       #:throw (lambda (v s) (error "uncaught exception: " v))
+                       #:catch (lambda (v s) (error "uncaught exception: " v))
+                       #:break (lambda (s) (error "break statement outside of loop"))
+                       #:continue (lambda (s) (error "continue statement outside of loop"))))))
 
 ;; takes a value and modifies it for output
 (define prep-val-for-output
