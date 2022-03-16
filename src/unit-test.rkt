@@ -411,3 +411,27 @@ if (true) {
   }
 }")
 
+(test-str #:id "while loop with break"
+          5 "
+var x = 0;
+while(true) {
+  x = x + 1;
+  if (x == 5) {
+    break;
+  }
+}
+return x;
+")
+
+(test-str #:id "while loop with continue"
+          2 "
+var y = 2;
+var x = 3;
+while(x > y) {
+  x = x - 1;
+  continue;
+  x = x + 1;
+}
+return x;
+")
+

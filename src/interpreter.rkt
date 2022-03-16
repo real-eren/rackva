@@ -160,6 +160,12 @@
                                                       (Mstate-while-impl condition
                                                                          body
                                                                          s2
+                                                                         conts))
+                                             #:break (next conts)
+                                             #:continue (lambda (s3)
+                                                      (Mstate-while-impl condition
+                                                                         body
+                                                                         s3
                                                                          conts))))
                  ((next conts) s1))))))
 
@@ -573,12 +579,14 @@
 ;; keys are checker functions that take a statement and return a bool
 ;; values are the corresponding constructs (type of statement)
 (define constructs-table (map-from-interlaced-entry-list
-                          (list is-return?  Mstate-return
-                                is-while?   Mstate-while
-                                is-if?      Mstate-if
-                                is-declare? Mstate-declare
-                                is-assign?  Mstate-assign
-                                is-block?   Mstate-block)
+                          (list is-return?   Mstate-return
+                                is-while?    Mstate-while
+                                is-if?       Mstate-if
+                                is-declare?  Mstate-declare
+                                is-assign?   Mstate-assign
+                                is-block?    Mstate-block
+                                is-break?    Mstate-break
+                                is-continue? Mstate-continue)
                           (map-empty-custom (lambda (key checker) (checker key)))))
 
 ;; returns whether the statement is a recognized construct
