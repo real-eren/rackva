@@ -40,10 +40,9 @@
     (Mstate-stmt-list parse-tree
                       new-state
                       (conts-of
-                       #:return (lambda (v) (prep-val-for-output v))
+                       #:return (lambda (v s) (prep-val-for-output v))
                        #:next (lambda (s) (error "reached end of program without return"))
                        #:throw (lambda (v s) (error "uncaught exception: " v))
-                       #:catch (lambda (v s) (error "uncaught exception: " v))
                        #:break (lambda (s) (error "break statement outside of loop"))
                        #:continue (lambda (s) (error "continue statement outside of loop"))))))
 
@@ -163,10 +162,10 @@
                                                                          conts))
                                              #:break (next conts)
                                              #:continue (lambda (s3)
-                                                      (Mstate-while-impl condition
-                                                                         body
-                                                                         s3
-                                                                         conts))))
+                                                          (Mstate-while-impl condition
+                                                                             body
+                                                                             s3
+                                                                             conts))))
                  ((next conts) s1))))))
 
 
@@ -216,7 +215,7 @@
             state
             conts
             (lambda (v s)
-              ((return conts) v)))))
+              ((return conts) v s)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; THROW ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -315,15 +314,84 @@
                               " before declaring it.")))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TRY CATCH FINALLY ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (define try-body second) ; may return null
 (define try-catch third) ; may return null
+;; takes the catch portion
+(define catch-var (compose1 first second))
+(define catch-body third)
 (define try-finally fourth) ; may return null
+;; takes the finally portion
+(define finally-body second)
 
 (define Mstate-try
   (lambda (statement state conts)
-    (Mstate-block-impl (try-body statement) state conts))) ;TODO: add catch and finally handling
+    (Mstate-try-impl (try-body statement)
+                     (try-catch statement)
+                     (try-finally statement)
+                     state
+                     conts)))
 
-
+(define Mstate-try-impl
+  (lambda (try-body catch-block finally-block state conts)
+    (Mstate-block-impl try-body
+                       state
+                       (conts-of conts
+                                 #:next (if (null? finally-block)
+                                            (next conts)
+                                            (lambda (s)
+                                              (Mstate-block-impl (finally-body finally-block)
+                                                                 s
+                                                                 (conts-of conts
+                                                                           #:next (next conts)))))
+                                 #:throw (cond
+                                           [(null? catch-block)     (lambda (e s)
+                                                                      (Mstate-block-impl (finally-body finally-block)
+                                                                                         s
+                                                                                         (conts-of conts
+                                                                                                   #:next (lambda (s2)
+                                                                                                            ((throw conts) e s2))
+                                                                                                   #:throw (throw conts))))]
+                                           [(null? finally-block)   (lambda (e s)
+                                                                      (Mstate-block-impl (catch-body catch-block)
+                                                                                         (state-assign-var (catch-var catch-block)
+                                                                                                           e
+                                                                                                           (state-declare-var (catch-var catch-block) s))
+                                                                                         conts))]
+                                           [else                    (lambda (e s)
+                                                                      (Mstate-block-impl (catch-body catch-block)
+                                                                                         (state-assign-var (catch-var catch-block)
+                                                                                                           e
+                                                                                                           (state-declare-var (catch-var catch-block) s))
+                                                                                         (conts-of conts ; after catch, before finally
+                                                                                                   #:next (lambda (s2)
+                                                                                                            (Mstate-block-impl (finally-body finally-block)
+                                                                                                                               s2
+                                                                                                                               conts))
+                                                                                                   #:break (lambda (s2)
+                                                                                                             (Mstate-block-impl (finally-body finally-block)
+                                                                                                                                s2
+                                                                                                                                (conts-of conts
+                                                                                                                                          #:next (break conts))))
+                                                                                                   #:continue (lambda (s2)
+                                                                                                                (Mstate-block-impl (finally-body finally-block)
+                                                                                                                                   s2
+                                                                                                                                   (conts-of conts
+                                                                                                                                             #:next (continue conts))))
+                                                                                                   #:throw (lambda (e2 s2)
+                                                                                                             (Mstate-block-impl (finally-body finally-block)
+                                                                                                                                s2
+                                                                                                                                (conts-of conts
+                                                                                                                                          #:next (lambda (s3)
+                                                                                                                                                   ((throw conts) e2 s3)))))
+                                                                                                   #:return (lambda (v s2)
+                                                                                                              (Mstate-block-impl (finally-body finally-block)
+                                                                                                                                 s2
+                                                                                                                                 (conts-of conts
+                                                                                                                                           #:next (lambda (s3)
+                                                                                                                                                    ((return conts) v s3))))))))])))))
+                                                                                                   
+                                                                      
 
 
 ;; Deprecated (see Mvalue)
@@ -571,7 +639,6 @@
 (define is-while? (checker-of 'while))
 (define is-try? (checker-of 'try))
 (define is-throw? (checker-of 'throw))
-(define is-catch? (checker-of 'catch))
 (define is-break? (checker-of 'break))
 (define is-continue? (checker-of 'continue))
 (define is-block? (checker-of 'begin))
@@ -585,6 +652,8 @@
                                 is-declare?  Mstate-declare
                                 is-assign?   Mstate-assign
                                 is-block?    Mstate-block
+                                is-try?      Mstate-try
+                                is-throw?    Mstate-throw
                                 is-break?    Mstate-break
                                 is-continue? Mstate-continue)
                           (map-empty-custom (lambda (key checker) (checker key)))))
