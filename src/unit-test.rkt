@@ -663,7 +663,7 @@ return result;
 ")
 
 (error-str #:id "Try catch test #19"
-          "
+           "
 var x = 10;
 var result = 1;
 
