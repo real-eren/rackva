@@ -97,6 +97,15 @@ return x;")
 (test-str #:id "negative sign on nested expression"
           -39 "return 6 * -(4 * 2) + 9;")
 
+(test-str #:id "return immediately upon first encountered return statement"
+          25 "
+var x = 0;
+x = x + 25;
+return x;
+x = x + 25;
+return x;
+x = x + 25;
+return x;")
 
 ; ; Error Tests
 
@@ -125,7 +134,7 @@ x = x + y;
 return x;")
 
 (error-str #:id "redeclare in same scope"
-            "
+           "
 var x = 10;
 var y = 20;
 var x = x + y;
@@ -161,6 +170,29 @@ if (true) {
 }
 return a;")
 
+(error-str #:id "var declared in first iter of while loop doesn't persist through later iters)"
+           "
+var x = 0;
+while (x < 5) {
+  if (x != 0) {
+    return a;
+  }
+  var a = 5;
+  x = x + 1;
+}
+return 0;")
+
+(error-str #:id "break outside of loop"
+           "
+var x = 1;
+break;
+return x;")
+
+(error-str #:id "continue outside of loop"
+           "
+var x = 1;
+continue;
+return x;")
 
 ; ; Boolean, If, While Tests
 
@@ -320,6 +352,14 @@ while ((x = x + 1) < 21)
   x = x;
 return x;")
 
+(test-str #:id "left-associative side-effects in while cond"
+          10 "
+var x = 0;
+var y = 20;
+while ((x = x + 1) < (y = y - 1))
+  x = x;
+return x;")
+
 (test-str #:id "modulus, assign expr in left and right operands"
           164 "
 var a = 31160;
@@ -387,13 +427,41 @@ if (true) {
 }
 return a;")
 
-(test-str #:id "var in block can access outer scope var"
+(test-str #:id "inner block can access var from outer scope"
           0 "
 var a = 10;
 if (true) {
   a = 0;
 }
 return a;")
+
+(test-str #:id "update var from outer scope"
+          20 "
+var x = 10;
+{
+  var y = 2;
+  var z = x * y;
+  x = z;
+}
+return x;")
+
+(test-str #:id "update var in multiple nested scopes"
+          164 "
+var a = 31160;
+var b = 1476;
+if (a < b) {
+  var temp = a;
+  a = b;
+  b = temp;
+}
+var r = a % b;
+while (r != 0) {
+  a = b;
+  b = r;
+  r = a % b;
+}
+return b;")
+
 
 (test-str #:id "nested blocks are consistent"
           3 "
@@ -411,7 +479,32 @@ if (true) {
   }
 }")
 
-(test-str #:id "while loop with break"
+
+; ; Loop Flow Control
+
+(test-str #:id "while loop with break, single iter"
+          1 "
+var x = 0;
+while(true) {
+  x = x + 1;
+  if (x == 1) {
+    break;
+  }
+}
+return x;
+")
+
+(test-str #:id "break in while loop skips remaining statements in body"
+          -1 "
+var x = 0;
+while (x < 10) {
+  x = x - 1;
+  break;
+  x = x + 100;
+}
+return x;")
+
+(test-str #:id "while loop with break, multiple iters"
           5 "
 var x = 0;
 while(true) {
@@ -421,6 +514,21 @@ while(true) {
   }
 }
 return x;
+")
+
+(test-str #:id "nested whiles, break exits only the immediate loop"
+          'true "
+var x = 0;
+var y = 0;
+while (x < 5) {
+  while (true) {
+    y = y + 1;
+    if (!(y < 5))
+      break;
+  }
+  x = x + 1;
+}
+return (x == 5) && (y == 9);
 ")
 
 (test-str #:id "while loop with continue"
@@ -433,5 +541,35 @@ while(x > y) {
   x = x + 1;
 }
 return x;
+")
+
+(test-str #:id "while w/ continue. multiple iters"
+          5 "
+var accumulator = 0;
+var y = 0;
+while (y < 10) {
+  y = y + 1;
+  if (y % 2 == 0)
+    continue;
+  accumulator = accumulator + 1;
+}
+return accumulator;
+")
+
+(test-str #:id "nested whiles w/ continue, jumps to immediate loop.  multiple iters"
+          50 "
+var accumulator = 0;
+var x = 0;
+while (x < 10) {
+  var y = 0;
+  while (y < 10) {
+    y = y + 1;
+    if ((y % 2) == 0)
+      continue;
+    accumulator = accumulator + 1;
+  }
+  x = x + 1;
+}
+return accumulator;
 ")
 
