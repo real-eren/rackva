@@ -570,6 +570,122 @@ while (x < 10) {
   }
   x = x + 1;
 }
-return accumulator;
+return accumulator;")
+
+(test-str #:id "Try catch test #15"
+          125 "
+var x;
+
+try {
+  x = 20;
+  if (x < 0)
+    throw 10;
+  x = x + 5;
+}
+catch (e) {
+  x = e;
+}
+finally {
+  x = x + 100;
+}
+return x;
+")
+
+(test-str #:id "Try catch test #16"
+          110 "
+var x;
+
+try {
+  x = 20;
+  if (x > 10)
+    throw 10;
+  x = x + 5;
+}
+catch(e) {
+  x = e;
+}
+finally {
+  x = x + 100;
+}
+return x;")
+
+(test-str #:id "Try catch test #17"
+          2000400 "
+var x = 0;
+var j = 1;
+
+try {
+  while (j >= 0) {
+    var i = 10;
+    while (i >= 0) {
+      try {
+        if (i == 0)
+          throw 1000000;
+        x = x + 10*i / i;
+      }
+      catch(e) {
+        if (j == 0)
+          throw 1000000;
+        x = x + e / j;
+      }
+      i = i - 1;
+    }
+    j = j - 1;
+  }
+}
+catch (e2) {
+  x = x * 2;
+}
+return x;")
+
+(test-str #:id "Try catch test #18"
+          101 "
+var x = 10;
+var result = 1;
+
+try {
+  while (x < 10000) {
+     result = result - 1;
+     x = x + 10;
+
+     if (x > 1000) {
+       throw x;
+     }
+     else if (x > 100) {
+        break;
+     }
+  }
+}
+finally {
+  result = result + x;
+}
+return result;
+")
+
+(error-str #:id "Try catch test #19"
+          "
+var x = 10;
+var result = 1;
+
+try {
+  while (x < 10000) {
+    result = result - 1;
+    x = x * 10;
+
+    if (x > 1000)
+      throw x;
+  }
+}
+catch (ex) {
+  throw 1;
+}
+return result;")
+
+(test-str #:id "Try catch test #20"
+          21 "
+var x = 0;
+while ((x = x + 1) < 21)
+  x = x;
+return x;
 ")
 
