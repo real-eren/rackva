@@ -103,7 +103,7 @@
 (define var-value
   (lambda (var-name state)
     (cond
-      [(no-frames? state)                            (error "")]
+      [(no-frames? state)                            (error "failed to check for existence of variable before accessing")]
       [(frame-var-declared? var-name
                             (peek-frame state))      (frame-var-value var-name
                                                                       (peek-frame state))]
