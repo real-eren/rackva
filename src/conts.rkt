@@ -12,9 +12,7 @@
                       next
                       set-next
                       throw
-                      set-throw
-                      catch
-                      set-catch))
+                      set-throw))
 
 ;;;; Container of continuations used by the interpreter
 ;; these include return, next, break, continue, throw, catch, finally
@@ -30,15 +28,13 @@
            #:break    [brk (break conts)]
            #:continue [con (continue conts)]
            #:next     [nxt (next conts)]
-           #:throw    [thr (throw conts)]
-           #:catch    [cat (catch conts)])
+           #:throw    [thr (throw conts)])
     (map-from-interlaced-entry-list
      (list return-key   ret
            break-key    brk
            continue-key con
            next-key     nxt
            throw-key    thr
-           catch-key    cat
            )
      map-empty)))
 
@@ -70,7 +66,3 @@
 (define throw-key 'throw)
 (define throw (getter throw-key))
 (define set-throw (setter throw-key))
-
-(define catch-key 'catch)
-(define catch (getter catch-key))
-(define set-catch (setter catch-key))

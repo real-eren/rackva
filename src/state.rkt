@@ -6,15 +6,13 @@
          (prefix-out state-
                      (combine-out push-new-frame
                                   pop-frame
+                                  declare-var-with-value
                                   declare-var
                                   assign-var
                                   var-declared?
                                   var-declared-top-frame?
                                   var-initialized?
-                                  var-value
-                                  return?
-                                  set-return-value
-                                  get-return-value)))
+                                  var-value)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; State is a stack of frames
@@ -59,6 +57,14 @@
 
 ;; creates a new state with no var bindings
 (define new-state (list (frame-declare-var 'return-value new-frame)))
+
+; declares and assigns the var with the given value
+(define declare-var-with-value
+  (lambda (var-name value state)
+    (push-frame (frame-assign-var var-name
+                                  value
+                                  (frame-declare-var var-name (peek-frame state)))
+                (pop-frame state))))
 
 ; declares the var in the top frame
 (define declare-var
@@ -106,27 +112,9 @@
 (define var-value
   (lambda (var-name state)
     (cond
-      [(no-frames? state)                            (error "")]
+      [(no-frames? state)                            (error "failed to check for existence of variable before accessing")]
       [(frame-var-declared? var-name
                             (peek-frame state))      (frame-var-value var-name
                                                                       (peek-frame state))]
       [else                                          (var-value var-name
                                                                 (pop-frame state))])))
-
-;; Deprecated, will be replaced with continuations
-(define return-value-name 'return-value)
-
-
-(define return?
-  (lambda (state)
-    (var-initialized? return-value-name state)))
-
-
-(define get-return-value
-  (lambda (state)
-    (var-value return-value-name state)))
-
-
-(define set-return-value
-  (lambda (value state)
-    (assign-var return-value-name value state)))
