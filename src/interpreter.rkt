@@ -282,9 +282,9 @@
                                                                 state
                                                                 conts
                                                                 (lambda (v s)
-                                                                  ((next conts) (state-assign-var var-name 
-                                                                                                  v 
-                                                                                                  (state-declare-var var-name s)))))])))
+                                                                  ((next conts) (state-declare-var-with-value var-name 
+                                                                                                              v
+                                                                                                              s))))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ASSIGN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -360,9 +360,9 @@
                                                                                          conts))]
                                            [else                    (lambda (e s)
                                                                       (Mstate-block-impl (catch-body catch-block)
-                                                                                         (state-assign-var (catch-var catch-block)
-                                                                                                           e
-                                                                                                           (state-declare-var (catch-var catch-block) s))
+                                                                                         (state-declare-var-with-value (catch-var catch-block)
+                                                                                                                       e
+                                                                                                                       s)
                                                                                          (conts-of conts ; after catch, before finally
                                                                                                    #:next (lambda (s2)
                                                                                                             (Mstate-block-impl (finally-body finally-block)

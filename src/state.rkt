@@ -6,6 +6,7 @@
          (prefix-out state-
                      (combine-out push-new-frame
                                   pop-frame
+                                  declare-var-with-value
                                   declare-var
                                   assign-var
                                   var-declared?
@@ -56,6 +57,14 @@
 
 ;; creates a new state with no var bindings
 (define new-state (list (frame-declare-var 'return-value new-frame)))
+
+; declares and assigns the var with the given value
+(define declare-var-with-value
+  (lambda (var-name value state)
+    (push-frame (frame-assign-var var-name
+                                  value
+                                  (frame-declare-var var-name (peek-frame state)))
+                (pop-frame state))))
 
 ; declares the var in the top frame
 (define declare-var
