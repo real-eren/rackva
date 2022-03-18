@@ -91,6 +91,7 @@
       [(is-construct? statement)            ((get-Mstate statement) statement state conts)]
       [else                                 (error "unrecognized stmt:" statement)])))
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; returns a list of the statements in a block statement
@@ -109,24 +110,6 @@
                       (conts-of conts
                                 #:next (lambda (s)
                                          ((next conts) (state-pop-frame s)))))))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSION ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; takes an expression and a state
-;; returns the state after evaluating the expression
-;;  in the context of the given initial state
-(define Mstate-expr
-  (lambda (expr state evaluate)
-    (cond
-      [(null? expr)                          (error "called Mstate on null expr")]
-      ; base case: 1 | x
-      [(not (nested? expr))                  (evaluate state)]
-      ; else nested
-      ; x = expr
-      [(is-assign? expr)                     (Mstate-assign expr state evaluate)]
-      [(has-op? expr)                        (Mstate-op expr state evaluate)]
-      [else                                  (error "unrecognized expr" expr)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; WHILE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -390,71 +373,7 @@
                                                                                                                                  (conts-of conts
                                                                                                                                            #:next (lambda (s3)
                                                                                                                                                     ((return conts) v s3))))))))])))))
-                                                                                                   
-                                                                      
 
-
-;; Deprecated (see Mvalue)
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; OP EXPRESSION ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; takes an expression representing one with an operator
-; ex: -(expr) | !(bool-expr) | -x | x+y | z/2 | etc
-(define op-op-symbol first)
-(define op-param-list cdr)
-
-;; takes an expression containing an operator
-;; returns the state resulting from evaluating
-;; the given expression in order of its operator's associativity
-;; also handles short-circuiting
-(define Mstate-op
-  (lambda (expr state evaluate)
-    (cond
-      [(is-||? expr)          (Mstate-|| (op-param-list expr) state evaluate)]
-      [(is-&&? expr)          (Mstate-&& (op-param-list expr) state evaluate)]
-      [else                   (state-after-expr-list
-                               (sort-list-to-associativity-of-op (op-op-symbol expr)
-                                                                 (op-param-list expr))
-                               state
-                               evaluate)])))
-
-;; takes a list of two expressions and a state
-;; returns state resulting from performing short-circuit or
-;; if the first expression evaluates to true, doesn't evaluate second
-(define Mstate-||
-  (lambda (exprs state evaluate)
-    (Mbool (first exprs) state (lambda (b s) 
-                                 (if b
-                                     (evaluate s)
-                                     (Mbool (second exprs) s (lambda (b s) (evaluate s))))))))
-
-;; takes a list of two expressions and a state
-;; returns state resulting from performing short-circuit and
-;; if the first expression evaluates to false, doesn't evaluate second
-(define Mstate-&&
-  (lambda (exprs state evaluate)
-    (Mbool (first exprs) state (lambda (b s) 
-                                 (if b
-                                     (Mbool (second exprs) s (lambda (b s) (evaluate s)))
-                                     (evaluate s))))))
-
-
-;; takes an op-symbol and a list of params
-;; returns a list of the same params in order
-;; of associativity, according to the given op
-(define sort-list-to-associativity-of-op
-  (lambda (op-symbol lis)
-    lis)) ; all given ops are left associative
-
-
-;; returns the state resulting from
-;; evaluating the list of expressions
-;; in the order they were given
-(define state-after-expr-list
-  (lambda (expr-list state evaluate)
-    (if (null? expr-list)
-        (evaluate state)
-        (Mstate-expr (car expr-list) state (lambda (s) 
-                                             (state-after-expr-list (cdr expr-list) s evaluate))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -511,6 +430,8 @@
         (error "value is not a bool:" val))))
 
 
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;; Mvalue functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -558,6 +479,19 @@
                                                                                 " before initializing it."))]
       [else                                               (state-var-value var-symbol state)])))
 
+
+;; takes an expression representing one with an operator
+; ex: -(expr) | !(bool-expr) | -x | x+y | z/2 | etc
+(define op-op-symbol first)
+(define op-param-list cdr)
+
+;; takes an op-symbol and a list of params
+;; returns a list of the same params in order
+;; of associativity, according to the given op
+(define sort-list-to-associativity-of-op
+  (lambda (op-symbol lis)
+    lis)) ; all given ops are left associative
+
 ;; takes a nested expression containing an op
 ;; and evaluates it
 (define Mvalue-op
@@ -598,10 +532,7 @@
       [(eq? 1 (length val-list))                  (evaluate (op (first val-list)))]
       [(eq? 2 (length val-list))                  (evaluate (op (first val-list) (second val-list)))]
       [else                                       (error op val-list)])))
-; todo:
-; check types
-; check # params expected by op (more-so for functions)
-; generalize to N params with `values` and `call-with-values`
+
 
 
 
