@@ -327,6 +327,28 @@
                                                                  s
                                                                  (conts-of conts
                                                                            #:next (next conts)))))
+                                 #:break (if (null? finally-block)
+                                              (break conts)
+                                              (lambda (s)
+                                                (Mstate-block-impl (finally-body finally-block)
+                                                                   s
+                                                                   (conts-of conts
+                                                                             #:next (break conts)))))
+                                 #:continue (if (null? finally-block)
+                                                (continue conts)
+                                                (lambda (s)
+                                                  (Mstate-block-impl (finally-body finally-block)
+                                                                     s
+                                                                     (conts-of conts
+                                                                               #:next (continue conts)))))
+                                 #:return (if (null? finally-block)
+                                              (return conts)
+                                              (lambda (v s)
+                                                (Mstate-block-impl (finally-body finally-block)
+                                                                   s
+                                                                   (conts-of conts
+                                                                             #:next (lambda (s2)
+                                                                                      ((return conts) v s2))))))
                                  #:throw (cond
                                            [(null? catch-block)     (lambda (e s)
                                                                       (Mstate-block-impl (finally-body finally-block)
