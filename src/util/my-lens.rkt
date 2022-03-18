@@ -9,7 +9,9 @@
                       
                       identity-lens
                       lens-compose
+                      lens-compose-list
                       lens-thrush
+                      lens-thrush-list
                       
                       car-lens
                       cdr-lens
@@ -106,18 +108,24 @@
 ;; ex: caddr-lens  car of cdr of cdr of target
 ;; (lens-compose '(car-lens cdr-lens cdr-lens))
 (define lens-compose
+  (lambda lenses
+    (lens-compose-list lenses)))
+(define lens-compose-list
   (lambda (lenses)
     ; (foldr combine2 identity-lens lenses)
     (cond
       [(null? lenses)           identity-lens]
       [(null? (cdr lenses))     (car lenses)]
       [else                     (combine2 (car lenses)
-                                          (lens-compose (cdr lenses)))])))
+                                          (lens-compose-list (cdr lenses)))])))
 
 ;; combines the lenses such that
 ;; 'eye' -> last lens -> ... -> first lens -> target
 ;; opposite order of lens-compose
 (define lens-thrush
+  (lambda lenses
+    (lens-thrush-list lenses)))
+(define lens-thrush-list
   (lambda (lenses)
     (foldl combine2 identity-lens lenses)))
 
