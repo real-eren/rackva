@@ -27,6 +27,7 @@
 
 (define error-str
   (lambda (str #:id [test-id #f])
+    ;(interpret-str str))) ;for checking the error messages
     (check-exn exn:fail? (lambda () (interpret-str str)) (format-test-id test-id))))
 
 
@@ -123,8 +124,6 @@ var y;
 y = x;
 return y;")
 
-(error-str #:id "accessing x before declaring it"
-           "return x;")
 
 (error-str #:id "reference w/out initializing"
            "
@@ -369,6 +368,28 @@ while (r != 0)
   r = (a = b) % (b = r);
 return b;")
 
+
+(test-str #:id "assign bool to var in condition"
+          5 "
+var i = 0;
+var x;
+while (x = true) {
+  i = i + 1;
+  if (i == 5) break;
+}
+return i;
+")
+
+(test-str #:id "assign bool to var in condition"
+          'true "
+var i = 0;
+var x;
+if (x = true) {
+  i = i + 1;
+}
+return x;
+")
+
 ; ; Short-circuit side-effects
 
 (test-str #:id "short-circuit or, should evaluate second arg"
@@ -572,6 +593,8 @@ while (x < 10) {
 }
 return accumulator;")
 
+; ; Try catch finally
+
 (test-str #:id "Try catch test #15"
           125 "
 var x;
@@ -638,7 +661,7 @@ catch (e2) {
 }
 return x;")
 
-(test-str #:id "Try catch test #18"
+(test-str #:id "Side effect in finally"
           101 "
 var x = 10;
 var result = 1;
@@ -662,7 +685,61 @@ finally {
 return result;
 ")
 
-(error-str #:id "Try catch test #19"
+(test-str #:id "try in loop, try has break and finally block"
+          505 "
+var x = 0;
+var i = 0;
+while (i < 5) {
+  try {
+    x = x + 1;
+    i = i + 1;
+    if (i == 5) {
+      break;
+    }
+  }
+  finally {
+    x = x + 100;
+  }
+}
+return x;
+")
+
+(test-str #:id "try {throw; return} catch {} finally {return}. should return val in finally"
+          2 "
+try {
+  throw 5;
+  return 1;
+}
+catch (e) {
+}
+finally {
+  return 2;
+}
+")
+
+(test-str #:id "side effects of try and catch visible in finally"
+          111 "
+var x = 0;
+try {
+  x = x + 1;
+  throw 10;
+  return x;
+}
+catch (e) {
+  x = x + e;
+}
+finally {
+  return x + 100;
+}
+return x;
+")
+
+(error-str #:id "Top-level throw"
+           "
+throw 1;
+")
+
+(error-str #:id "Uncaught throw in (entered) catch block"
            "
 var x = 10;
 var result = 1;
@@ -681,11 +758,58 @@ catch (ex) {
 }
 return result;")
 
-(test-str #:id "Try catch test #20"
-          21 "
+(error-str #:id "break exit from block pops frame"
+           "
 var x = 0;
-while ((x = x + 1) < 21)
-  x = x;
+while (true) {
+  x = x + 1;
+  var a = 5;
+  if (x == 2) {
+    break;
+  }
+}
+return a;
+")
+
+(error-str #:id "continue in while body block, pop frame"
+           "
+var x = 1;
+var y = 2;
+if (x < y) {
+  var z = 0;
+  while (z < 100) {
+    var a = 1;
+    z = z + a;
+    continue;
+    z = 1000;
+  }
+  if (z != x) {
+    z = a;
+  }
+}
 return x;
 ")
 
+(error-str #:id "throw in block, should pop frame. var from try not visible in catch"
+           "
+try {
+  var a = 1;
+  throw 0;
+}
+catch (e) {
+  return a;
+}
+")
+
+(error-str #:id "throw in block, should pop frame. var from try not visible in finally"
+           "
+try {
+  var a = 1;
+  throw 0;
+}
+catch (e) {
+}
+finally {
+  return a;
+}
+")
