@@ -109,7 +109,15 @@
                       (state-push-new-frame state)
                       (conts-of conts
                                 #:next (lambda (s)
-                                         ((next conts) (state-pop-frame s)))))))
+                                         ((next conts) (state-pop-frame s)))
+                                #:break (lambda (s)
+                                          ((break conts) (state-pop-frame s)))
+                                #:continue (lambda (s)
+                                             ((continue conts) (state-pop-frame s)))
+                                #:throw (lambda (v s)
+                                          ((throw conts) v (state-pop-frame s)))
+                                #:return (lambda (v s)
+                                           ((return conts) v (state-pop-frame s)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; WHILE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -328,12 +336,12 @@
                                                                  (conts-of conts
                                                                            #:next (next conts)))))
                                  #:break (if (null? finally-block)
-                                              (break conts)
-                                              (lambda (s)
-                                                (Mstate-block-impl (finally-body finally-block)
-                                                                   s
-                                                                   (conts-of conts
-                                                                             #:next (break conts)))))
+                                             (break conts)
+                                             (lambda (s)
+                                               (Mstate-block-impl (finally-body finally-block)
+                                                                  s
+                                                                  (conts-of conts
+                                                                            #:next (break conts)))))
                                  #:continue (if (null? finally-block)
                                                 (continue conts)
                                                 (lambda (s)
@@ -413,8 +421,11 @@
 (define Mbool
   (lambda (expr state conts evaluate)
     (cond
-      [(not (nested? expr))      (Mvalue-base expr state conts (lambda (v s)
-                                                                 (evaluate (assert-bool v) s)))]
+      [(not (nested? expr))      (Mvalue-base expr
+                                              state
+                                              conts
+                                              (lambda (v s)
+                                                (evaluate (assert-bool v) s)))]
       [(is-||? expr)             (Mbool (bool-left-op expr)
                                         state
                                         conts
@@ -437,11 +448,17 @@
                                                      conts
                                                      (lambda (b2 s2)
                                                        (evaluate b2 s2))))))]
-      [else                      (Mvalue-op expr
+      [(is-assign? expr)         (Mvalue expr
+                                         state
+                                         conts
+                                         (lambda (b s)
+                                           (evaluate (assert-bool b) s)))]
+      [(is-boolean-expr? expr)   (Mvalue-op expr
                                             state
                                             conts
                                             (lambda (b s)
-                                              (evaluate (assert-bool b) s)))])))
+                                              (evaluate (assert-bool b) s)))]
+      [else                      (error "not considered to be a boolean type expr: " expr)])))
 
 
 ; error if not bool, else allows through
@@ -472,7 +489,7 @@
                                                    conts
                                                    (lambda (v s) 
                                                      (evaluate v (state-assign-var (assign-var expr) v s))))]
-      [(is-boolean? expr)                  (Mbool expr state conts evaluate)]
+      [(is-boolean-expr? expr)             (Mbool expr state conts evaluate)]
       [(has-op? expr)                      (Mvalue-op expr state conts evaluate)]
       [else                                (error "unreachable in Mvalue")])))
 
@@ -485,7 +502,8 @@
       [(number? token)            (evaluate token state)]
       [(eq? 'true token)          (evaluate #t state)]
       [(eq? 'false token)         (evaluate #f state)]
-      [else                       (evaluate (read-var token state) state)])))
+      [(symbol? token)            (evaluate (read-var token state) state)]
+      [else                       (error "not a bool/int literal or symbol: " token)])))
 
 
 ;; retrieves value of a var from state
@@ -625,7 +643,7 @@
 
 
 ;; returns whether a nested expression is of the boolean variety
-(define is-boolean?
+(define is-boolean-expr?
   (lambda (nested-expr)
     (map-contains? (action nested-expr) boolean-op-table)))
 
@@ -646,8 +664,8 @@
 
 (define boolean-op-table
   (map-from-interlaced-entry-list
-   (list '&& (lambda (a b) (and a b))
-         '|| (lambda (a b) (or a b))
+   (list '&& error ; short-circuit ops must be handled as a special case
+         '|| error
          '!  not
          '== eq?
          '!= (lambda (a b) (not (eq? a b)))
