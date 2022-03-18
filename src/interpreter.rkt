@@ -7,7 +7,8 @@
 ;; Duc Huy Nguyen, Eren Kahriman, Loc Nguyen
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(require "state.rkt"
+(require "conts.rkt"
+         "state.rkt"
          "util/map.rkt"
          "simpleParser.rkt")
 
@@ -26,25 +27,33 @@
 ;; and returns the result
 (define interpret
   (lambda (file-name)
-    (extract-result (Mstate-stmt-list (parser file-name) new-state))))
+    (interpret-helper (parser file-name))))
 
 ;; takes a string representing a program, intreprets it
 ;; returns the result
 (define interpret-str
   (lambda (str)
-    (extract-result (Mstate-stmt-list (parser-str str) new-state))))
+    (interpret-helper (parser-str str))))
 
-;; takes a state and returns its return value
-;; modifies booleans
-(define extract-result
-  (lambda (state)
+(define interpret-helper
+  (lambda (parse-tree)
+    (Mstate-stmt-list parse-tree
+                      new-state
+                      (conts-of
+                       #:return (lambda (v s) (prep-val-for-output v))
+                       #:next (lambda (s) (error "reached end of program without return"))
+                       #:throw (lambda (v s) (error "uncaught exception: " v))
+                       #:break (lambda (s) (error "break statement outside of loop"))
+                       #:continue (lambda (s) (error "continue statement outside of loop"))))))
+
+;; takes a value and modifies it for output
+(define prep-val-for-output
+  (lambda (value)
     (cond
-      [(not (state-return? state))                     (error "program ended without reaching a return statement")]
-      [(eq? #t (state-get-return-value state))         'true]
-      [(eq? #f (state-get-return-value state))         'false]
-      [(number? (state-get-return-value state))        (state-get-return-value state)]
-      [else                                            (error "returned a value, but unsupported type: "
-                                                              (state-get-return-value state))])))
+      [(eq? #t value)         'true]
+      [(eq? #f value)         'false]
+      [(number? value)        value]
+      [else                   (error "returned an unsupported type: " value)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -59,13 +68,16 @@
 ;; executes a list of statements with a given initial state
 ;; and returns the resulting state
 (define Mstate-stmt-list
-  (lambda (statement-list state)
-    (cond
-      [(state-return? state)              state]
-      [(null? statement-list)             state]
-      [else                               (Mstate-stmt-list (cdr statement-list)
-                                                            (Mstate-statement (car statement-list)
-                                                                              state))])))
+  (lambda (statement-list state conts)
+    (if (null? statement-list)
+        ((next conts) state)
+        (Mstate-statement (car statement-list)
+                          state
+                          (conts-of conts
+                                    #:next (lambda (s)
+                                             (Mstate-stmt-list (cdr statement-list) 
+                                                               s
+                                                               conts)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -73,11 +85,10 @@
 ;; takes a statement
 ;; returns the state resulting from evaluating it
 (define Mstate-statement
-  (lambda (statement state)
+  (lambda (statement state conts)
     (cond
-      [(state-return? state)                state] ; exit early on return
       [(null? statement)                    (error "called Mstate on null statement")]
-      [(is-construct? statement)            ((get-Mstate statement) statement state)]
+      [(is-construct? statement)            ((get-Mstate statement) statement state conts)]
       [else                                 (error "unrecognized stmt:" statement)])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -88,8 +99,17 @@
 ;; takes a block statement
 ;; returns the state resulting from evaluating it
 (define Mstate-block
-  (lambda (statement state)
-    (state-pop-frame (Mstate-stmt-list (block-stmt-list statement) (state-push-new-frame state)))))
+  (lambda (statement state conts)
+    (Mstate-block-impl (block-stmt-list statement) state conts)))
+;; takes a statement list
+(define Mstate-block-impl
+  (lambda (stmt-list state conts)
+    (Mstate-stmt-list stmt-list
+                      (state-push-new-frame state)
+                      (conts-of conts
+                                #:next (lambda (s)
+                                         ((next conts) (state-pop-frame s)))))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSION ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -97,15 +117,15 @@
 ;; returns the state after evaluating the expression
 ;;  in the context of the given initial state
 (define Mstate-expr
-  (lambda (expr state)
+  (lambda (expr state evaluate)
     (cond
       [(null? expr)                          (error "called Mstate on null expr")]
       ; base case: 1 | x
-      [(not (nested? expr))                  state]
+      [(not (nested? expr))                  (evaluate state)]
       ; else nested
       ; x = expr
-      [(is-assign? expr)                     (Mstate-assign expr state)]
-      [(has-op? expr)                        (Mstate-op expr state)]
+      [(is-assign? expr)                     (Mstate-assign expr state evaluate)]
+      [(has-op? expr)                        (Mstate-op expr state evaluate)]
       [else                                  (error "unrecognized expr" expr)])))
 
 
@@ -119,19 +139,34 @@
 
 ;; takes a statement representing a while statement
 (define Mstate-while
-  (lambda (statement state)
+  (lambda (statement state conts)
     (Mstate-while-impl (while-condition statement)
                        (while-body statement)
-                       state)))
+                       state
+                       conts)))
 
 (define Mstate-while-impl
-  (lambda (condition body state)
-    (if (Mbool condition state)
-        (Mstate-while-impl condition
-                           body
-                           (Mstate-statement body
-                                             (Mstate-expr condition state)))
-        (Mstate-expr condition state))))
+  (lambda (condition body state conts)
+    (Mbool condition
+           state
+           conts
+           (lambda (b s1)
+             (if b
+                 (Mstate-statement body 
+                                   s1
+                                   (conts-of conts
+                                             #:next (lambda (s2)
+                                                      (Mstate-while-impl condition
+                                                                         body
+                                                                         s2
+                                                                         conts))
+                                             #:break (next conts)
+                                             #:continue (lambda (s3)
+                                                          (Mstate-while-impl condition
+                                                                             body
+                                                                             s3
+                                                                             conts))))
+                 ((next conts) s1))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; IF ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -147,20 +182,23 @@
 ;; takes a statement representing an if statement
 ;; returns the resulting state
 (define Mstate-if
-  (lambda (statement state)
+  (lambda (statement state conts)
     (Mstate-if-impl (if-condition statement)
                     (if-then-body statement)
                     (if-else-body statement)
-                    state)))
+                    state
+                    conts)))
 
 (define Mstate-if-impl
-  (lambda (condition then-body maybe-else-body state)
-    (cond
-      [(Mbool condition state)            (Mstate-statement then-body
-                                                            (Mstate-expr condition state))]
-      [(null? maybe-else-body)            (Mstate-expr condition state)]
-      [else                               (Mstate-statement (get maybe-else-body)
-                                                            (Mstate-expr condition state))])))
+  (lambda (condition then-body maybe-else-body state conts)
+    (Mbool condition
+           state
+           conts
+           (lambda (b s)
+             (cond
+               [b                        (Mstate-statement then-body s conts)]
+               [(null? maybe-else-body)  ((next conts) s)]
+               [else                     (Mstate-statement (get maybe-else-body) s conts)])))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; RETURN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -170,12 +208,49 @@
 (define return-expr-part second)
 
 ; takes a statement representing a return statement
-; returns the resulting state,
-;  which will have also set a special var in state corresponding to the return value
+; invokes the return continuation
 (define Mstate-return
-  (lambda (statement state)
-    (state-set-return-value (Mvalue (return-expr-part statement) state)
-                            (Mstate-expr (return-expr-part statement) state))))
+  (lambda (statement state conts)
+    (Mvalue (return-expr-part statement)
+            state
+            conts
+            (lambda (v s)
+              ((return conts) v s)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; THROW ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; takes a statement representing a throw statement
+; extracts the expression portion
+(define throw-expr-part second)
+
+; takes a statement representing a throw statement
+; invokes the throw continuation
+(define Mstate-throw
+  (lambda (statement state conts)
+    (Mvalue (throw-expr-part statement)
+            state
+            conts
+            (lambda (v s)
+              ((throw conts) v s)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BREAK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; takes a statement representing a break statement
+; invokes the break continuation
+(define Mstate-break
+  (lambda (statement state conts)
+    ((break conts) state)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CONTINUE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; takes a statement representing a continue statement
+; invokes the continue continuation
+(define Mstate-continue
+  (lambda (statement state conts)
+    ((continue conts) state)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -188,25 +263,28 @@
 ;; takes a declaration statement
 ;; returns the resulting state
 (define Mstate-declare
-  (lambda (statement state)
+  (lambda (statement state conts)
     (Mstate-decl-impl (decl-var statement)
                       (decl-maybe-expr statement)
-                      state)))
+                      state
+                      conts)))
 
 ;; declares the variable,
 ;; error if already declared
 ;; initializes if expr is provided
 (define Mstate-decl-impl
-  (lambda (var-name maybe-expr state)
+  (lambda (var-name maybe-expr state conts)
     (cond
       [(state-var-declared-top-frame? var-name state)   (error (string-append "attempted to re-declare "
-                                                                              (symbol->string var-name)
-                                                                              "."))]
-      [(null? maybe-expr)                               (state-declare-var var-name state)]
-      [else                                             (state-assign-var var-name
-                                                                          (Mvalue (get maybe-expr) state)
-                                                                          (Mstate-expr (get maybe-expr)
-                                                                                       (state-declare-var var-name state)))])))
+                                                                              (symbol->string var-name)))]
+      [(null? maybe-expr)                               ((next conts) (state-declare-var var-name state))]
+      [else                                             (Mvalue (get maybe-expr)
+                                                                state
+                                                                conts
+                                                                (lambda (v s)
+                                                                  ((next conts) (state-declare-var-with-value var-name 
+                                                                                                              v
+                                                                                                              s))))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ASSIGN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -219,23 +297,104 @@
 ;; assigns the value resulting from evaluating expr
 ;;  onto the state resulting from evaluating expr
 (define Mstate-assign
-  (lambda (expr state)
+  (lambda (expr state conts)
     (Mstate-assign-impl (assign-var expr)
                         (assign-expr expr)
-                        state)))
+                        state
+                        conts)))
 
 (define Mstate-assign-impl
-  (lambda (var-name val-expr state)
+  (lambda (var-name val-expr state conts)
     (if (state-var-declared? var-name state)
-        (state-assign-var var-name
-                          (Mvalue val-expr state)
-                          (Mstate-expr val-expr state))
+        (Mvalue val-expr state conts (lambda (v s)
+                                       ((next conts) (state-assign-var var-name v s))))
         ; else assigning to undeclared var
         (error (string-append "tried to assign to "
                               (symbol->string var-name)
                               " before declaring it.")))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TRY CATCH FINALLY ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(define try-body second) ; may return null
+(define try-catch third) ; may return null
+;; takes the catch portion
+(define catch-var (compose1 first second))
+(define catch-body third)
+(define try-finally fourth) ; may return null
+;; takes the finally portion
+(define finally-body second)
+
+(define Mstate-try
+  (lambda (statement state conts)
+    (Mstate-try-impl (try-body statement)
+                     (try-catch statement)
+                     (try-finally statement)
+                     state
+                     conts)))
+
+(define Mstate-try-impl
+  (lambda (try-body catch-block finally-block state conts)
+    (Mstate-block-impl try-body
+                       state
+                       (conts-of conts
+                                 #:next (if (null? finally-block)
+                                            (next conts)
+                                            (lambda (s)
+                                              (Mstate-block-impl (finally-body finally-block)
+                                                                 s
+                                                                 (conts-of conts
+                                                                           #:next (next conts)))))
+                                 #:throw (cond
+                                           [(null? catch-block)     (lambda (e s)
+                                                                      (Mstate-block-impl (finally-body finally-block)
+                                                                                         s
+                                                                                         (conts-of conts
+                                                                                                   #:next (lambda (s2)
+                                                                                                            ((throw conts) e s2))
+                                                                                                   #:throw (throw conts))))]
+                                           [(null? finally-block)   (lambda (e s)
+                                                                      (Mstate-block-impl (catch-body catch-block)
+                                                                                         (state-assign-var (catch-var catch-block)
+                                                                                                           e
+                                                                                                           (state-declare-var (catch-var catch-block) s))
+                                                                                         conts))]
+                                           [else                    (lambda (e s)
+                                                                      (Mstate-block-impl (catch-body catch-block)
+                                                                                         (state-declare-var-with-value (catch-var catch-block)
+                                                                                                                       e
+                                                                                                                       s)
+                                                                                         (conts-of conts ; after catch, before finally
+                                                                                                   #:next (lambda (s2)
+                                                                                                            (Mstate-block-impl (finally-body finally-block)
+                                                                                                                               s2
+                                                                                                                               conts))
+                                                                                                   #:break (lambda (s2)
+                                                                                                             (Mstate-block-impl (finally-body finally-block)
+                                                                                                                                s2
+                                                                                                                                (conts-of conts
+                                                                                                                                          #:next (break conts))))
+                                                                                                   #:continue (lambda (s2)
+                                                                                                                (Mstate-block-impl (finally-body finally-block)
+                                                                                                                                   s2
+                                                                                                                                   (conts-of conts
+                                                                                                                                             #:next (continue conts))))
+                                                                                                   #:throw (lambda (e2 s2)
+                                                                                                             (Mstate-block-impl (finally-body finally-block)
+                                                                                                                                s2
+                                                                                                                                (conts-of conts
+                                                                                                                                          #:next (lambda (s3)
+                                                                                                                                                   ((throw conts) e2 s3)))))
+                                                                                                   #:return (lambda (v s2)
+                                                                                                              (Mstate-block-impl (finally-body finally-block)
+                                                                                                                                 s2
+                                                                                                                                 (conts-of conts
+                                                                                                                                           #:next (lambda (s3)
+                                                                                                                                                    ((return conts) v s3))))))))])))))
+                                                                                                   
+                                                                      
+
+
+;; Deprecated (see Mvalue)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; OP EXPRESSION ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; takes an expression representing one with an operator
@@ -248,32 +407,35 @@
 ;; the given expression in order of its operator's associativity
 ;; also handles short-circuiting
 (define Mstate-op
-  (lambda (expr state)
+  (lambda (expr state evaluate)
     (cond
-      [(is-||? expr)          (Mstate-|| (op-param-list expr) state)]
-      [(is-&&? expr)          (Mstate-&& (op-param-list expr) state)]
+      [(is-||? expr)          (Mstate-|| (op-param-list expr) state evaluate)]
+      [(is-&&? expr)          (Mstate-&& (op-param-list expr) state evaluate)]
       [else                   (state-after-expr-list
                                (sort-list-to-associativity-of-op (op-op-symbol expr)
                                                                  (op-param-list expr))
-                               state)])))
+                               state
+                               evaluate)])))
 
 ;; takes a list of two expressions and a state
 ;; returns state resulting from performing short-circuit or
-;; if the first expression evals to true, doesn't eval second
+;; if the first expression evaluates to true, doesn't evaluate second
 (define Mstate-||
-  (lambda (exprs state)
-    (if (Mbool (first exprs) state)
-        (Mstate-expr (first exprs) state)
-        (Mstate-expr (second exprs) (Mstate-expr (first exprs) state)))))
+  (lambda (exprs state evaluate)
+    (Mbool (first exprs) state (lambda (b s) 
+                                 (if b
+                                     (evaluate s)
+                                     (Mbool (second exprs) s (lambda (b s) (evaluate s))))))))
 
 ;; takes a list of two expressions and a state
 ;; returns state resulting from performing short-circuit and
-;; if the first expression evals to false, doesn't eval second
+;; if the first expression evaluates to false, doesn't evaluate second
 (define Mstate-&&
-  (lambda (exprs state)
-    (if (Mbool (first exprs) state)
-        (Mstate-expr (second exprs) (Mstate-expr (first exprs) state))
-        (Mstate-expr (first exprs) state))))
+  (lambda (exprs state evaluate)
+    (Mbool (first exprs) state (lambda (b s) 
+                                 (if b
+                                     (Mbool (second exprs) s (lambda (b s) (evaluate s)))
+                                     (evaluate s))))))
 
 
 ;; takes an op-symbol and a list of params
@@ -288,11 +450,11 @@
 ;; evaluating the list of expressions
 ;; in the order they were given
 (define state-after-expr-list
-  (lambda (expr-list state)
+  (lambda (expr-list state evaluate)
     (if (null? expr-list)
-        state
-        (state-after-expr-list (cdr expr-list)
-                               (Mstate-expr (car expr-list) state)))))
+        (evaluate state)
+        (Mstate-expr (car expr-list) state (lambda (s) 
+                                             (state-after-expr-list (cdr expr-list) s evaluate))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -305,21 +467,40 @@
 (define bool-left-op second)
 (define bool-right-op third)
 
-;; takes an expression and evaluates it
+;; takes an expression and evaluate it
 ;; error if not bool
 (define Mbool
-  (lambda (expr state)
+  (lambda (expr state conts evaluate)
     (cond
-      [(not (nested? expr))      (assert-bool (Mvalue-base expr state))]
-      [(is-||? expr)             (or (Mbool (bool-left-op expr)
-                                            state)
-                                     (Mbool (bool-right-op expr)
-                                            (Mstate-expr (bool-left-op expr) state)))]
-      [(is-&&? expr)             (and (Mbool (bool-left-op expr)
-                                             state)
-                                      (Mbool (bool-right-op expr)
-                                             (Mstate-expr (bool-left-op expr) state)))]
-      [else                      (assert-bool (Mvalue-op expr state))])))
+      [(not (nested? expr))      (Mvalue-base expr state conts (lambda (v s)
+                                                                 (evaluate (assert-bool v) s)))]
+      [(is-||? expr)             (Mbool (bool-left-op expr)
+                                        state
+                                        conts
+                                        (lambda (b1 s1)
+                                          (if b1
+                                              (evaluate b1 s1)
+                                              (Mbool (bool-right-op expr)
+                                                     s1
+                                                     conts
+                                                     (lambda (b2 s2)
+                                                       (evaluate b2 s2))))))]
+      [(is-&&? expr)             (Mbool (bool-left-op expr)
+                                        state
+                                        conts
+                                        (lambda (b1 s1)
+                                          (if (not b1)
+                                              (evaluate b1 s1)
+                                              (Mbool (bool-right-op expr)
+                                                     s1
+                                                     conts
+                                                     (lambda (b2 s2)
+                                                       (evaluate b2 s2))))))]
+      [else                      (Mvalue-op expr
+                                            state
+                                            conts
+                                            (lambda (b s)
+                                              (evaluate (assert-bool b) s)))])))
 
 
 ; error if not bool, else allows through
@@ -327,7 +508,7 @@
   (lambda (val)
     (if (boolean? val)
         val
-        (error "" val " is not a bool"))))
+        (error "value is not a bool:" val))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -338,26 +519,30 @@
 
 ;; returns the value of an expression, in the context of the given state
 (define Mvalue
-  (lambda (expr state)
+  (lambda (expr state conts evaluate)
     (cond
       [(null? expr)                        (error "called Mvalue on a null expression")]
-      [(not (nested? expr))                (Mvalue-base expr state)]
+      [(not (nested? expr))                (Mvalue-base expr state conts evaluate)]
       ; else nested expr
-      [(is-assign? expr)                   (Mvalue (assign-expr expr) state)]
-      [(is-boolean? expr)                  (Mbool expr state)]
-      [(has-op? expr)                      (Mvalue-op expr state)]
+      [(is-assign? expr)                   (Mvalue (assign-expr expr) 
+                                                   state
+                                                   conts
+                                                   (lambda (v s) 
+                                                     (evaluate v (state-assign-var (assign-var expr) v s))))]
+      [(is-boolean? expr)                  (Mbool expr state conts evaluate)]
+      [(has-op? expr)                      (Mvalue-op expr state conts evaluate)]
       [else                                (error "unreachable in Mvalue")])))
 
 
 ;; returns the value of the token given the state
 ;; token = 1 | 'x | 'true 
 (define Mvalue-base
-  (lambda (token state)
+  (lambda (token state conts evaluate)
     (cond
-      [(number? token)            token]
-      [(eq? 'true token)          #t]
-      [(eq? 'false token)         #f]
-      [else                       (read-var token state)])))
+      [(number? token)            (evaluate token state)]
+      [(eq? 'true token)          (evaluate #t state)]
+      [(eq? 'false token)         (evaluate #f state)]
+      [else                       (evaluate (read-var token state) state)])))
 
 
 ;; retrieves value of a var from state
@@ -373,42 +558,51 @@
                                                                                 " before initializing it."))]
       [else                                               (state-var-value var-symbol state)])))
 
-
 ;; takes a nested expression containing an op
 ;; and evaluates it
 (define Mvalue-op
-  (lambda (expr state)
-    (op-apply (op-of-symbol (op-op-symbol expr))
-              (map-expr-list-to-value-list
-               (sort-list-to-associativity-of-op (op-op-symbol expr)
-                                                 (op-param-list expr))
-               state))))
+  (lambda (expr state conts evaluate)
+    (map-expr-list-to-value-list
+     (sort-list-to-associativity-of-op (op-op-symbol expr)
+                                       (op-param-list expr))
+     state
+     conts
+     (lambda (v1 s) 
+       (op-apply (op-of-symbol (op-op-symbol expr)) 
+                 v1
+                 (lambda (v2)
+                   (evaluate v2 s)))))))
 
 
 ;; takes a list of exprs and maps them to values,
 ;; propagating the state changes (so that they evaluate correctly)
 (define map-expr-list-to-value-list
-  (lambda (expr-list state)
+  (lambda (expr-list state conts evaluate)
     (if (null? expr-list)
-        expr-list
-        (cons (Mvalue (car expr-list) state)
-              (map-expr-list-to-value-list (cdr expr-list)
-                                           (Mstate-expr (car expr-list) state))))))
+        (evaluate expr-list state)
+        (Mvalue (car expr-list)
+                state
+                conts
+                (lambda (v1 s1)
+                  (map-expr-list-to-value-list (cdr expr-list)
+                                               s1
+                                               conts
+                                               (lambda (v2 s2) (evaluate (cons v1 v2) s2))))))))
 
 
 ;; takes an op and a val-list * already in order of associativity
 ;; returns the value of the op applied to the list of values
 (define op-apply
-  (lambda (op val-list)
+  (lambda (op val-list evaluate)
     (cond
-      [(eq? 1 (length val-list))                  (op (first val-list))]
-      [(eq? 2 (length val-list))                  (op (first val-list) (second val-list))]
+      [(eq? 1 (length val-list))                  (evaluate (op (first val-list)))]
+      [(eq? 2 (length val-list))                  (evaluate (op (first val-list) (second val-list)))]
       [else                                       (error op val-list)])))
 ; todo:
 ; check types
 ; check # params expected by op (more-so for functions)
 ; generalize to N params with `values` and `call-with-values`
-    
+
 
 
 
@@ -443,19 +637,25 @@
 (define is-return? (checker-of 'return))
 (define is-if? (checker-of 'if))
 (define is-while? (checker-of 'while))
+(define is-try? (checker-of 'try))
+(define is-throw? (checker-of 'throw))
 (define is-break? (checker-of 'break))
 (define is-continue? (checker-of 'continue))
 (define is-block? (checker-of 'begin))
 
 ;; keys are checker functions that take a statement and return a bool
-;; values are the corresponding constructs
+;; values are the corresponding constructs (type of statement)
 (define constructs-table (map-from-interlaced-entry-list
-                          (list is-return?  Mstate-return
-                                is-while?   Mstate-while
-                                is-if?      Mstate-if
-                                is-declare? Mstate-declare
-                                is-assign?  Mstate-assign
-                                is-block?   Mstate-block)
+                          (list is-return?   Mstate-return
+                                is-while?    Mstate-while
+                                is-if?       Mstate-if
+                                is-declare?  Mstate-declare
+                                is-assign?   Mstate-assign
+                                is-block?    Mstate-block
+                                is-try?      Mstate-try
+                                is-throw?    Mstate-throw
+                                is-break?    Mstate-break
+                                is-continue? Mstate-continue)
                           (map-empty-custom (lambda (key checker) (checker key)))))
 
 ;; returns whether the statement is a recognized construct
