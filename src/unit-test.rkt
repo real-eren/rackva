@@ -813,3 +813,36 @@ finally {
   return a;
 }
 ")
+
+
+(test-str #:id "while loop with continue inside try and try is inside while"
+          22 "
+var x = 0;
+while(x < 12) {
+  try{
+    x = x + 10;
+    continue;
+  }catch(e) {
+   
+  } finally {
+     x = x+1;
+  }
+}
+return x;
+")
+
+(test-str #:id "while loop with break inside try and try is inside while"
+          11 "
+var x = 0;
+while(x < 12) {
+  try{
+    x = x + 10;
+    break;
+  }catch(e) {
+   
+  } finally {
+     x = x+1;
+  }
+}
+return x;
+")
