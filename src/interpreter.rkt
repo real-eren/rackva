@@ -333,8 +333,7 @@
                                             (lambda (s)
                                               (Mstate-block-impl (finally-body finally-block)
                                                                  s
-                                                                 (conts-of conts
-                                                                           #:next (next conts)))))
+                                                                 conts)))
                                  #:break (if (null? finally-block)
                                              (break conts)
                                              (lambda (s)
@@ -363,13 +362,12 @@
                                                                                          s
                                                                                          (conts-of conts
                                                                                                    #:next (lambda (s2)
-                                                                                                            ((throw conts) e s2))
-                                                                                                   #:throw (throw conts))))]
+                                                                                                            ((throw conts) e s2)))))]
                                            [(null? finally-block)   (lambda (e s)
                                                                       (Mstate-block-impl (catch-body catch-block)
-                                                                                         (state-assign-var (catch-var catch-block)
-                                                                                                           e
-                                                                                                           (state-declare-var (catch-var catch-block) s))
+                                                                                         (state-declare-var-with-value (catch-var catch-block)
+                                                                                                                       e
+                                                                                                                       s)
                                                                                          conts))]
                                            [else                    (lambda (e s)
                                                                       (Mstate-block-impl (catch-body catch-block)
@@ -525,27 +523,18 @@
 (define op-op-symbol first)
 (define op-param-list cdr)
 
-;; takes an op-symbol and a list of params
-;; returns a list of the same params in order
-;; of associativity, according to the given op
-(define sort-list-to-associativity-of-op
-  (lambda (op-symbol lis)
-    lis)) ; all given ops are left associative
-
 ;; takes a nested expression containing an op
 ;; and evaluates it
 (define Mvalue-op
   (lambda (expr state conts evaluate)
-    (map-expr-list-to-value-list
-     (sort-list-to-associativity-of-op (op-op-symbol expr)
-                                       (op-param-list expr))
-     state
-     conts
-     (lambda (v1 s) 
-       (op-apply (op-of-symbol (op-op-symbol expr)) 
-                 v1
-                 (lambda (v2)
-                   (evaluate v2 s)))))))
+    (map-expr-list-to-value-list (op-param-list expr)
+                                 state
+                                 conts
+                                 (lambda (v1 s) 
+                                   (op-apply (op-of-symbol (op-op-symbol expr)) 
+                                             v1
+                                             (lambda (v2)
+                                               (evaluate v2 s)))))))
 
 
 ;; takes a list of exprs and maps them to values,
