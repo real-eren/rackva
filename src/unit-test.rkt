@@ -1,7 +1,8 @@
 #lang racket/base
 
 (require rackunit 
-         "interpreter.rkt")
+         "interpreter.rkt"
+         "interpreter-extension.rkt")
 
 ; white space / newlines do not affect the parser,
 ; but are included for readability

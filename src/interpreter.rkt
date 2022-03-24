@@ -1,9 +1,8 @@
 #lang racket
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CSDS 343 Interpreter Part 1
+;; CSDS 343 Interpreter
 ;; 2022 Spring
-;; Group 1
 ;; Duc Huy Nguyen, Eren Kahriman, Loc Nguyen
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -13,7 +12,7 @@
          "simpleParser.rkt")
 
 (provide interpret
-         interpret-str)
+         interpret-parse-tree)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -27,15 +26,9 @@
 ;; and returns the result
 (define interpret
   (lambda (file-name)
-    (interpret-helper (parser file-name))))
+    (interpret-parse-tree (parser file-name))))
 
-;; takes a string representing a program, intreprets it
-;; returns the result
-(define interpret-str
-  (lambda (str)
-    (interpret-helper (parser-str str))))
-
-(define interpret-helper
+(define interpret-parse-tree
   (lambda (parse-tree)
     (Mstate-stmt-list parse-tree
                       new-state
