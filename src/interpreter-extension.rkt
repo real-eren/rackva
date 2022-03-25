@@ -11,7 +11,7 @@
 ;; and thus would not function properly in the environment used for grading
 
 
-;; takes a string representing a program, intreprets it
+;; takes a string representing a program, interprets it
 ;; returns the result
 ; extra white space, including new lines, is ignored
 ; ex:
