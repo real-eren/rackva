@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Racket Package CI
-        uses: jackfirth/racket-package-ci-action@v0.1.4
+        uses: jackfirth/racket-package-ci-action@v0.1.2
         with:
     # The name that the package should be given. This is used as the `--name` argument to `raco pkg install`.
           name: rackunit
