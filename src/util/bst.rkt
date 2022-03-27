@@ -268,7 +268,7 @@
 
   (define tree-overwrite-2 (from-interlaced-list (list 'a 2.2
                                                        'b 3.2
-                                                       'c 54.2
+                                                       'c 4.2
                                                        'd 5.2)
                                                  tree-overwrite-1))
   
