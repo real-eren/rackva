@@ -25,7 +25,7 @@ jobs:
         uses: jackfirth/racket-package-ci-action@v0.1.4
         with:
     # The name that the package should be given. This is used as the `--name` argument to `raco pkg install`.
-          name: interpreter
+          name: rackunit
     # The package's root directory, relative to the root of the repository. Should never include a leading slash. For example, a repository with foo-lib, foo-test, and foo-doc packages would use "foo-lib", "foo-test", or "foo-doc" to specify the input package directory. The default value, ".", is intended to be used with single-package repositories.
           directory: src
 
