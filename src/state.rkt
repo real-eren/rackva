@@ -12,11 +12,14 @@
                                   var-declared?
                                   var-declared-top-frame?
                                   var-initialized?
+                                  var-box
                                   var-value)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; State is a stack of frames
 ;; a frame is a map of var bindings
+;; a var binding associates a symbol with a box
+;; beware, frames are mutable, thus state is too.
 ;; push a frame to enter a new scope
 ;; pop a frame to exit a scope
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -26,17 +29,22 @@
 
 (define frame-var-declared? map-contains?)
 
-(define frame-var-initialized?
+(define frame-var-box map-get)
+
+(define frame-var-value
   (lambda (var-name frame)
-    (not (null? var-value var-name frame))))
+    (unbox (frame-var-box var-name frame))))
 
-(define frame-var-value map-get)
-
-(define frame-assign-var map-put)
+;; assumes var is already declared
+(define frame-assign-var
+  (lambda (var-name val frame)
+    (begin
+      (set-box! (frame-var-box var-name frame) val)
+      frame)))
 
 (define frame-declare-var
   (lambda (var-name frame)
-    (frame-assign-var var-name null frame)))
+    (map-put var-name (box null) frame)))
 
 ;;;; State stack operations
 (define no-frames? null?)
@@ -55,8 +63,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; creates a new state with no var bindings
-(define new-state (list (frame-declare-var 'return-value new-frame)))
+;; a new state with no var bindings
+(define new-state (list new-frame))
 
 ; declares and assigns the var with the given value
 (define declare-var-with-value
@@ -106,15 +114,20 @@
   (lambda (var-name state)
     (not (null? (var-value var-name state)))))
 
+;; returns the box bound to the var-name in the top frame that has it declared
+(define var-box
+  (lambda (var-name state)
+    (cond
+      [(no-frames? state)                        (error "failed to check for existence of variable before accessing")]
+      [(frame-var-declared? var-name
+                            (peek-frame state))  (frame-var-box var-name (peek-frame state))]
+      [else                                      (var-box var-name
+                                                          (pop-frame state))])))
+
+
 ; returns the value bound to the var-name in the top frame that has it declared
 ; use var-initialized? beforehand
 ; returns error if no such binding exists
 (define var-value
   (lambda (var-name state)
-    (cond
-      [(no-frames? state)                            (error "failed to check for existence of variable before accessing")]
-      [(frame-var-declared? var-name
-                            (peek-frame state))      (frame-var-value var-name
-                                                                      (peek-frame state))]
-      [else                                          (var-value var-name
-                                                                (pop-frame state))])))
+    (unbox (var-box var-name state))))
