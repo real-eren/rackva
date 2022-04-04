@@ -607,18 +607,18 @@
 
 ;; keys are symbols representative of a construct type
 ;; values are the corresponding constructs (type of statement)
-(define constructs-table (map-from-interlaced-entry-list
-                          (list 'return   Mstate-return
-                                'while    Mstate-while
-                                'if       Mstate-if
-                                'var      Mstate-declare
-                                '=        Mstate-assign
-                                'begin    Mstate-block
-                                'try      Mstate-try
-                                'throw    Mstate-throw
-                                'break    Mstate-break
-                                'continue Mstate-continue)
-                          map-empty))
+(define constructs-table
+  (map-from-interlaced-entries
+   'return   Mstate-return
+   'while    Mstate-while
+   'if       Mstate-if
+   'var      Mstate-declare
+   '=        Mstate-assign
+   'begin    Mstate-block
+   'try      Mstate-try
+   'throw    Mstate-throw
+   'break    Mstate-break
+   'continue Mstate-continue))
 
 ;; returns whether the statement is a recognized construct
 (define is-construct?
@@ -651,26 +651,24 @@
 ;; associative lists from op-symbols to functions
 
 (define boolean-op-table
-  (map-from-interlaced-entry-list
-   (list '&& error ; short-circuit ops must be handled as a special case
-         '|| error
-         '!  not
-         '== eq?
-         '!= (lambda (a b) (not (eq? a b)))
-         '<  <
-         '>  >
-         '<= <=
-         '>= >=)
-   map-empty))
+  (map-from-interlaced-entries
+   '&& error ; short-circuit ops must be handled as a special case
+   '|| error
+   '!  not
+   '== eq?
+   '!= (lambda (a b) (not (eq? a b)))
+   '<  <
+   '>  >
+   '<= <=
+   '>= >=))
 
 (define arithmetic-op-table
-  (map-from-interlaced-entry-list
-   (list '+  +
-         '-  -
-         '/  quotient
-         '*  *
-         '%  modulo)
-   map-empty))
+  (map-from-interlaced-entries
+   '+  +
+   '-  -
+   '/  quotient
+   '*  *
+   '%  modulo))
 
 ;; assuming the atom is an op-symbol, returns the associated function
 (define op-of-symbol
