@@ -1,7 +1,7 @@
 #lang racket
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CSDS 343 Interpreter Part 1
+;; CSDS 343 Interpreter
 ;; 2022 Spring
 ;; Group 1
 ;; Duc Huy Nguyen, Eren Kahriman, Loc Nguyen
@@ -604,41 +604,32 @@
 
 ;; these take a statement and return whether it is a particular construct
 (define is-assign? (checker-of '=))
-(define is-declare? (checker-of 'var))
-(define is-return? (checker-of 'return))
-(define is-if? (checker-of 'if))
-(define is-while? (checker-of 'while))
-(define is-try? (checker-of 'try))
-(define is-throw? (checker-of 'throw))
-(define is-break? (checker-of 'break))
-(define is-continue? (checker-of 'continue))
-(define is-block? (checker-of 'begin))
 
-;; keys are checker functions that take a statement and return a bool
+;; keys are symbols representative of a construct type
 ;; values are the corresponding constructs (type of statement)
 (define constructs-table (map-from-interlaced-entry-list
-                          (list is-return?   Mstate-return
-                                is-while?    Mstate-while
-                                is-if?       Mstate-if
-                                is-declare?  Mstate-declare
-                                is-assign?   Mstate-assign
-                                is-block?    Mstate-block
-                                is-try?      Mstate-try
-                                is-throw?    Mstate-throw
-                                is-break?    Mstate-break
-                                is-continue? Mstate-continue)
-                          (map-empty-custom (lambda (key checker) (checker key)))))
+                          (list 'return   Mstate-return
+                                'while    Mstate-while
+                                'if       Mstate-if
+                                'var      Mstate-declare
+                                '=        Mstate-assign
+                                'begin    Mstate-block
+                                'try      Mstate-try
+                                'throw    Mstate-throw
+                                'break    Mstate-break
+                                'continue Mstate-continue)
+                          map-empty))
 
 ;; returns whether the statement is a recognized construct
 (define is-construct?
   (lambda (statement)
-    (map-contains? statement constructs-table)))
+    (map-contains? (action statement) constructs-table)))
 
 ;; returns the Mstate function that goes with this statement,
 ;; assuming it is a valid construct
 (define get-Mstate
   (lambda (statement)
-    (map-get statement constructs-table)))
+    (map-get (action statement) constructs-table)))
 
 
 
@@ -658,9 +649,6 @@
 
 
 ;; associative lists from op-symbols to functions
-; the alternative is a (hard-coded) cond
-; which is a less flexible design
-; consider these to be constants
 
 (define boolean-op-table
   (map-from-interlaced-entry-list
