@@ -5,7 +5,6 @@
 
 ;; newly constructed maps are empty
 (check-true (map-empty? map-empty))
-(check-true (map-empty? (map-empty-custom eq?)))
 
 (define map-3 (map-put 'a 1 (map-put 'b 2 (map-put 'c 3 map-empty))))
 (define map-3i (map-from-interlaced-entry-list '(a 1
@@ -14,8 +13,8 @@
                                                map-empty))
 
 ; may have to replace with unordered equality
-(check-true (equal? (map-entry-list map-3)
-                    (reverse (map-entry-list map-3i))))
+(check-true (equal? map-3
+                    (reverse map-3i)))
 
 ;; contains finds most recent
 (check-true (map-contains? 'a map-3))
@@ -24,7 +23,7 @@
 ;; first entered
 (check-true (map-contains? 'c map-3))
 ;; only 3 elements
-(check-eq? 3 (length (map-entry-list map-3)))
+(check-eq? 3 (length map-3))
 ;; not present
 (check-false (map-contains? 'not-in-map map-3))
 
@@ -37,7 +36,7 @@
 (check-false (map-contains? 'a (map-remove 'a map-3)))
 
 (check-true (map-contains? 'r (map-put 'r 123 map-3)))
-(check-eq? 4 (length (map-entry-list (map-put 'r 123 map-3))))
+(check-eq? 4 (length (map-put 'r 123 map-3)))
 
 (check-true (map-contains? 'a (map-put 'a 123 map-3)))
 
