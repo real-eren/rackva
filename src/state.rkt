@@ -5,8 +5,12 @@
 
 (provide new-state
          (prefix-out state:
-                     (combine-out push-new-var-frame
-                                  pop-var-frame
+                     (combine-out height
+                                  push-new-layer
+                                  pop-layer
+                                  bottom-layers
+
+                                  declare-var-with-box
                                   declare-var-with-value
                                   declare-var
                                   assign-var
@@ -15,14 +19,10 @@
                                   var-initialized?
                                   get-var-box
                                   get-var-value
-                                  bottom-var-frames
-                                  
-                                  push-new-funs-layer
-                                  pop-funs-layer
+
                                   has-fun?
                                   get-closure
-                                  declare-fun
-                                  bottom-fun-layers))
+                                  declare-fun))
          closure:params
          closure:body
          closure:scoper)
@@ -40,18 +40,38 @@
 (define vars first)
 (define funs second)
 
-;;;; var mappings
-
-;; State with a blank stack frame added to the stack
-(define push-new-var-frame
+;; height of the stack and function table
+(define height
   (lambda (state)
-    (state-of (var-table:push-new-frame (vars state))
-              (funs state))))
+    (length (vars state))))
 
-;; State with the top frame of the stack removed
-(define pop-var-frame
+;; State with the top scope removed from the stack and function table
+(define pop-layer
   (lambda (state)
     (state-of (var-table:pop-frame (vars state))
+              (function-table:pop-layer (funs state)))))
+
+;; State with a blank frame added to the stack and function table
+(define push-new-layer
+  (lambda (state)
+    (state-of (var-table:push-new-frame (vars state))
+              (function-table:push-new-layer (funs state)))))
+
+
+;; State with only the bottom n layers of the stack and function table
+(define bottom-layers
+  (lambda (n state)
+    (state-of (var-table:bottom-frames n (vars state)
+              (function-table:bottom-layers n (funs state))))))
+
+
+;;;; var mappings
+
+
+;; State with this varname declared in the current scope and initialized to this value
+(define declare-var-with-box
+  (lambda (name box state)
+    (state-of (var-table:declare-var-with-box name box (vars state))
               (funs state))))
 
 ;; State with this varname declared in the current scope and initialized to this value
@@ -97,26 +117,8 @@
   (lambda (name state)
     (var-table:var-value name (vars state))))
 
-;; State with the bottom n frames of the stack
-(define bottom-var-frames
-  (lambda (n state)
-    (state-of (var-table:bottom-frames n (vars state))
-              (funs state))))
-
 
 ;;;; fun mappings
-
-;; State with a new blank layer of function bindings added
-(define push-new-funs-layer
-  (lambda (state)
-    (state-of (vars state)
-              (function-table:push-new-layer (funs state)))))
-
-;; State with the top layer of function bindings removed
-(define pop-funs-layer
-  (lambda (state)
-    (state-of (vars state)
-              (function-table:pop-layer (funs state)))))
 
 ;; Is a function with this name in scope?
 (define has-fun?
@@ -134,11 +136,6 @@
     (state-of (vars state)
               (function-table:declare-fun name params body scoper (funs state)))))
 
-;; State with only the bottom n layers
-(define bottom-fun-layers
-  (lambda (n state)
-    (state-of (vars state)
-              (function-table:bottom-layers n (funs state)))))
 
 ;; extract portions of a closure
 (define closure:params function-table:closure:params)
