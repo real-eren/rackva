@@ -2,7 +2,8 @@
 
 (require "util/map.rkt")
 
-(provide (prefix-out function-table:
+(provide new-function-table
+         (prefix-out function-table:
                      (combine-out closure:params
                                   closure:body
                                   closure:scoper
@@ -43,6 +44,8 @@
 (define new-layer map-empty)
 
 ;; stack operations
+(define new-function-table null)
+
 (define push-layer cons)
 
 (define push-new-layer

@@ -99,18 +99,18 @@
 (define Mstate-block-impl
   (lambda (stmt-list state conts)
     (Mstate-stmt-list stmt-list
-                      (state-push-new-frame state)
+                      (state:push-new-var-frame state)
                       (conts-of conts
                                 #:next (lambda (s)
-                                         ((next conts) (state-pop-frame s)))
+                                         ((next conts) (state:pop-var-frame s)))
                                 #:break (lambda (s)
-                                          ((break conts) (state-pop-frame s)))
+                                          ((break conts) (state:pop-var-frame s)))
                                 #:continue (lambda (s)
-                                             ((continue conts) (state-pop-frame s)))
+                                             ((continue conts) (state:pop-var-frame s)))
                                 #:throw (lambda (v s)
-                                          ((throw conts) v (state-pop-frame s)))
+                                          ((throw conts) v (state:pop-var-frame s)))
                                 #:return (lambda (v s)
-                                           ((return conts) v (state-pop-frame s)))))))
+                                           ((return conts) v (state:pop-var-frame s)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; WHILE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -259,14 +259,14 @@
 (define Mstate-decl-impl
   (lambda (var-name maybe-expr state conts)
     (cond
-      [(state-var-declared-top-frame? var-name state)   (error (string-append "attempted to re-declare "
+      [(state:var-declared-top-frame? var-name state)   (error (string-append "attempted to re-declare "
                                                                               (symbol->string var-name)))]
-      [(null? maybe-expr)                               ((next conts) (state-declare-var var-name state))]
+      [(null? maybe-expr)                               ((next conts) (state:declare-var var-name state))]
       [else                                             (Mvalue (get maybe-expr)
                                                                 state
                                                                 conts
                                                                 (lambda (v s)
-                                                                  ((next conts) (state-declare-var-with-value var-name 
+                                                                  ((next conts) (state:declare-var-with-value var-name 
                                                                                                               v
                                                                                                               s))))])))
 
@@ -289,9 +289,9 @@
 
 (define Mstate-assign-impl
   (lambda (var-name val-expr state conts)
-    (if (state-var-declared? var-name state)
+    (if (state:var-declared? var-name state)
         (Mvalue val-expr state conts (lambda (v s)
-                                       ((next conts) (state-assign-var var-name v s))))
+                                       ((next conts) (state:assign-var var-name v s))))
         ; else assigning to undeclared var
         (error (string-append "tried to assign to "
                               (symbol->string var-name)
@@ -358,13 +358,13 @@
                                                                                                             ((throw conts) e s2)))))]
                                            [(null? finally-block)   (lambda (e s)
                                                                       (Mstate-block-impl (catch-body catch-block)
-                                                                                         (state-declare-var-with-value (catch-var catch-block)
+                                                                                         (state:declare-var-with-value (catch-var catch-block)
                                                                                                                        e
                                                                                                                        s)
                                                                                          conts))]
                                            [else                    (lambda (e s)
                                                                       (Mstate-block-impl (catch-body catch-block)
-                                                                                         (state-declare-var-with-value (catch-var catch-block)
+                                                                                         (state:declare-var-with-value (catch-var catch-block)
                                                                                                                        e
                                                                                                                        s)
                                                                                          (conts-of conts ; after catch, before finally
@@ -479,7 +479,7 @@
                                                    state
                                                    conts
                                                    (lambda (v s) 
-                                                     (evaluate v (state-assign-var (assign-var expr) v s))))]
+                                                     (evaluate v (state:assign-var (assign-var expr) v s))))]
       [(is-boolean-expr? expr)             (Mbool expr state conts evaluate)]
       [(has-op? expr)                      (Mvalue-op expr state conts evaluate)]
       [else                                (error "unreachable in Mvalue")])))
@@ -502,13 +502,13 @@
 (define read-var
   (lambda (var-symbol state)
     (cond
-      [(not (state-var-declared? var-symbol state))       (error (string-append "referenced "
+      [(not (state:var-declared? var-symbol state))       (error (string-append "referenced "
                                                                                 (symbol->string var-symbol)
                                                                                 " before declaring it."))]
-      [(not (state-var-initialized? var-symbol state))    (error (string-append "accessed "
+      [(not (state:var-initialized? var-symbol state))    (error (string-append "accessed "
                                                                                 (symbol->string var-symbol)
                                                                                 " before initializing it."))]
-      [else                                               (state-var-value var-symbol state)])))
+      [else                                               (state:get-var-value var-symbol state)])))
 
 
 ;; takes an expression representing one with an operator

@@ -3,7 +3,7 @@
 (require "var-table.rkt"
          "function-table.rkt")
 
-(provide state-of
+(provide new-state
          (prefix-out state:
                      (combine-out push-new-var-frame
                                   pop-var-frame
@@ -34,6 +34,8 @@
 (define state-of
   (lambda (vars funs)
     (list vars funs)))
+
+(define new-state (state-of new-var-table new-function-table))
 
 (define vars first)
 (define funs second)
