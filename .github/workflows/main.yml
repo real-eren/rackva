@@ -14,10 +14,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-#       - name: Checkout
-#         uses: actions/checkout@master
+      - name: Checkout
+        uses: actions/checkout@v2
 
+      - name: Cache Racket Dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/racket
+            ~/.local/share/racket
+          key: ${{ runner.os }}-racket-8.2
       - name: Install Racket
         uses: Bogdanp/setup-racket@v1.6.1
         with:
