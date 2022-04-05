@@ -14,8 +14,7 @@
                                   var-declared-top-frame?
                                   var-initialized?
                                   var-box
-                                  var-value
-                                  bottom-frames)))
+                                  var-value)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Var-table is a stack of frames
@@ -146,8 +145,3 @@
   (lambda (var-name var-table)
     (unbox (var-box var-name var-table))))
 
-
-;; returns the bottom n layers
-(define bottom-frames
-  (lambda (n var-table)
-    (take-right var-table n)))

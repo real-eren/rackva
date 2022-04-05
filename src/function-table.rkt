@@ -6,28 +6,27 @@
          (prefix-out function-table:
                      (combine-out closure:params
                                   closure:body
-                                  closure:scoper
+                                  closure:state
                                   push-new-layer
                                   pop-layer
                                   has-fun?
                                   get-closure
-                                  declare-fun
-                                  bottom-layers)))
+                                  declare-fun)))
 
 
 ;; function table
 
 ;; stack of maps of closures
-;; entry   name : (body . )
+;; entry   name : (params body scope)
 
 ;; closures functions
 (define closure:params first)
 (define closure:body second)
-(define closure:scoper third)
+(define closure:state third)
 
 (define closure-of
-  (lambda (params body scoper)
-    (list params body scoper)))
+  (lambda (params body state)
+    (list params body state)))
 
 ;; layer is a map of { name : closure }
 
@@ -75,13 +74,8 @@
 
 ;; adds function to table
 (define declare-fun
-  (lambda (name params body scoper table)
+  (lambda (name params body state table)
     (push-layer (layer-put-fun name
-                               (closure-of params body scoper)
+                               (closure-of params body state)
                                (peek-layer table))
                 (pop-layer table))))
-
-;; returns the bottom n layers of function in the table
-(define bottom-layers
-  (lambda (n table)
-    (take-right table n)))

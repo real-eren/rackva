@@ -5,10 +5,8 @@
 
 (provide new-state
          (prefix-out state:
-                     (combine-out height
-                                  push-new-layer
+                     (combine-out push-new-layer
                                   pop-layer
-                                  bottom-layers
 
                                   declare-var-with-box
                                   declare-var-with-value
@@ -25,7 +23,7 @@
                                   declare-fun))
          closure:params
          closure:body
-         closure:scoper)
+         closure:state)
 
 
 ;;;; State
@@ -40,10 +38,6 @@
 (define vars first)
 (define funs second)
 
-;; height of the stack and function table
-(define height
-  (lambda (state)
-    (length (vars state))))
 
 ;; State with the top scope removed from the stack and function table
 (define pop-layer
@@ -58,15 +52,7 @@
               (function-table:push-new-layer (funs state)))))
 
 
-;; State with only the bottom n layers of the stack and function table
-(define bottom-layers
-  (lambda (n state)
-    (state-of (var-table:bottom-frames n (vars state)
-              (function-table:bottom-layers n (funs state))))))
-
-
 ;;;; var mappings
-
 
 ;; State with this varname declared in the current scope and initialized to this value
 (define declare-var-with-box
@@ -132,13 +118,13 @@
 
 ;; State with this fun declared in the current layer
 (define declare-fun
-  (lambda (name params body scoper state)
+  (lambda (name params body scoped-state state)
     (state-of (vars state)
-              (function-table:declare-fun name params body scoper (funs state)))))
+              (function-table:declare-fun name params body scoped-state (funs state)))))
 
 
 ;; extract portions of a closure
 (define closure:params function-table:closure:params)
 (define closure:body function-table:closure:body)
-(define closure:scoper function-table:closure:scoper)
+(define closure:state function-table:closure:state)
 
