@@ -99,18 +99,18 @@
 (define Mstate-block-impl
   (lambda (stmt-list state conts)
     (Mstate-stmt-list stmt-list
-                      (state:push-new-var-frame state)
+                      (state:push-new-layer state)
                       (conts-of conts
                                 #:next (lambda (s)
-                                         ((next conts) (state:pop-var-frame s)))
+                                         ((next conts) (state:pop-layer s)))
                                 #:break (lambda (s)
-                                          ((break conts) (state:pop-var-frame s)))
+                                          ((break conts) (state:pop-layer s)))
                                 #:continue (lambda (s)
-                                             ((continue conts) (state:pop-var-frame s)))
+                                             ((continue conts) (state:pop-layer s)))
                                 #:throw (lambda (v s)
-                                          ((throw conts) v (state:pop-var-frame s)))
+                                          ((throw conts) v (state:pop-layer s)))
                                 #:return (lambda (v s)
-                                           ((return conts) v (state:pop-var-frame s)))))))
+                                           ((return conts) v (state:pop-layer s)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; WHILE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
