@@ -6,6 +6,7 @@
          (prefix-out var-table:
                      (combine-out push-new-frame
                                   pop-frame
+                                  declare-var-with-box
                                   declare-var-with-value
                                   declare-var
                                   assign-var
@@ -43,6 +44,10 @@
       (set-box! (frame-var-box var-name frame) val)
       frame)))
 
+(define frame-assign-box
+  (lambda (var-name box frame)
+    (map-put var-name box frame)))
+
 (define frame-declare-var
   (lambda (var-name frame)
     (map-put var-name (box null) frame)))
@@ -66,6 +71,14 @@
 
 ;; a new var-table with no var bindings
 (define new-var-table (list new-frame))
+
+; declares and assigns the var with the given box
+(define declare-var-with-box
+  (lambda (var-name box var-table)
+    (push-frame (frame-assign-box var-name
+                                  box
+                                  (peek-frame var-table))
+                (pop-frame var-table))))
 
 ; declares and assigns the var with the given value
 (define declare-var-with-value
