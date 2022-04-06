@@ -86,7 +86,7 @@
     (state-of (var-table:declare-var name (vars state))
               (funs state))))
 
-;; State with 
+;; State with val assigned to this varname in the most recent scope containing such a name
 (define assign-var
   (lambda (name val state)
     (state-of (var-table:assign-var name val (vars state))
