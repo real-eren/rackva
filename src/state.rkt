@@ -63,7 +63,7 @@
 (define make-scoper
   (lambda (declare-state)
     (lambda (invoke-state)
-      (state-of (vars declare-state)
+      (state-of (bottom-layers (vars invoke-state) (height (vars declare-state)))
                 (bottom-layers (funs invoke-state) (height (funs declare-state)))))))
 
 ;;;; var mappings
