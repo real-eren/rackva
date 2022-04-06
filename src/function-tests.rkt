@@ -705,6 +705,13 @@ function main() {
   return x;
 }")
 
+(error-str #:id "throw in main"
+           #:catch #t
+           "
+function main() {
+  throw 1;
+}")
+
 (error-str #:id "break in main w/out while"
            #:catch #t
            "
