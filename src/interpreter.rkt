@@ -32,13 +32,13 @@
 (define interpret-parse-tree
   (lambda (parse-tree)
     (Mstate-top-level parse-tree
-                      new-state
+                      (state:push-stack-trace 'top-level new-state)
                       (conts-of
-                       #:return (lambda (v s) (error "return as top-level statement"))
-                       #:next (lambda (s) (Mstate-main s))
+                       #:return (lambda (v s) (myerror "return as top-level statement" s))
+                       #:next (lambda (s) (Mstate-main (state:pop-stack-trace s)))
                        #:throw default-throw
-                       #:break (lambda (s) (error "break as top-level statement"))
-                       #:continue (lambda (s) (error "continue as top-level statement"))))))
+                       #:break (lambda (s) (myerror "break as top-level statement" s))
+                       #:continue (lambda (s) (myerror "continue as top-level statement" s))))))
 
 ;; legacy, for testing
 ;; interprets programs accepted by simpleParser.rkt
@@ -48,7 +48,7 @@
                       new-state
                       (conts-of
                        #:return (lambda (v s) (prep-val-for-output v))
-                       #:next (lambda (s) (error "reached end of program without return"))
+                       #:next (lambda (s) (myerror "reached end of program without return" s))
                        #:throw default-throw
                        #:break default-break
                        #:continue default-continue))))
@@ -93,7 +93,7 @@
             (is-assign? statement)
             (is-fun-decl? statement))
         (Mstate-statement statement state conts)
-        (error "illegal top-level statement: " statement))))
+        (myerror "illegal top-level statement: " statement))))
 
 ;; Find and execute the main function with the initial state
 ; should be run after executing all other top-level statements
@@ -102,7 +102,7 @@
     (Mvalue-fun '(funcall main)
                 state
                 (conts-of
-                 #:next (lambda (s) (error "main function terminated without returning"))
+                 #:next (lambda (s) (myerror "main function terminated without returning"))
                  #:throw default-throw)
                 (lambda (v s) (prep-val-for-output v)))))
 
@@ -133,7 +133,7 @@
     (cond
       [(null? statement)                    (error "called Mstate on null statement")]
       [(is-construct? statement)            ((get-Mstate statement) statement state conts)]
-      [else                                 (error "unrecognized stmt:" statement)])))
+      [else                                 (myerror (format "unrecognized stmt: #s" statement) state)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -289,8 +289,9 @@
 (define Mstate-decl-fun-impl
   (lambda (fun-name fun-params fun-body state conts)
     (if (state:has-fun? fun-name state)
-        (error (string-append "attempted to re-declare function "
-                              (symbol->string fun-name)))
+        (myerror (string-append "attempted to re-declare function "
+                                (symbol->string fun-name))
+                 state)
         ((next conts) (state:declare-fun fun-name 
                                          fun-params
                                          fun-body
@@ -318,9 +319,10 @@
                                    #:break      default-break
                                    #:throw      (lambda (e s) ((throw conts) state))
                                    #:return     (lambda (v s) ((next conts) state))))
-        (error (string-append "function "
-                              (symbol->string (fun-name expr))
-                              " not in scope.")))))
+        (myerror (string-append "function "
+                                (symbol->string (fun-name expr))
+                                " not in scope.")
+                 state))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BREAK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -363,8 +365,9 @@
 (define Mstate-decl-impl
   (lambda (var-name maybe-expr state conts)
     (cond
-      [(state:var-declared-top-frame? var-name state)   (error (string-append "attempted to re-declare "
-                                                                              (symbol->string var-name)))]
+      [(state:var-declared-top-frame? var-name state)   (myerror (string-append "attempted to re-declare "
+                                                                                (symbol->string var-name))
+                                                                 state)]
       [(null? maybe-expr)                               ((next conts) (state:declare-var var-name state))]
       [else                                             (Mvalue (get maybe-expr)
                                                                 state
@@ -397,9 +400,10 @@
         (Mvalue val-expr state conts (lambda (v s)
                                        ((next conts) (state:assign-var var-name v s))))
         ; else assigning to undeclared var
-        (error (string-append "tried to assign to "
-                              (symbol->string var-name)
-                              " before declaring it.")))))
+        (myerror (string-append "tried to assign to "
+                                (symbol->string var-name)
+                                " before declaring it.")
+                 state))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TRY CATCH FINALLY ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -603,21 +607,22 @@
                          (fun-inputs expr) 
                          state
                          (conts-of conts
-                                   #:next      (lambda (s) (error "The function did not return any values!"))
+                                   #:next      (lambda (s) (myerror "The function did not return any values!" s))
                                    #:continue  default-continue
                                    #:break     default-break
                                    #:throw     (lambda (e s) ((throw conts) e state))
                                    #:return    (lambda (v s) (evaluate v state))))
-        (error (string-append "function "
-                              (symbol->string (fun-name expr))
-                              " not in scope.")))))
+        (myerror (string-append "function "
+                                (symbol->string (fun-name expr))
+                                " not in scope.")
+                 state))))
 
 (define Mvalue-fun-impl
   (lambda (fun-name fun-closure fun-inputs state conts)
     (get-environment fun-name 
                      fun-closure
                      fun-inputs
-                     state
+                     (state:push-stack-trace fun-name state)
                      conts
                      (lambda (s)
                        (Mstate-stmt-list (closure:body fun-closure) 
@@ -630,8 +635,8 @@
 ;; It should evaluate the state that should be used during the function call
 (define get-environment
   (lambda (fun-name fun-closure inputs state conts next)
-    (get-inputs-list-box-cps (closure:params fun-closure) 
-                             inputs 
+    (get-inputs-list-box-cps (closure:params fun-closure)
+                             inputs
                              state
                              conts
                              (lambda (p l s)
@@ -653,8 +658,8 @@
     (cond
       [(and (null? actual-params)
             (null? formal-params))      (evaluation '() '() state)]
-      [(null? actual-params)            (error "Too few inputs for function call!")]
-      [(null? formal-params)            (error "Too many inputs for function call!")]
+      [(null? actual-params)            (myerror "Too few inputs for function call!" state)]
+      [(null? formal-params)            (myerror "Too many inputs for function call!" state)]
       ;; by value
       [(not (eq? (car formal-params)
                  '&))                   (Mvalue (car actual-params)
@@ -678,8 +683,9 @@
                                                                    (evaluation (cons (second formal-params) p)
                                                                                (cons (state:get-var-box (car actual-params) state) b)
                                                                                s)))]
-      [else                             (error (string-append "Function requires a reference for "
-                                                              (symbol->string (second formal-params))))])))
+      [else                             (myerror (string-append "Function requires a reference for "
+                                                                (symbol->string (second formal-params)))
+                                                 state)])))
 
 ;; Binds the names of the formal-params to boxes representing the actual parameters
 (define bind-boxed-params
@@ -712,12 +718,14 @@
 (define read-var
   (lambda (var-symbol state)
     (cond
-      [(not (state:var-declared? var-symbol state))       (error (string-append "referenced "
-                                                                                (symbol->string var-symbol)
-                                                                                " before declaring it."))]
-      [(not (state:var-initialized? var-symbol state))    (error (string-append "accessed "
-                                                                                (symbol->string var-symbol)
-                                                                                " before initializing it."))]
+      [(not (state:var-declared? var-symbol state))       (myerror (string-append "referenced "
+                                                                                  (symbol->string var-symbol)
+                                                                                  " before declaring it.")
+                                                                   state)]
+      [(not (state:var-initialized? var-symbol state))    (myerror (string-append "accessed "
+                                                                                  (symbol->string var-symbol)
+                                                                                  " before initializing it.")
+                                                                   state)]
       [else                                               (state:get-var-value var-symbol state)])))
 
 
@@ -874,9 +882,22 @@
         (map-get op-symbol boolean-op-table))))
 
 
+;;;;;;; Custom error functions
+
+;; retrieves the stack-trace from state and returns it in a form fit for output
+(define formatted-stack-trace
+  (lambda (state)
+    (string-join (map symbol->string (reverse (state:stack-trace state)))
+                 " -> "
+                 #:before-first "stack trace: ")))
+;; for user-facing errors
+(define myerror
+  (lambda (msg state)
+    (raise-user-error (string-append msg "\n" (formatted-stack-trace state)))))
+
 ;;;;;;;; Common Continuations
 
-(define default-throw (lambda (v s) (error "uncaught exception: " v)))
-(define default-break (lambda (s) (error "break statement outside of loop")))
-(define default-continue (lambda (s) (error "continue statement outside of loop")))
+(define default-throw (lambda (v s) (myerror (format "uncaught exception: ~s" v) s)))
+(define default-break (lambda (s) (myerror "break statement outside of loop" s)))
+(define default-continue (lambda (s) (myerror "continue statement outside of loop" s)))
 

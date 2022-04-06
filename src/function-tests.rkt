@@ -11,7 +11,9 @@
   (lambda (id)
     (if (eq? id #f)
         #f
-        (format "test ID: ~s" id))))
+        (string-append "test ID: " (if (string? id)
+                                       id
+                                       (format "~s" id))))))
 
 
 (define test-file
@@ -857,6 +859,58 @@ function f() {
 function main() {
   return x;
 }")
+
+(error-str #:id "nested fun refers to 'nephew' nested fun"
+           #:catch #t
+           "
+function main() {
+  function bar() {
+    return nephew();
+  }
+  function sibling() {
+    function newphew() {
+      return 5;
+    }
+  }
+  return bar();
+}")
+
+(error-str #:id "nested fun refers to 'cousin' nested fun. Same height different branches"
+           #:catch #t
+           "
+function main() {
+  function a1() {
+    function a2() {
+      function a3() {
+        return b2();
+      }
+      return a3();
+    }
+    return a2();
+  }
+  function b1() {
+    function b2() {
+      return 5;
+    }
+    function b2b() {
+      return a1();
+    }
+    return b2b();
+  }
+  return b1();
+}")
+
+; not specified whether params can be shadowed by locals
+;(error-str #:id "local name collides with param name"
+;           #:catch #t
+;           "
+;function foo(x) {
+;  var x = 2;
+;  return x;
+;}
+;function main() {
+;  return foo(5);
+;}")
 
 (error-str #:id "function w/out return used as expression"
            #:catch #t
