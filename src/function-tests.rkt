@@ -23,13 +23,16 @@
     (check-equal? (interpret-str str) expected (format-test-id test-id))))
 
 (define error-file
-  (lambda (file #:id [test-id #f])
-    (check-exn exn:fail? (lambda () (interpret file)) (format-test-id test-id))))
+  (lambda (file #:id [test-id #f] #:catch [suppress #t])
+    (if suppress
+        (check-exn exn:fail? (lambda () (interpret file)) (format-test-id test-id))
+        (test-file 'error file #:id test-id))))
 
 (define error-str
-  (lambda (str #:id [test-id #f])
-    ;(interpret-str str))) ;for checking the error messages
-    (check-exn exn:fail? (lambda () (interpret-str str)) (format-test-id test-id))))
+  (lambda (str #:id [test-id #f] #:catch [suppress #t])
+    (if suppress
+        (check-exn exn:fail? (lambda () (interpret-str str)) (format-test-id test-id))
+        (test-str 'error str #:id test-id))))
 
 
 
@@ -317,16 +320,6 @@ function main() {
 }
 ")
 
-(error-str #:id "Mismatched parameters and arguments"
-           "
-function f(a) {
-  return a*a;
-}
-
-function main() {
-  return f(10, 11, 12);
-}")
-
 (test-str #:id "Functions inside functions. "
           90 "
 function main() {
@@ -433,27 +426,6 @@ function main() {
 }
 ")
 
-(error-str #:id "Functions inside functions accessing out of scope variables."
-           "
-function f(x) {
-  function g(x) {
-    var b;
-    b = x;
-    return 0;
-  }
-
-  function h(x) {
-    b = x;
-    return 1;
-  }
-
-  return g(x) + h(x);
-}
-
-function main() {
-  return f(10);
-}
-")
 
 (test-str #:id "try/catch finally, but no exception thrown. "
           125 "
@@ -613,3 +585,100 @@ function main () {
   gcd(x,y);
   return x+y;
 }")
+
+(test-str #:id "global function invokes function defined later"
+          2
+          "
+function a() {
+  return b();
+}
+
+function b() {
+  return 2;
+}
+function main() {
+  return a();
+}
+")
+
+(error-str #:id "invoking undefined function in top level var declaration"
+           #:catch #t
+           "
+var x = f();
+
+function f() {
+  return 2;
+}
+
+function main() {
+  return x;
+}")
+
+(error-str #:id "Passing too many arguments"
+           #:catch #t
+           "
+function f(a) {
+  return a*a;
+}
+
+function main() {
+  return f(10, 11, 12);
+}")
+
+(error-str #:id "Passing too few arguments"
+           #:catch #t
+           "
+function f(a, b, c) {
+  return a + b + c;
+}
+function main() {
+  return f(1);
+}")
+
+(error-str #:id "Passing expressions to a reference parameter"
+           #:catch #t
+           "
+function f(&a) {
+  a = a + 1;
+}
+function main() {
+  return f(1);
+}")
+
+(error-str #:id "Functions inside functions accessing out of scope variables."
+           #:catch #t
+           "
+function f(x) {
+  function g(x) {
+    var b;
+    b = x;
+    return 0;
+  }
+
+  function h(x) {
+    b = x;
+    return 1;
+  }
+
+  return g(x) + h(x);
+}
+
+function main() {
+  return f(10);
+}
+")
+
+(error-str #:id "global function defined twice"
+           #:catch #t
+           "
+function foo() {
+  return 1;
+}
+function foo() {
+  return 2;
+}
+function main() {
+  var x = foo();
+  return x;
+}")
+
