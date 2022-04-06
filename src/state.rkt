@@ -55,11 +55,13 @@
 
 ;; Given a state, creates a function that takes a state
 ; and returns the portion in-scope according to the original state
+; the vars present in declare state
+; the functions present in the layers present in both invoke and declare state
 (define make-scoper
   (lambda (declare-state)
     (lambda (invoke-state)
       (state-of (vars declare-state)
-                (funs declare-state)))))
+                (take-right (funs invoke-state) (length (funs declare-state)))))))
 
 ;;;; var mappings
 
