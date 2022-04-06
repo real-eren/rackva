@@ -297,6 +297,7 @@
                             #:next        (lambda (s) ((next conts) state))
                             #:continue    (lambda (s) (error "Continue statement inside function call"))
                             #:break       (lambda (s) (error "Break statement inside function call"))
+                            #:throw       (lambda (e s) ((throw conts) state))
                             #:return      (lambda (v s)
                                             ((next conts) state))))
         (error (string-append "function "
@@ -632,6 +633,7 @@
                             #:next        (lambda (s) (error "The function did not return any values!"))
                             #:continue    (lambda (s) (error "Continue statement inside function call"))
                             #:break       (lambda (s) (error "Break statement inside function call"))
+                            #:throw       (lambda (e s) ((throw conts) e state))
                             #:return      (lambda (v s)
                                             (evaluate v state))))
         (error (string-append "function "
@@ -691,15 +693,21 @@
 (define get-inputs-list-box-cps
   (lambda (params inputs state conts evaluation) 
     (cond 
-      [(null? inputs)               (if (null? params) (evaluation '() '() state) (error "Too few inputs for function call!"))]
+      [(null? inputs)               (if (null? params) 
+                                        (evaluation '() '() state)
+                                        (error "Too few inputs for function call!"))]
+
       [(null? params)               (error "Too many inputs for function call!")]
-      [(equal? (car params) '&)     (if (is-ref-var? (car inputs))  
-                                        (get-inputs-list-box-cps (cddr params)
-                                                            (cdr inputs)
-                                                            state
-                                                            conts
-                                                            (lambda (p1 l1 s1)
-                                                              (evaluation (cons (cadr params) p1) (cons (state:get-var-box (car inputs) state) l1) s1)))
+      
+      [(equal? (car params) '&)     (if (is-ref-var? (car inputs))
+                                        (get-inputs-list-box-cps  (cddr params)
+                                                                  (cdr inputs)
+                                                                  state
+                                                                  conts
+                                                                  (lambda (p1 l1 s1)
+                                                                    (evaluation (cons (cadr params) p1)
+                                                                                (cons (state:get-var-box (car inputs) state) l1) 
+                                                                                s1)))
                                         (error (string-append "Function requires a reference for "
                                                                               (symbol->string (cadr params)))))]
       [else                         (Mvalue (car inputs)
@@ -707,14 +715,17 @@
                                             conts
                                             (lambda (v1 s1)
                                               (get-inputs-list-box-cps  (cdr params)
-                                                                          (cdr inputs)
-                                                                          s1
-                                                                          conts
-                                                                          (lambda (p1 l1 s2)
-                                                                            (evaluation (cons (car params) p1) (cons (box v1) l1) s2)))))])))
+                                                                        (cdr inputs)
+                                                                        s1
+                                                                        conts
+                                                                        (lambda (p1 l1 s2)
+                                                                          (evaluation (cons (car params) p1) 
+                                                                                      (cons (box v1) l1) 
+                                                                                      s2)))))])))
 
-;; Takes in the current state, the function name, 
-;; It should 
+;; Takes in the current state, the function name, the function closure, the input expression
+;; the state, the conts and the evaluation
+;; It should evaluate the state that should be used during the function call
 (define make-new-state-cps
   (lambda (fun-name fun-closure inputs state conts evaluation)
     (get-inputs-list-box-cps    (closure:params fun-closure) 
@@ -724,12 +735,13 @@
                                 (lambda (p l s)
                                   (declare-boxes-cps  p
                                                       l
-                                                      (state:declare-fun  fun-name
-                                                                          (closure:params fun-closure)
-                                                                          (closure:body fun-closure)
-                                                                          (closure:state fun-closure)
-                                                                          (state:push-new-layer (closure:state fun-closure)))
-                                                      evaluation)))))
+                                                      (closure:state fun-closure)
+                                                      (lambda (s2)
+                                                        (evaluation (state:declare-fun  fun-name
+                                                                                        (closure:params   fun-closure)
+                                                                                        (closure:body     fun-closure)
+                                                                                        (closure:state    fun-closure)
+                                                                                        (state:push-new-layer s2)))))))))
 
 ;; Takes in the list of boxes, declare them to the given state
 (define declare-boxes-cps
@@ -737,9 +749,10 @@
     (cond
       [(null? box-list)             (evaluation state)]
       [else                         (declare-boxes-cps  (cdr params) 
-                                                        (cdr box-list) 
-                                                        (state:declare-var-with-box (car params) (car box-list) state)
-                                                        evaluation)])))
+                                                        (cdr box-list)
+                                                        state
+                                                        (lambda (s)
+                                                          (evaluation (state:declare-var-with-box (car params) (car box-list) s))))])))
 
 ;; takes a nested expr (list), returns what should be an action symbol
 ;; use is-___ functions to determine whether the
