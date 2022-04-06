@@ -548,7 +548,8 @@
                                          conts
                                          (lambda (b s)
                                            (evaluate (assert-bool b) s)))]
-      [(is-nested-boolean-expr? expr)   (Mvalue-op expr
+      [(is-nested-boolean-expr?
+        expr)                    (Mvalue-op expr
                                             state
                                             conts
                                             (lambda (b s)
@@ -648,48 +649,48 @@
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
 (define get-inputs-list-box-cps
-  (lambda (params inputs state conts evaluation) 
+  (lambda (formal-params actual-params state conts evaluation) 
     (cond
-      [(null? inputs)               (if (null? params) 
-                                        (evaluation '() '() state)
-                                        (error "Too few inputs for function call!"))]
+      [(and (null? actual-params)
+            (null? formal-params))      (evaluation '() '() state)]
+      [(null? actual-params)            (error "Too few inputs for function call!")]
+      [(null? formal-params)            (error "Too many inputs for function call!")]
+      ;; by value
+      [(not (eq? (car formal-params)
+                 '&))                   (Mvalue (car actual-params)
+                                                state
+                                                conts
+                                                (lambda (v1 s1)
+                                                  (get-inputs-list-box-cps (cdr formal-params)
+                                                                           (cdr actual-params)
+                                                                           s1
+                                                                           conts
+                                                                           (lambda (p1 l1 s2)
+                                                                             (evaluation (cons (car formal-params) p1) 
+                                                                                         (cons (box v1) l1) 
+                                                                                         s2)))))]
+      ;; by reference
+      [(symbol? (car actual-params))    (get-inputs-list-box-cps (cddr formal-params)
+                                                                 (cdr actual-params)
+                                                                 state
+                                                                 conts
+                                                                 (lambda (p b s)
+                                                                   (evaluation (cons (second formal-params) p)
+                                                                               (cons (state:get-var-box (car actual-params) state) b)
+                                                                               s)))]
+      [else                             (error (string-append "Function requires a reference for "
+                                                              (symbol->string (cadr formal-params))))])))
 
-      [(null? params)               (error "Too many inputs for function call!")]
-      
-      [(equal? (car params) '&)     (if (is-var-name? (car inputs))
-                                        (get-inputs-list-box-cps  (cddr params)
-                                                                  (cdr inputs)
-                                                                  state
-                                                                  conts
-                                                                  (lambda (p1 l1 s1)
-                                                                    (evaluation (cons (cadr params) p1)
-                                                                                (cons (state:get-var-box (car inputs) state) l1) 
-                                                                                s1)))
-                                        (error (string-append "Function requires a reference for "
-                                                              (symbol->string (cadr params)))))]
-      [else                         (Mvalue (car inputs)
-                                            state
-                                            conts
-                                            (lambda (v1 s1)
-                                              (get-inputs-list-box-cps (cdr params)
-                                                                       (cdr inputs)
-                                                                       s1
-                                                                       conts
-                                                                       (lambda (p1 l1 s2)
-                                                                         (evaluation (cons (car params) p1) 
-                                                                                     (cons (box v1) l1) 
-                                                                                     s2)))))])))
-
-;; Binds a list of boxes representing the actual parameters to
+;; Binds the names of the formal-params to boxes representing the actual parameters
 (define bind-boxed-params
-  (lambda (params box-list state next)
+  (lambda (formal-params box-list state next)
     (if (null? box-list)
         (next state)
-        (bind-boxed-params (cdr params) 
+        (bind-boxed-params (cdr formal-params) 
                            (cdr box-list)
                            state
                            (lambda (s)
-                             (next (state:declare-var-with-box (car params) (car box-list) s)))))))
+                             (next (state:declare-var-with-box (car formal-params) (car box-list) s)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -787,9 +788,6 @@
 ;; takes a maybe-value and extracts the value
 ;; throws error if maybe-value was `empty`
 (define get car)
-
-;; returns whether a value could be a variable name
-(define is-var-name? symbol?)
 
 ;; produces a function that returns whether a statement's 'action' symbol matches symbl
 (define checker-of
