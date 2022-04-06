@@ -294,7 +294,7 @@
         ((next conts) (state:declare-fun fun-name 
                                          fun-params
                                          fun-body
-                                         state
+                                         (state:make-scoper state)
                                          state)))))
 
 
@@ -637,12 +637,12 @@
                              (lambda (p l s)
                                (bind-boxed-params p
                                                   l
-                                                  (closure:state fun-closure)
+                                                  ((closure:scoper fun-closure) state)
                                                   (lambda (s2)
                                                     (next (state:declare-fun fun-name
                                                                              (closure:params   fun-closure)
                                                                              (closure:body     fun-closure)
-                                                                             (closure:state    fun-closure)
+                                                                             (closure:scoper   fun-closure)
                                                                              (state:push-new-layer s2)))))))))
 
 
@@ -679,7 +679,7 @@
                                                                                (cons (state:get-var-box (car actual-params) state) b)
                                                                                s)))]
       [else                             (error (string-append "Function requires a reference for "
-                                                              (symbol->string (cadr formal-params))))])))
+                                                              (symbol->string (second formal-params))))])))
 
 ;; Binds the names of the formal-params to boxes representing the actual parameters
 (define bind-boxed-params

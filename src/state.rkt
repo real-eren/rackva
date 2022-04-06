@@ -8,6 +8,8 @@
                      (combine-out push-new-layer
                                   pop-layer
 
+                                  make-scoper
+
                                   declare-var-with-box
                                   declare-var-with-value
                                   declare-var
@@ -23,7 +25,7 @@
                                   declare-fun))
          closure:params
          closure:body
-         closure:state)
+         closure:scoper)
 
 
 ;;;; State
@@ -51,6 +53,13 @@
 
 (define new-state (push-new-layer (state-of new-var-table new-function-table)))
 
+;; Given a state, creates a function that takes a state
+; and returns the portion in-scope according to the original state
+(define make-scoper
+  (lambda (declare-state)
+    (lambda (invoke-state)
+      (state-of (vars declare-state)
+                (funs declare-state)))))
 
 ;;;; var mappings
 
@@ -118,13 +127,13 @@
 
 ;; State with this fun declared in the current layer
 (define declare-fun
-  (lambda (name params body scoped-state state)
+  (lambda (name params body scoper state)
     (state-of (vars state)
-              (function-table:declare-fun name params body scoped-state (funs state)))))
+              (function-table:declare-fun name params body scoper (funs state)))))
 
 
 ;; extract portions of a closure
 (define closure:params function-table:closure:params)
 (define closure:body function-table:closure:body)
-(define closure:state function-table:closure:state)
+(define closure:scoper function-table:closure:scoper)
 
