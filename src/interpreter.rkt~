@@ -289,7 +289,7 @@
 (define Mstate-fun
   (lambda (expr state conts)
     (if (state:has-fun? (fun-name expr) state) 
-        (Mvalue expr state conts (lambda (v s) ((next conts) s)))
+        (Mvalue expr conts (lambda (v s) ((next conts) s)))
         (error (string-append "function "
                               (symbol->string (fun-name expr))
                               " not in scope.")))))
