@@ -36,7 +36,7 @@
                       (conts-of
                        #:return (lambda (v s) (error "return as top-level statement"))
                        #:next (lambda (s) (Mstate-main s))
-                       #:throw (lambda (v s) (error "uncaught exception: " v))
+                       #:throw default-throw
                        #:break (lambda (s) (error "break as top-level statement"))
                        #:continue (lambda (s) (error "continue as top-level statement"))))))
 
@@ -49,9 +49,9 @@
                       (conts-of
                        #:return (lambda (v s) (prep-val-for-output v))
                        #:next (lambda (s) (error "reached end of program without return"))
-                       #:throw (lambda (v s) (error "uncaught exception: " v))
-                       #:break (lambda (s) (error "break statement outside of loop"))
-                       #:continue (lambda (s) (error "continue statement outside of loop"))))))
+                       #:throw default-throw
+                       #:break default-break
+                       #:continue default-continue))))
 
 ;; takes a value and modifies it for output
 (define prep-val-for-output
@@ -83,7 +83,8 @@
                                          #:next (lambda (s)
                                                   (Mstate-top-level (cdr stmt-list)
                                                                     s
-                                                                    conts)))))))
+                                                                    conts))
+                                         #:throw default-throw)))))
 
 ;; Evaluates a single top level statement
 (define Mstate-top-level-stmt
@@ -100,7 +101,9 @@
   (lambda (state)
     (Mvalue-fun '(funcall main)
                 state
-                (conts-of #:next (lambda (s) (error "main function terminated without returning")))
+                (conts-of
+                 #:next (lambda (s) (error "main function terminated without returning"))
+                 #:throw default-throw)
                 (lambda (v s) (prep-val-for-output v)))))
 
 
@@ -271,11 +274,9 @@
 ; takes a statement representing a function declaration statement
 ; declare the function in the state
 
-(define decl-fun-body fourth)
-
-(define decl-fun-params third)
-
 (define decl-fun-name second)
+(define decl-fun-params third)
+(define decl-fun-body fourth)
 
 (define Mstate-decl-fun
   (lambda (statement state conts)
@@ -287,14 +288,14 @@
 
 (define Mstate-decl-fun-impl
   (lambda (fun-name fun-params fun-body state conts)
-    (cond 
-      [(state:has-fun? fun-name state)                  (error (string-append "attempted to re-declare function"
-                                                                              (symbol->string fun-name)))]
-      [else                                             ((next conts) (state:declare-fun  fun-name 
-                                                                                          fun-params
-                                                                                          fun-body
-                                                                                          state
-                                                                                          state))])))
+    (if (state:has-fun? fun-name state)
+        (error (string-append "attempted to re-declare function "
+                              (symbol->string fun-name)))
+        ((next conts) (state:declare-fun fun-name 
+                                         fun-params
+                                         fun-body
+                                         state
+                                         state)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;   FUNCTION INVOCATION   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -302,27 +303,24 @@
 ; invokes the function
 
 (define fun-name second)
-
 (define fun-inputs cddr)
 
 (define Mstate-fun
   (lambda (expr state conts)
     (if (state:has-fun? (fun-name expr) state)
-        (Mvalue-fun-impl  (fun-name expr)
-                          (state:get-closure (fun-name expr) state)
-                          (fun-inputs expr) 
-                          state
-                          (conts-of conts
-                                    #:next        (lambda (s) ((next conts) state))
-                                    #:continue    (lambda (s) (error "Continue statement inside function call"))
-                                    #:break       (lambda (s) (error "Break statement inside function call"))
-                                    #:throw       (lambda (e s) ((throw conts) state))
-                                    #:return      (lambda (v s)
-                                                    ((next conts) state))))
+        (Mvalue-fun-impl (fun-name expr)
+                         (state:get-closure (fun-name expr) state)
+                         (fun-inputs expr) 
+                         state
+                         (conts-of conts
+                                   #:next       (lambda (s) ((next conts) state))
+                                   #:continue   default-continue
+                                   #:break      default-break
+                                   #:throw      (lambda (e s) ((throw conts) state))
+                                   #:return     (lambda (v s) ((next conts) state))))
         (error (string-append "function "
                               (symbol->string (fun-name expr))
-                              " not in scope.")))
-    ))
+                              " not in scope.")))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BREAK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -550,7 +548,7 @@
                                          conts
                                          (lambda (b s)
                                            (evaluate (assert-bool b) s)))]
-      [(is-boolean-expr? expr)   (Mvalue-op expr
+      [(is-nested-boolean-expr? expr)   (Mvalue-op expr
                                             state
                                             conts
                                             (lambda (b s)
@@ -591,7 +589,7 @@
                                                     conts
                                                     (lambda (v s) 
                                                       (evaluate v (state:assign-var (assign-var expr) v s))))]
-      [(is-boolean-expr? expr)              (Mbool expr state conts evaluate)]
+      [(is-nested-boolean-expr? expr)       (Mbool expr state conts evaluate)]
       [(has-op? expr)                       (Mvalue-op expr state conts evaluate)]
       [else                                 (error "unreachable in Mvalue")])))
 
@@ -605,8 +603,8 @@
                          state
                          (conts-of conts
                                    #:next      (lambda (s) (error "The function did not return any values!"))
-                                   #:continue  (lambda (s) (error "Continue statement inside function call"))
-                                   #:break     (lambda (s) (error "Break statement inside function call"))
+                                   #:continue  default-continue
+                                   #:break     default-break
                                    #:throw     (lambda (e s) ((throw conts) e state))
                                    #:return    (lambda (v s) (evaluate v state))))
         (error (string-append "function "
@@ -615,22 +613,22 @@
 
 (define Mvalue-fun-impl
   (lambda (fun-name fun-closure fun-inputs state conts)
-    (make-new-state-cps fun-name 
-                        fun-closure
-                        fun-inputs
-                        state
-                        conts
-                        (lambda (s)
-                          (Mstate-stmt-list (closure:body fun-closure) 
-                                            s
-                                            conts)))))
+    (get-environment fun-name 
+                     fun-closure
+                     fun-inputs
+                     state
+                     conts
+                     (lambda (s)
+                       (Mstate-stmt-list (closure:body fun-closure) 
+                                         s
+                                         conts)))))
 
 
 ;; Takes in the function name, the function closure, the input expression
 ;; the state, the conts and the evaluation
 ;; It should evaluate the state that should be used during the function call
-(define make-new-state-cps
-  (lambda (fun-name fun-closure inputs state conts evaluation)
+(define get-environment
+  (lambda (fun-name fun-closure inputs state conts next)
     (get-inputs-list-box-cps (closure:params fun-closure) 
                              inputs 
                              state
@@ -640,11 +638,11 @@
                                                   l
                                                   (closure:state fun-closure)
                                                   (lambda (s2)
-                                                    (evaluation (state:declare-fun fun-name
-                                                                                   (closure:params   fun-closure)
-                                                                                   (closure:body     fun-closure)
-                                                                                   (closure:state    fun-closure)
-                                                                                   (state:push-new-layer s2)))))))))
+                                                    (next (state:declare-fun fun-name
+                                                                             (closure:params   fun-closure)
+                                                                             (closure:body     fun-closure)
+                                                                             (closure:state    fun-closure)
+                                                                             (state:push-new-layer s2)))))))))
 
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
@@ -673,14 +671,14 @@
                                             state
                                             conts
                                             (lambda (v1 s1)
-                                              (get-inputs-list-box-cps  (cdr params)
-                                                                        (cdr inputs)
-                                                                        s1
-                                                                        conts
-                                                                        (lambda (p1 l1 s2)
-                                                                          (evaluation (cons (car params) p1) 
-                                                                                      (cons (box v1) l1) 
-                                                                                      s2)))))])))
+                                              (get-inputs-list-box-cps (cdr params)
+                                                                       (cdr inputs)
+                                                                       s1
+                                                                       conts
+                                                                       (lambda (p1 l1 s2)
+                                                                         (evaluation (cons (car params) p1) 
+                                                                                     (cons (box v1) l1) 
+                                                                                     s2)))))])))
 
 ;; Binds a list of boxes representing the actual parameters to
 (define bind-boxed-params
@@ -775,7 +773,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;; Helper functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; functions that may be useful in more than one context
+
+;;;; functions that may be useful in more than one context
 
 ;; takes a nested expr (list), returns what should be an action symbol
 ;; use is-___ functions to determine whether the
@@ -832,9 +831,8 @@
     (map-get (action statement) constructs-table)))
 
 
-
 ;; returns whether a nested expression is of the boolean variety
-(define is-boolean-expr?
+(define is-nested-boolean-expr?
   (lambda (nested-expr)
     (map-contains? (action nested-expr) boolean-op-table)))
 
@@ -878,4 +876,9 @@
         (map-get op-symbol boolean-op-table))))
 
 
+;;;;;;;; Common Continuations
+
+(define default-throw (lambda (v s) (error "uncaught exception: " v)))
+(define default-break (lambda (s) (error "break statement outside of loop")))
+(define default-continue (lambda (s) (error "continue statement outside of loop")))
 
