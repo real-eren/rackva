@@ -42,7 +42,7 @@
                                                        #:throw (lambda (v s) (error "uncaught exception: " v))
                                                        #:break (lambda (s) (error "break statement outside of loop"))
                                                        #:continue (lambda (s) (error "continue statement outside of loop"))
-                                                      )))
+                                                       )))
                        #:throw (lambda (v s) (error "uncaught exception: " v))
                        #:break (lambda (s) (error "break statement outside of loop"))
                        #:continue (lambda (s) (error "continue statement outside of loop"))))))
@@ -286,13 +286,13 @@
 (define Mstate-decl-fun-impl
   (lambda (fun-name fun-params fun-body state conts)
     (cond 
-    [(state:has-fun? fun-name state)                  (error (string-append "attempted to re-declare function"
+      [(state:has-fun? fun-name state)                  (error (string-append "attempted to re-declare function"
                                                                               (symbol->string fun-name)))]
-    [else                                             ((next conts) (state:declare-fun  fun-name 
-                                                                                        fun-params
-                                                                                        fun-body
-                                                                                        state
-                                                                                        state))])))
+      [else                                             ((next conts) (state:declare-fun  fun-name 
+                                                                                          fun-params
+                                                                                          fun-body
+                                                                                          state
+                                                                                          state))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;   FUNCTION INVOCATION   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -311,16 +311,16 @@
                           (fun-inputs expr) 
                           state
                           (conts-of conts
-                            #:next        (lambda (s) ((next conts) state))
-                            #:continue    (lambda (s) (error "Continue statement inside function call"))
-                            #:break       (lambda (s) (error "Break statement inside function call"))
-                            #:throw       (lambda (e s) ((throw conts) state))
-                            #:return      (lambda (v s)
-                                            ((next conts) state))))
+                                    #:next        (lambda (s) ((next conts) state))
+                                    #:continue    (lambda (s) (error "Continue statement inside function call"))
+                                    #:break       (lambda (s) (error "Break statement inside function call"))
+                                    #:throw       (lambda (e s) ((throw conts) state))
+                                    #:return      (lambda (v s)
+                                                    ((next conts) state))))
         (error (string-append "function "
                               (symbol->string (fun-name expr))
                               " not in scope.")))
-                              ))
+    ))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BREAK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -647,12 +647,12 @@
                           (fun-inputs expr) 
                           state
                           (conts-of conts
-                            #:next        (lambda (s) (error "The function did not return any values!"))
-                            #:continue    (lambda (s) (error "Continue statement inside function call"))
-                            #:break       (lambda (s) (error "Break statement inside function call"))
-                            #:throw       (lambda (e s) ((throw conts) e state))
-                            #:return      (lambda (v s)
-                                            (evaluate v state))))
+                                    #:next        (lambda (s) (error "The function did not return any values!"))
+                                    #:continue    (lambda (s) (error "Continue statement inside function call"))
+                                    #:break       (lambda (s) (error "Break statement inside function call"))
+                                    #:throw       (lambda (e s) ((throw conts) e state))
+                                    #:return      (lambda (v s)
+                                                    (evaluate v state))))
         (error (string-append "function "
                               (symbol->string (fun-name expr))
                               " not in scope.")))))
@@ -668,7 +668,7 @@
                           (Mstate-stmt-list (closure:body fun-closure) 
                                             s
                                             conts)
-                        ))))
+                          ))))
 
 ;; takes a list of exprs and maps them to values,
 ;; propagating the state changes (so that they evaluate correctly)
@@ -726,7 +726,7 @@
                                                                                 (cons (state:get-var-box (car inputs) state) l1) 
                                                                                 s1)))
                                         (error (string-append "Function requires a reference for "
-                                                                              (symbol->string (cadr params)))))]
+                                                              (symbol->string (cadr params)))))]
       [else                         (Mvalue (car inputs)
                                             state
                                             conts
