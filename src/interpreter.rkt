@@ -609,13 +609,14 @@
 (define Mvalue-fun
   (lambda (expr state conts evaluate)
     (if (state:has-fun? (fun-name expr) state)
-        (Mvalue-fun-impl  (fun-name expr) 
+        (Mvalue-fun-impl  (fun-name expr)
+                          (state:get-closure (fun-name expr) state)
                           (fun-inputs expr) 
                           state
                           (conts-of conts
                             #:next        (lambda (s) (error "The function did not return any values!"))
-                            #:continue    (error "Continue statement inside function call")
-                            #:break       (error "Break statement inside function call")
+                            #:continue    (lambda (s) (error "Continue statement inside function call"))
+                            #:break       (lambda (s) (error "Break statement inside function call"))
                             #:return      (lambda (v s)
                                             (evaluate v state))))
         (error (string-append "function "
