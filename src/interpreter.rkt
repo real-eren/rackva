@@ -528,6 +528,11 @@
                                             conts
                                             (lambda (b s)
                                               (evaluate (assert-bool b) s)))]
+      [(is-fun? expr)            (Mvalue-fun  expr 
+                                              state 
+                                              conts 
+                                              (lambda (b s)
+                                                (evaluate (assert-bool b) s)))]
       [else                      (error "not considered to be a boolean type expr: " expr)])))
 
 
