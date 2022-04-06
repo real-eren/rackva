@@ -33,8 +33,6 @@
   (lambda (vars funs)
     (list vars funs)))
 
-(define new-state (state-of new-var-table new-function-table))
-
 (define vars first)
 (define funs second)
 
@@ -50,6 +48,8 @@
   (lambda (state)
     (state-of (var-table:push-new-frame (vars state))
               (function-table:push-new-layer (funs state)))))
+
+(define new-state (push-new-layer (state-of new-var-table new-function-table)))
 
 
 ;;;; var mappings
