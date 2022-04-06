@@ -289,7 +289,10 @@
 (define Mstate-fun
   (lambda (expr state conts)
     (if (state:has-fun? (fun-name expr) state) 
-        (Mvalue expr conts (lambda (v s) ((next conts) s)))
+        (Mvalue expr 
+                state 
+                conts 
+                (lambda (v s) ((next conts) s)))
         (error (string-append "function "
                               (symbol->string (fun-name expr))
                               " not in scope.")))))
@@ -629,6 +632,7 @@
                         fun-closure
                         fun-inputs
                         state
+                        conts
                         (lambda (s)
                           (Mstate-stmt-list (closure:body fun-closure) 
                                             s
@@ -673,7 +677,7 @@
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
 (define get-inputs-list-box-cps
-  (lambda (params inputs state evaluation) 
+  (lambda (params inputs state conts evaluation) 
     (cond 
       [(null? inputs)               (if (null? params) (evaluation '() '() state) (error "Too few inputs for function call!"))]
       [(null? params)               (error "Too many inputs for function call!")]
@@ -681,26 +685,30 @@
                                         (get-inputs-list-box-cps (cddr params)
                                                             (cdr inputs)
                                                             state
+                                                            conts
                                                             (lambda (p1 l1 s1)
-                                                              (evaluation (cons (cadr params) p1) (cons state:get-var-box (car inputs) l1) s1)))
+                                                              (evaluation (cons (cadr params) p1) (cons (state:get-var-box (car inputs) state) l1) s1)))
                                         (error (string-append "Function requires a reference for "
                                                                               (symbol->string (cadr params)))))]
       [else                         (Mvalue (car inputs)
                                             state
+                                            conts
                                             (lambda (v1 s1)
                                               (get-inputs-list-box-cps  (cdr params)
                                                                           (cdr inputs)
                                                                           s1
+                                                                          conts
                                                                           (lambda (p1 l1 s2)
                                                                             (evaluation (cons (car params) p1) (cons (box v1) l1) s2)))))])))
 
 ;; Takes in the current state, the function name, 
 ;; It should 
 (define make-new-state-cps
-  (lambda (fun-name fun-closure inputs state evaluation)
+  (lambda (fun-name fun-closure inputs state conts evaluation)
     (get-inputs-list-box-cps    (closure:params fun-closure) 
                                 inputs 
                                 state
+                                conts
                                 (lambda (p l s)
                                   (declare-boxes-cps  p
                                                       l
@@ -718,7 +726,7 @@
       [(null? box-list)             (evaluation state)]
       [else                         (declare-boxes-cps  (cdr params) 
                                                         (cdr box-list) 
-                                                        (state:declare-var-with-box (car params) (car box-list))
+                                                        (state:declare-var-with-box (car params) (car box-list) state)
                                                         evaluation)])))
 
 ;; takes a nested expr (list), returns what should be an action symbol
