@@ -288,14 +288,21 @@
 
 (define Mstate-fun
   (lambda (expr state conts)
-    (if (state:has-fun? (fun-name expr) state) 
-        (Mvalue expr 
-                state 
-                conts 
-                (lambda (v s) ((next conts) s)))
+    (if (state:has-fun? (fun-name expr) state)
+        (Mvalue-fun-impl  (fun-name expr)
+                          (state:get-closure (fun-name expr) state)
+                          (fun-inputs expr) 
+                          state
+                          (conts-of conts
+                            #:next        (lambda (s) ((next conts) state))
+                            #:continue    (lambda (s) (error "Continue statement inside function call"))
+                            #:break       (lambda (s) (error "Break statement inside function call"))
+                            #:return      (lambda (v s)
+                                            ((next conts) state))))
         (error (string-append "function "
                               (symbol->string (fun-name expr))
-                              " not in scope.")))))
+                              " not in scope.")))
+                              ))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BREAK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
