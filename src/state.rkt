@@ -7,6 +7,8 @@
          (prefix-out state:
                      (combine-out push-new-layer
                                   pop-layer
+                                  push-stack-trace
+                                  pop-stack-trace
 
                                   stack-trace
 
@@ -57,11 +59,14 @@
               (function-table:push-new-layer (funs state))
               (stack-trace state))))
 
+
+;;;; function call stack-trace
 (define push-stack-trace
   (lambda (fun-name state)
     (state-of (vars state)
               (funs state)
               (cons fun-name (stack-trace state)))))
+
 (define pop-stack-trace
   (lambda (state)
     (state-of (vars state)
@@ -158,6 +163,7 @@
     (state-of (vars state)
               (function-table:declare-fun name params body scoper (funs state))
               (stack-trace state))))
+
 
 
 ;; extract portions of a closure
