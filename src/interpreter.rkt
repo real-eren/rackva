@@ -12,7 +12,8 @@
          "functionParser.rkt")
 
 (provide interpret
-         interpret-parse-tree)
+         interpret-parse-tree
+         simple-interpret-parse-tree)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -42,6 +43,19 @@
                                                        #:break (lambda (s) (error "break statement outside of loop"))
                                                        #:continue (lambda (s) (error "continue statement outside of loop"))
                                                       )))
+                       #:throw (lambda (v s) (error "uncaught exception: " v))
+                       #:break (lambda (s) (error "break statement outside of loop"))
+                       #:continue (lambda (s) (error "continue statement outside of loop"))))))
+
+;; legacy, for testing
+;; interprets programs accepted by simpleParser.rkt
+(define simple-interpret-parse-tree
+  (lambda (simple-parse-tree)
+    (Mstate-stmt-list simple-parse-tree
+                      new-state
+                      (conts-of
+                       #:return (lambda (v s) (prep-val-for-output v))
+                       #:next (lambda (s) (error "reached end of program without return"))
                        #:throw (lambda (v s) (error "uncaught exception: " v))
                        #:break (lambda (s) (error "break statement outside of loop"))
                        #:continue (lambda (s) (error "continue statement outside of loop"))))))
