@@ -34,18 +34,11 @@
     (Mstate-top-level parse-tree
                       new-state
                       (conts-of
-                       #:return (lambda (v s) (error "top level return"))
-                       #:next (lambda (s) (Mstate-run s
-                                                      (conts-of
-                                                       #:return (lambda (v s) (prep-val-for-output v)) ; gets overwritten
-                                                       #:next (lambda (s) (error "main function is missing a return statement"))
-                                                       #:throw (lambda (v s) (error "uncaught exception: " v))
-                                                       #:break (lambda (s) (error "break statement outside of loop"))
-                                                       #:continue (lambda (s) (error "continue statement outside of loop"))
-                                                       )))
+                       #:return (lambda (v s) (error "return as top-level statement"))
+                       #:next (lambda (s) (Mstate-main s))
                        #:throw (lambda (v s) (error "uncaught exception: " v))
-                       #:break (lambda (s) (error "break statement outside of loop"))
-                       #:continue (lambda (s) (error "continue statement outside of loop"))))))
+                       #:break (lambda (s) (error "break as top-level statement"))
+                       #:continue (lambda (s) (error "continue as top-level statement"))))))
 
 ;; legacy, for testing
 ;; interprets programs accepted by simpleParser.rkt
@@ -69,6 +62,17 @@
       [(number? value)        value]
       [else                   (error "returned an unsupported type: " value)])))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;; Mstate functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TOP-LEVEL ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Evaluates all the top level statements
 (define Mstate-top-level
   (lambda (stmt-list state conts)
     (if (null? stmt-list)
@@ -76,10 +80,12 @@
         (Mstate-top-level-stmt (car stmt-list)
                                state
                                (conts-of conts
-                                         #:next (lambda (s) (Mstate-top-level (cdr stmt-list)
-                                                                              s
-                                                                              conts)))))))
+                                         #:next (lambda (s)
+                                                  (Mstate-top-level (cdr stmt-list)
+                                                                    s
+                                                                    conts)))))))
 
+;; Evaluates a single top level statement
 (define Mstate-top-level-stmt
   (lambda (statement state conts)
     (if (or (is-declare? statement)
@@ -88,19 +94,15 @@
         (Mstate-statement statement state conts)
         (error "illegal top-level statement: " statement))))
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;; Mstate functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(define Mstate-run
-  (lambda (state conts)
+;; Find and execute the main function with the initial state
+; should be run after executing all other top-level statements
+(define Mstate-main
+  (lambda (state)
     (Mvalue-fun '(funcall main)
                 state
-                conts
+                (conts-of #:next (lambda (s) (error "main function terminated without returning")))
                 (lambda (v s) (prep-val-for-output v)))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -553,11 +555,11 @@
                                             conts
                                             (lambda (b s)
                                               (evaluate (assert-bool b) s)))]
-      [(is-fun? expr)            (Mvalue-fun  expr 
-                                              state 
-                                              conts 
-                                              (lambda (b s)
-                                                (evaluate (assert-bool b) s)))]
+      [(is-fun? expr)            (Mvalue-fun expr 
+                                             state 
+                                             conts 
+                                             (lambda (b s)
+                                               (evaluate (assert-bool b) s)))]
       [else                      (error "not considered to be a boolean type expr: " expr)])))
 
 
@@ -583,7 +585,7 @@
     (cond
       [(null? expr)                         (error "called Mvalue on a null expression")]
       [(not (nested? expr))                 (Mvalue-base expr state conts evaluate)]
-      ; else nested expr
+      [(is-fun? expr)                       (Mvalue-fun expr state conts evaluate)]
       [(is-assign? expr)                    (Mvalue (assign-expr expr) 
                                                     state
                                                     conts
@@ -591,9 +593,108 @@
                                                       (evaluate v (state:assign-var (assign-var expr) v s))))]
       [(is-boolean-expr? expr)              (Mbool expr state conts evaluate)]
       [(has-op? expr)                       (Mvalue-op expr state conts evaluate)]
-      [(is-fun? expr)                       (Mvalue-fun expr state conts evaluate)]
       [else                                 (error "unreachable in Mvalue")])))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define Mvalue-fun
+  (lambda (expr state conts evaluate)
+    (if (state:has-fun? (fun-name expr) state)
+        (Mvalue-fun-impl (fun-name expr)
+                         (state:get-closure (fun-name expr) state)
+                         (fun-inputs expr) 
+                         state
+                         (conts-of conts
+                                   #:next      (lambda (s) (error "The function did not return any values!"))
+                                   #:continue  (lambda (s) (error "Continue statement inside function call"))
+                                   #:break     (lambda (s) (error "Break statement inside function call"))
+                                   #:throw     (lambda (e s) ((throw conts) e state))
+                                   #:return    (lambda (v s) (evaluate v state))))
+        (error (string-append "function "
+                              (symbol->string (fun-name expr))
+                              " not in scope.")))))
+
+(define Mvalue-fun-impl
+  (lambda (fun-name fun-closure fun-inputs state conts)
+    (make-new-state-cps fun-name 
+                        fun-closure
+                        fun-inputs
+                        state
+                        conts
+                        (lambda (s)
+                          (Mstate-stmt-list (closure:body fun-closure) 
+                                            s
+                                            conts)))))
+
+
+;; Takes in the function name, the function closure, the input expression
+;; the state, the conts and the evaluation
+;; It should evaluate the state that should be used during the function call
+(define make-new-state-cps
+  (lambda (fun-name fun-closure inputs state conts evaluation)
+    (get-inputs-list-box-cps (closure:params fun-closure) 
+                             inputs 
+                             state
+                             conts
+                             (lambda (p l s)
+                               (bind-boxed-params p
+                                                  l
+                                                  (closure:state fun-closure)
+                                                  (lambda (s2)
+                                                    (evaluation (state:declare-fun fun-name
+                                                                                   (closure:params   fun-closure)
+                                                                                   (closure:body     fun-closure)
+                                                                                   (closure:state    fun-closure)
+                                                                                   (state:push-new-layer s2)))))))))
+
+
+;; Takes in the inputs and params and the current state, return the mapping of params and values
+;; The evaluation passing the list of boxes of input, the params without the & and the new state 
+(define get-inputs-list-box-cps
+  (lambda (params inputs state conts evaluation) 
+    (cond
+      [(null? inputs)               (if (null? params) 
+                                        (evaluation '() '() state)
+                                        (error "Too few inputs for function call!"))]
+
+      [(null? params)               (error "Too many inputs for function call!")]
+      
+      [(equal? (car params) '&)     (if (is-var-name? (car inputs))
+                                        (get-inputs-list-box-cps  (cddr params)
+                                                                  (cdr inputs)
+                                                                  state
+                                                                  conts
+                                                                  (lambda (p1 l1 s1)
+                                                                    (evaluation (cons (cadr params) p1)
+                                                                                (cons (state:get-var-box (car inputs) state) l1) 
+                                                                                s1)))
+                                        (error (string-append "Function requires a reference for "
+                                                              (symbol->string (cadr params)))))]
+      [else                         (Mvalue (car inputs)
+                                            state
+                                            conts
+                                            (lambda (v1 s1)
+                                              (get-inputs-list-box-cps  (cdr params)
+                                                                        (cdr inputs)
+                                                                        s1
+                                                                        conts
+                                                                        (lambda (p1 l1 s2)
+                                                                          (evaluation (cons (car params) p1) 
+                                                                                      (cons (box v1) l1) 
+                                                                                      s2)))))])))
+
+;; Binds a list of boxes representing the actual parameters to
+(define bind-boxed-params
+  (lambda (params box-list state next)
+    (if (null? box-list)
+        (next state)
+        (bind-boxed-params (cdr params) 
+                           (cdr box-list)
+                           state
+                           (lambda (s)
+                             (next (state:declare-var-with-box (car params) (car box-list) s)))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; returns the value of the token given the state
 ;; token = 1 | 'x | 'true 
@@ -639,36 +740,6 @@
                                              (lambda (v2)
                                                (evaluate v2 s)))))))
 
-(define Mvalue-fun
-  (lambda (expr state conts evaluate)
-    (if (state:has-fun? (fun-name expr) state)
-        (Mvalue-fun-impl  (fun-name expr)
-                          (state:get-closure (fun-name expr) state)
-                          (fun-inputs expr) 
-                          state
-                          (conts-of conts
-                                    #:next        (lambda (s) (error "The function did not return any values!"))
-                                    #:continue    (lambda (s) (error "Continue statement inside function call"))
-                                    #:break       (lambda (s) (error "Break statement inside function call"))
-                                    #:throw       (lambda (e s) ((throw conts) e state))
-                                    #:return      (lambda (v s)
-                                                    (evaluate v state))))
-        (error (string-append "function "
-                              (symbol->string (fun-name expr))
-                              " not in scope.")))))
-
-(define Mvalue-fun-impl
-  (lambda (fun-name fun-closure fun-inputs state conts)
-    (make-new-state-cps fun-name 
-                        fun-closure
-                        fun-inputs
-                        state
-                        conts
-                        (lambda (s)
-                          (Mstate-stmt-list (closure:body fun-closure) 
-                                            s
-                                            conts)
-                          ))))
 
 ;; takes a list of exprs and maps them to values,
 ;; propagating the state changes (so that they evaluate correctly)
@@ -704,72 +775,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;; Helper functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; Takes in the inputs and params and the current state, return the mapping of params and values
-;; The evaluation passing the list of boxes of input, the params without the & and the new state 
-(define get-inputs-list-box-cps
-  (lambda (params inputs state conts evaluation) 
-    (cond 
-      [(null? inputs)               (if (null? params) 
-                                        (evaluation '() '() state)
-                                        (error "Too few inputs for function call!"))]
-
-      [(null? params)               (error "Too many inputs for function call!")]
-      
-      [(equal? (car params) '&)     (if (is-ref-var? (car inputs))
-                                        (get-inputs-list-box-cps  (cddr params)
-                                                                  (cdr inputs)
-                                                                  state
-                                                                  conts
-                                                                  (lambda (p1 l1 s1)
-                                                                    (evaluation (cons (cadr params) p1)
-                                                                                (cons (state:get-var-box (car inputs) state) l1) 
-                                                                                s1)))
-                                        (error (string-append "Function requires a reference for "
-                                                              (symbol->string (cadr params)))))]
-      [else                         (Mvalue (car inputs)
-                                            state
-                                            conts
-                                            (lambda (v1 s1)
-                                              (get-inputs-list-box-cps  (cdr params)
-                                                                        (cdr inputs)
-                                                                        s1
-                                                                        conts
-                                                                        (lambda (p1 l1 s2)
-                                                                          (evaluation (cons (car params) p1) 
-                                                                                      (cons (box v1) l1) 
-                                                                                      s2)))))])))
-
-;; Takes in the current state, the function name, the function closure, the input expression
-;; the state, the conts and the evaluation
-;; It should evaluate the state that should be used during the function call
-(define make-new-state-cps
-  (lambda (fun-name fun-closure inputs state conts evaluation)
-    (get-inputs-list-box-cps    (closure:params fun-closure) 
-                                inputs 
-                                state
-                                conts
-                                (lambda (p l s)
-                                  (declare-boxes-cps  p
-                                                      l
-                                                      (closure:state fun-closure)
-                                                      (lambda (s2)
-                                                        (evaluation (state:declare-fun  fun-name
-                                                                                        (closure:params   fun-closure)
-                                                                                        (closure:body     fun-closure)
-                                                                                        (closure:state    fun-closure)
-                                                                                        (state:push-new-layer s2)))))))))
-
-;; Takes in the list of boxes, declare them to the given state
-(define declare-boxes-cps
-  (lambda (params box-list state evaluation)
-    (cond
-      [(null? box-list)             (evaluation state)]
-      [else                         (declare-boxes-cps  (cdr params) 
-                                                        (cdr box-list)
-                                                        state
-                                                        (lambda (s)
-                                                          (evaluation (state:declare-var-with-box (car params) (car box-list) s))))])))
+;; functions that may be useful in more than one context
 
 ;; takes a nested expr (list), returns what should be an action symbol
 ;; use is-___ functions to determine whether the
@@ -779,10 +785,12 @@
 ;; takes an expression and returns whether it contains other expressions
 (define nested? list?)
 
-
 ;; takes a maybe-value and extracts the value
 ;; throws error if maybe-value was `empty`
 (define get car)
+
+;; returns whether a value could be a variable name
+(define is-var-name? symbol?)
 
 ;; produces a function that returns whether a statement's 'action' symbol matches symbl
 (define checker-of
@@ -832,7 +840,6 @@
 
 (define is-&&? (checker-of '&&))
 (define is-||? (checker-of '||))
-(define is-ref-var? symbol?)
 
 ;; Takes a nested expression and returns whether it contains a recognized operation
 (define has-op?
