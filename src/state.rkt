@@ -1,120 +1,144 @@
 #lang racket
 
-(require "util/map.rkt")
+(require "var-table.rkt"
+         "function-table.rkt")
 
 (provide new-state
-         (prefix-out state-
-                     (combine-out push-new-frame
-                                  pop-frame
+         (prefix-out state:
+                     (combine-out push-new-layer
+                                  pop-layer
+
+                                  make-scoper
+
+                                  declare-var-with-box
                                   declare-var-with-value
                                   declare-var
                                   assign-var
                                   var-declared?
                                   var-declared-top-frame?
                                   var-initialized?
-                                  var-value)))
+                                  get-var-box
+                                  get-var-value
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; State is a stack of frames
-;; a frame is a map of var bindings
-;; push a frame to enter a new scope
-;; pop a frame to exit a scope
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                                  has-fun?
+                                  get-closure
+                                  declare-fun))
+         closure:params
+         closure:body
+         closure:scoper)
 
-;;;; Frame
-(define new-frame map-empty)
 
-(define frame-var-declared? map-contains?)
+;;;; State
+;; pair of a var-table and a function table
 
-(define frame-var-initialized?
-  (lambda (var-name frame)
-    (not (null? var-value var-name frame))))
+(define state-of
+  (lambda (vars funs)
+    (list vars funs)))
 
-(define frame-var-value map-get)
+(define vars first)
+(define funs second)
 
-(define frame-assign-var map-put)
 
-(define frame-declare-var
-  (lambda (var-name frame)
-    (frame-assign-var var-name null frame)))
-
-;;;; State stack operations
-(define no-frames? null?)
-
-(define push-frame cons)
-
-(define push-new-frame
+;; State with the top scope removed from the stack and function table
+(define pop-layer
   (lambda (state)
-    (push-frame new-frame state)))
+    (state-of (var-table:pop-frame (vars state))
+              (function-table:pop-layer (funs state)))))
 
-; returns the top (most-recent) frame
-(define peek-frame car)
+;; State with a blank frame added to the stack and function table
+(define push-new-layer
+  (lambda (state)
+    (state-of (var-table:push-new-frame (vars state))
+              (function-table:push-new-layer (funs state)))))
 
-; removes the top frame
-(define pop-frame cdr)
+(define new-state (push-new-layer (state-of new-var-table new-function-table)))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Given a state, creates a function that takes a state
+; and returns the portion in-scope according to the original state
+; the vars present in declare state
+; the functions present in layers of invoke-state as high as declare-state
+(define bottom-layers take-right) ; get the bottom/last layers of a function table
+(define height length) ; count the number of layers in a function table
 
-;; creates a new state with no var bindings
-(define new-state (list (frame-declare-var 'return-value new-frame)))
+(define make-scoper
+  (lambda (declare-state)
+    (lambda (invoke-state)
+      (state-of (bottom-layers (vars invoke-state) (height (vars declare-state)))
+                (bottom-layers (funs invoke-state) (height (funs declare-state)))))))
 
-; declares and assigns the var with the given value
+;;;; var mappings
+
+;; State with this varname declared in the current scope and initialized to this value
+(define declare-var-with-box
+  (lambda (name box state)
+    (state-of (var-table:declare-var-with-box name box (vars state))
+              (funs state))))
+
+;; State with this varname declared in the current scope and initialized to this value
 (define declare-var-with-value
-  (lambda (var-name value state)
-    (push-frame (frame-assign-var var-name
-                                  value
-                                  (frame-declare-var var-name (peek-frame state)))
-                (pop-frame state))))
+  (lambda (name value state)
+    (state-of (var-table:declare-var-with-value name value (vars state))
+              (funs state))))
 
-; declares the var in the top frame
+;; State with this varname declared in the current scope
 (define declare-var
-  (lambda (var-name state)
-    (push-frame (frame-declare-var var-name
-                                   (peek-frame state))
-                (pop-frame state))))
+  (lambda (name state)
+    (state-of (var-table:declare-var name (vars state))
+              (funs state))))
 
-; find frame that declares it, update that frame
+;; State with val assigned to this varname in the most recent scope containing such a name
 (define assign-var
-  (lambda (var-name value state)
-    (cond
-      [(no-frames? state)                           (error "assigning to undeclared var")]
-      [(frame-var-declared? var-name
-                            (peek-frame state))     (push-frame (frame-assign-var var-name
-                                                                                  value
-                                                                                  (peek-frame state))
-                                                                (pop-frame state))]
-      [else                                         (push-frame (peek-frame state)
-                                                                (assign-var var-name
-                                                                            value
-                                                                            (pop-frame state)))])))
+  (lambda (name val state)
+    (state-of (var-table:assign-var name val (vars state))
+              (funs state))))
 
-(define var-declared-top-frame?
-  (lambda (var-name state)
-    (frame-var-declared? var-name (peek-frame state))))
-
+;; Is a variable with this name in scope?
 (define var-declared?
-  (lambda (var-name state)
-    ;(ormap (lambda (frame) (frame-var-declared? var-name frame)) state)))
-    (cond
-      [(no-frames? state)                            #f]
-      [(var-declared-top-frame? var-name state)      #t]
-      [else                                          (var-declared? var-name
-                                                                    (pop-frame state))])))
+  (lambda (name state)
+    (var-table:var-declared? name (vars state))))
 
+;; Is a variable with this name in scope in the current scope?
+(define var-declared-top-frame?
+  (lambda (name state)
+    (var-table:var-declared-top-frame? name (vars state))))
 
+;; Is a variable with this name in scope and initialized?
 (define var-initialized?
-  (lambda (var-name state)
-    (not (null? (var-value var-name state)))))
+  (lambda (name state)
+    (var-table:var-initialized? name (vars state))))
 
-; returns the value bound to the var-name in the top frame that has it declared
-; use var-initialized? beforehand
-; returns error if no such binding exists
-(define var-value
-  (lambda (var-name state)
-    (cond
-      [(no-frames? state)                            (error "failed to check for existence of variable before accessing")]
-      [(frame-var-declared? var-name
-                            (peek-frame state))      (frame-var-value var-name
-                                                                      (peek-frame state))]
-      [else                                          (var-value var-name
-                                                                (pop-frame state))])))
+;; Get the box that backs this var
+(define get-var-box
+  (lambda (name state)
+    (var-table:var-box name (vars state))))
+
+;; get the current value of this var
+(define get-var-value
+  (lambda (name state)
+    (var-table:var-value name (vars state))))
+
+
+;;;; fun mappings
+
+;; Is a function with this name in scope?
+(define has-fun?
+  (lambda (name state)
+    (function-table:has-fun? name (funs state))))
+
+;; Get closure for the first (layer-wise) function with this name
+(define get-closure
+  (lambda (name state)
+    (function-table:get-closure name (funs state))))
+
+;; State with this fun declared in the current layer
+(define declare-fun
+  (lambda (name params body scoper state)
+    (state-of (vars state)
+              (function-table:declare-fun name params body scoper (funs state)))))
+
+
+;; extract portions of a closure
+(define closure:params function-table:closure:params)
+(define closure:body function-table:closure:body)
+(define closure:scoper function-table:closure:scoper)
+

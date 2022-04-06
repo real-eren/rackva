@@ -16,27 +16,38 @@
 
 (define test-file
   (lambda (expected file #:id [test-id #f])
-    (check-equal? (interpret file) expected (format-test-id test-id))))
+    (check-equal? (simple-interpret-file file) expected (format-test-id test-id))))
 
 (define test-str
   (lambda (expected str #:id [test-id #f])
-    (check-equal? (interpret-str str) expected (format-test-id test-id))))
+    (check-equal? (simple-interpret-str str) expected (format-test-id test-id))))
 
 (define error-file
-  (lambda (file #:id [test-id #f])
-    (check-exn exn:fail? (lambda () (interpret file)) (format-test-id test-id))))
+  (lambda (file #:id [test-id #f] #:catch [suppress #t])
+    (if suppress
+        (check-exn exn:fail? (lambda () (simple-interpret-file file)) (format-test-id test-id))
+        (test-file 'error file #:id test-id))))
 
 (define error-str
-  (lambda (str #:id [test-id #f])
-    ;(interpret-str str))) ;for checking the error messages
-    (check-exn exn:fail? (lambda () (interpret-str str)) (format-test-id test-id))))
+  (lambda (str #:id [test-id #f] #:catch [suppress #t])
+    (if suppress
+        (check-exn exn:fail? (lambda () (simple-interpret-str str)) (format-test-id test-id))
+        (test-str 'error str #:id test-id))))
 
+; ; Literal Tests
+(test-str #:id "return a positive literal"
+          150 "return 150;")
 
+(test-str #:id "return a negative literal"
+          -150 "return -150;")
+
+(test-str #:id "return a true literal"
+          'true "return true;")
+
+(test-str #:id "return a false literal"
+          'false "return false;")
 
 ; ; Number Tests
-
-(test-str #:id "return a literal"
-          150 "return 150;")
 
 (test-str #:id "return a nested expression"
           -4 "return 6 * (8 + (5 % 3)) / 11 - 9;")
@@ -112,21 +123,26 @@ return x;")
 ; ; Error Tests
 
 (error-str #:id "accessing var before declaring it"
+           #:catch #t
            "return x;")
 
 (error-str #:id "assign w/out declaring"
+           #:catch #t
            "
 var x = 1;
 y = 10 + x;
 return y;")
 
-(error-str #:id "reference w/out declare or initializing" "
+(error-str #:id "reference w/out declare or initializing"
+           #:catch #t
+           "
 var y;
 y = x;
 return y;")
 
 
 (error-str #:id "reference w/out initializing"
+           #:catch #t
            "
 var x;
 var y;
@@ -134,6 +150,7 @@ x = x + y;
 return x;")
 
 (error-str #:id "redeclare in same scope"
+           #:catch #t
            "
 var x = 10;
 var y = 20;
@@ -141,6 +158,7 @@ var x = x + y;
 return x;")
 
 (error-str #:id "var in block not accessible from subsequent outer scope"
+           #:catch #t
            "
 var x = 10;
 var y = 4;
@@ -154,6 +172,7 @@ return min;")
 
 
 (error-str #:id "var in block can't access undeclared var"
+           #:catch #t
            "
 if (true) {
   a = 0;
@@ -161,6 +180,7 @@ if (true) {
 return a;")
 
 (error-str #:id "var in block not accessible in later block (same depth in stack)"
+           #:catch #t
            "
 if (true) {
   var a = 0;
@@ -171,6 +191,7 @@ if (true) {
 return a;")
 
 (error-str #:id "var declared in first iter of while loop doesn't persist through later iters)"
+           #:catch #t
            "
 var x = 0;
 while (x < 5) {
@@ -183,12 +204,14 @@ while (x < 5) {
 return 0;")
 
 (error-str #:id "break outside of loop"
+           #:catch #t
            "
 var x = 1;
 break;
 return x;")
 
 (error-str #:id "continue outside of loop"
+           #:catch #t
            "
 var x = 1;
 continue;
@@ -599,7 +622,6 @@ return accumulator;")
 (test-str #:id "Try catch test #15"
           125 "
 var x;
-
 try {
   x = 20;
   if (x < 0)
@@ -618,7 +640,6 @@ return x;
 (test-str #:id "Try catch test #16"
           110 "
 var x;
-
 try {
   x = 20;
   if (x > 10)
@@ -637,7 +658,6 @@ return x;")
           2000400 "
 var x = 0;
 var j = 1;
-
 try {
   while (j >= 0) {
     var i = 10;
@@ -666,12 +686,10 @@ return x;")
           101 "
 var x = 10;
 var result = 1;
-
 try {
   while (x < 10000) {
      result = result - 1;
      x = x + 10;
-
      if (x > 1000) {
        throw x;
      }
@@ -736,20 +754,20 @@ return x;
 ")
 
 (error-str #:id "Top-level throw"
+           #:catch #t
            "
 throw 1;
 ")
 
 (error-str #:id "Uncaught throw in (entered) catch block"
+           #:catch #t
            "
 var x = 10;
 var result = 1;
-
 try {
   while (x < 10000) {
     result = result - 1;
     x = x * 10;
-
     if (x > 1000)
       throw x;
   }
@@ -760,6 +778,7 @@ catch (ex) {
 return result;")
 
 (error-str #:id "break exit from block pops frame"
+           #:catch #t
            "
 var x = 0;
 while (true) {
@@ -773,6 +792,7 @@ return a;
 ")
 
 (error-str #:id "continue in while body block, pop frame"
+           #:catch #t
            "
 var x = 1;
 var y = 2;
@@ -792,6 +812,7 @@ return x;
 ")
 
 (error-str #:id "throw in block, should pop frame. var from try not visible in catch"
+           #:catch #t
            "
 try {
   var a = 1;
@@ -803,6 +824,7 @@ catch (e) {
 ")
 
 (error-str #:id "throw in block, should pop frame. var from try not visible in finally"
+           #:catch #t
            "
 try {
   var a = 1;
@@ -824,7 +846,6 @@ while(x < 12) {
     x = x + 10;
     continue;
   }catch(e) {
-   
   } finally {
      x = x+1;
   }

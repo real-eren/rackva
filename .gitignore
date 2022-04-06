@@ -2,3 +2,4 @@
 *.bak
 *.html
 .DS_Store
+.rkt~
