@@ -8,6 +8,8 @@
                      (combine-out push-new-layer
                                   pop-layer
 
+                                  stack-trace
+
                                   make-scoper
 
                                   declare-var-with-box
@@ -32,26 +34,41 @@
 ;; pair of a var-table and a function table
 
 (define state-of
-  (lambda (vars funs)
-    (list vars funs)))
+  (lambda (vars funs stack-trace)
+    (list vars funs stack-trace)))
 
 (define vars first)
 (define funs second)
+; stack of the functions called
+(define stack-trace third)
 
 
 ;; State with the top scope removed from the stack and function table
 (define pop-layer
   (lambda (state)
     (state-of (var-table:pop-frame (vars state))
-              (function-table:pop-layer (funs state)))))
+              (function-table:pop-layer (funs state))
+              (stack-trace state))))
 
 ;; State with a blank frame added to the stack and function table
 (define push-new-layer
   (lambda (state)
     (state-of (var-table:push-new-frame (vars state))
-              (function-table:push-new-layer (funs state)))))
+              (function-table:push-new-layer (funs state))
+              (stack-trace state))))
 
-(define new-state (push-new-layer (state-of new-var-table new-function-table)))
+(define push-stack-trace
+  (lambda (fun-name state)
+    (state-of (vars state)
+              (funs state)
+              (cons fun-name (stack-trace state)))))
+(define pop-stack-trace
+  (lambda (state)
+    (state-of (vars state)
+              (funs state)
+              (cdr (stack-trace state)))))
+
+(define new-state (push-new-layer (state-of new-var-table new-function-table null)))
 
 ;; Given a state, creates a function that takes a state
 ; and returns the portion in-scope according to the original state
@@ -64,7 +81,8 @@
   (lambda (declare-state)
     (lambda (invoke-state)
       (state-of (vars declare-state)
-                (bottom-layers (funs invoke-state) (height (funs declare-state)))))))
+                (bottom-layers (funs invoke-state) (height (funs declare-state)))
+                (stack-trace invoke-state)))))
 
 ;;;; var mappings
 
@@ -72,25 +90,29 @@
 (define declare-var-with-box
   (lambda (name box state)
     (state-of (var-table:declare-var-with-box name box (vars state))
-              (funs state))))
+              (funs state)
+              (stack-trace state))))
 
 ;; State with this varname declared in the current scope and initialized to this value
 (define declare-var-with-value
   (lambda (name value state)
     (state-of (var-table:declare-var-with-value name value (vars state))
-              (funs state))))
+              (funs state)
+              (stack-trace state))))
 
 ;; State with this varname declared in the current scope
 (define declare-var
   (lambda (name state)
     (state-of (var-table:declare-var name (vars state))
-              (funs state))))
+              (funs state)
+              (stack-trace state))))
 
 ;; State with 
 (define assign-var
   (lambda (name val state)
     (state-of (var-table:assign-var name val (vars state))
-              (funs state))))
+              (funs state)
+              (stack-trace state))))
 
 ;; Is a variable with this name in scope?
 (define var-declared?
@@ -134,7 +156,8 @@
 (define declare-fun
   (lambda (name params body scoper state)
     (state-of (vars state)
-              (function-table:declare-fun name params body scoper (funs state)))))
+              (function-table:declare-fun name params body scoper (funs state))
+              (stack-trace state))))
 
 
 ;; extract portions of a closure
