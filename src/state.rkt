@@ -87,7 +87,7 @@
     (lambda (invoke-state)
       (state-of (bottom-layers (vars invoke-state) (height (vars declare-state)))
                 (bottom-layers (funs invoke-state) (height (funs declare-state)))
-                (stack-trace invoke-state)))))))))
+                (stack-trace invoke-state)))))
 
 ;;;; var mappings
 
