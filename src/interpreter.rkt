@@ -37,7 +37,7 @@
                        #:return (lambda (v s) (error "top level return"))
                        #:next (lambda (s) (Mstate-run s
                                                       (conts-of
-                                                       #:return (lambda (v s) (prep-val-for-output v))
+                                                       #:return (lambda (v s) (prep-val-for-output v)) ; gets overwritten
                                                        #:next (lambda (s) (error "main function is missing a return statement"))
                                                        #:throw (lambda (v s) (error "uncaught exception: " v))
                                                        #:break (lambda (s) (error "break statement outside of loop"))
@@ -97,7 +97,10 @@
 
 (define Mstate-run
   (lambda (state conts)
-    (Mvalue-fun '(funcall main) state conts (lambda (v s) v))))
+    (Mvalue-fun '(funcall main)
+                state
+                conts
+                (lambda (v s) (prep-val-for-output v)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
