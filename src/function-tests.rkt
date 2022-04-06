@@ -127,7 +127,7 @@ return x;
 
 
 
-(test-str #:id "A main with code inside" 
+(test-str #:id "Main with no globals" 
           10 "
 function main() {
   var x = 10;
@@ -144,7 +144,7 @@ function main() {
   return min;
 }")
 
-(test-str #:id "A function that uses global variables."
+(test-str #:id "Main reads global variables."
           14 "
 var x = 4;
 var y = 6 + x;
@@ -153,7 +153,7 @@ function main() {
   return x + y;
 }")
 
-(test-str #:id "A function that changes global variables"
+(test-str #:id "Main updates global variables"
           45 "
 var x = 1;
 var y = 10;
@@ -598,8 +598,32 @@ function b() {
 }
 function main() {
   return a();
+}")
+
+(test-str #:id "function w/ return used as statement"
+          0
+          "
+function f() {
+  return 2;
 }
-")
+function main() {
+  f();
+  return 0;
+}")
+
+(test-str #:id "param shadows global var"
+          0
+          "
+var x = 3;
+function decrement(x) {
+  x = x - 1;
+  return x;
+}
+function main() {
+  return decrement(1);
+}")
+
+; ; Error Tests
 
 (error-str #:id "invoking undefined function in top level var declaration"
            #:catch #t
@@ -665,8 +689,7 @@ function f(x) {
 
 function main() {
   return f(10);
-}
-")
+}")
 
 (error-str #:id "global function defined twice"
            #:catch #t
@@ -682,3 +705,48 @@ function main() {
   return x;
 }")
 
+(error-str #:id "break in main w/out while"
+           #:catch #t
+           "
+function main() {
+  break;
+}")
+
+(error-str #:id "break in function w/out while"
+           #:catch #t
+           "
+function f() {
+  break;
+}
+function main() {
+  return f();
+}")
+
+(error-str #:id "continue in main w/out while"
+           #:catch #t
+           "
+function main() {
+  continue;
+}")
+
+(error-str #:id "continue in function w/out while"
+           #:catch #t
+           "
+function f() {
+  continue;
+}
+function main() {
+  return f();
+}")
+
+(error-str #:id "function w/out return used as expression"
+           #:catch #t
+           "
+function noReturn() {
+  var x;
+  x = 2;
+}
+
+function main() {
+  return noReturn();
+}")
