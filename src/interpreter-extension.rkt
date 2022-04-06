@@ -2,7 +2,7 @@
 
 (require "interpreter.rkt"
          "lex.rkt"
-         "simpleParser.rkt")
+         "functionParser.rkt")
 
 (provide interpret-str)
   

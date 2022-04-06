@@ -9,7 +9,7 @@
 (require "conts.rkt"
          "state.rkt"
          "util/map.rkt"
-         "simpleParser.rkt")
+         "functionParser.rkt")
 
 (provide interpret
          interpret-parse-tree)
@@ -30,11 +30,18 @@
 
 (define interpret-parse-tree
   (lambda (parse-tree)
-    (Mstate-stmt-list parse-tree
+    (Mstate-top-level parse-tree
                       new-state
                       (conts-of
-                       #:return (lambda (v s) (prep-val-for-output v))
-                       #:next (lambda (s) (error "reached end of program without return"))
+                       #:return (lambda (v s) (error "top level return"))
+                       #:next (lambda (s) (Mstate-run s
+                                                      (conts-of
+                                                       #:return (lambda (v s) v)
+                                                       #:next (lambda (s) (error "main function is missing a return statement"))
+                                                       #:throw (lambda (v s) (error "uncaught exception: " v))
+                                                       #:break (lambda (s) (error "break statement outside of loop"))
+                                                       #:continue (lambda (s) (error "continue statement outside of loop"))
+                                                      )))
                        #:throw (lambda (v s) (error "uncaught exception: " v))
                        #:break (lambda (s) (error "break statement outside of loop"))
                        #:continue (lambda (s) (error "continue statement outside of loop"))))))
@@ -48,6 +55,25 @@
       [(number? value)        value]
       [else                   (error "returned an unsupported type: " value)])))
 
+(define Mstate-top-level
+  (lambda (stmt-list state conts)
+    (if (null? stmt-list)
+        ((next conts) state)
+        (Mstate-top-level-stmt (car stmt-list)
+                               state
+                               (conts-of conts
+                                         #:next (lambda (s) (Mstate-top-level (cdr stmt-list)
+                                                                              s
+                                                                              conts)))))))
+
+(define Mstate-top-level-stmt
+  (lambda (statement state conts)
+    (if (or (is-declare? statement)
+            (is-assign? statement)
+            (is-fun-decl? statement))
+        (Mstate-statement statement state conts)
+        (error "illegal top-level statement: " statement))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -55,6 +81,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(define Mstate-run
+  (lambda (state conts)
+    (Mvalue-fun '(funcall main) state conts (lambda (v s) v))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -255,7 +284,7 @@
 
 (define fun-name second)
 
-(define fun-inputs cdddr)
+(define fun-inputs cddr)
 
 (define Mstate-fun
   (lambda (expr state conts)
@@ -579,7 +608,7 @@
 
 (define Mvalue-fun
   (lambda (expr state conts evaluate)
-    (if (state:has-fun? (fun-name expr) state) 
+    (if (state:has-fun? (fun-name expr) state)
         (Mvalue-fun-impl  (fun-name expr) 
                           (fun-inputs expr) 
                           state
@@ -711,7 +740,8 @@
 
 ;; these take a statement and return whether it is a particular construct
 (define is-assign? (checker-of '=))
-
+(define is-declare? (checker-of 'var))
+(define is-fun-decl? (checker-of 'function))
 (define is-fun? (checker-of 'funcall))
 
 ;; keys are symbols representative of a construct type
