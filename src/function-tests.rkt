@@ -41,27 +41,27 @@
 (test-str #:id "return a number literal"
           150 "
 function main() {
-   return 150;
+  return 150;
 }")
 
 (test-str #:id "return a boolean literal"
           'true "
 function main() {
-   return true;
+  return true;
 }")
 
 (test-str #:id "return a nested expression"
           -4 "
 function main() {
-    return 6 * (8 + (5 % 3)) / 11 - 9;
+  return 6 * (8 + (5 % 3)) / 11 - 9;
 }")
 
 (test-str #:id "declare, assign a literal, return"
           10 "
 function main() {
   var z;
-z = 10;
-return z;
+  z = 10;
+  return z;
 }")
 
 (test-str #:id "declare with expression value, return"
@@ -95,34 +95,34 @@ function main() {
 (test-str #:id "assign in if statement, >= op"
           6 "
 function main() {
-var x = 5;
-var y = 6;
-var m;
-if (x >= y)
-  m = x;
-else
-  m = y;
-return m;
+  var x = 5;
+  var y = 6;
+  var m;
+  if (x >= y)
+    m = x;
+  else
+    m = y;
+  return m;
 }")
 
 (test-str #:id "!= cond"
           10 "
 function main() {
-var x = 5;
-var y = 6;
-if (x != y)
-  x = 10;
-return x;
+  var x = 5;
+  var y = 6;
+  if (x != y)
+    x = 10;
+  return x;
 }")
 
 (test-str #:id "== cond"
           5 "
 function main() {
-var x = 5;
-var y = 6;
-if (x == y)
-  x = 10;
-return x;
+  var x = 5;
+  var y = 6;
+  if (x == y)
+    x = 10;
+  return x;
 }")
 
 
@@ -600,6 +600,19 @@ function main() {
   return a();
 }")
 
+(test-str #:id "global function invokes later function that invokes function defined later"
+          2
+          "
+function main() {
+  return a();
+}
+function a() {
+  return b();
+}
+function b() {
+  return 2;
+}")
+
 (test-str #:id "function w/ return used as statement"
           0
           "
@@ -621,6 +634,38 @@ function decrement(x) {
 }
 function main() {
   return decrement(1);
+}")
+
+(test-str #:id "recursion between two global functions, matching param names"
+          303
+          "
+function a(n, i) {
+  if (i > 0) {
+    return b(n + 1, i-1);
+  }
+  return n;
+}
+function b(n, i) {
+  if (i > 0) {
+    return a(n + 100, i-1);
+  }
+  return n;
+}
+function main() {
+  return a(0, 6);
+}")
+
+(test-str #:id "nested function refers to later nested function"
+          11
+          "
+function main() {
+  function b() {
+    return 10 + a();
+  }
+  function a() {
+    return 1;
+  }
+  return b();
 }")
 
 ; ; Error Tests
@@ -744,6 +789,17 @@ function f() {
 }
 function main() {
   return f();
+}")
+
+(error-str #:id "global var initializer invokes later global function"
+           #:catch #t
+           "
+var x = f();
+function f() {
+  return 5;
+}
+function main() {
+  return x;
 }")
 
 (error-str #:id "function w/out return used as expression"
