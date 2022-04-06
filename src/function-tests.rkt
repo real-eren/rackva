@@ -670,6 +670,51 @@ function main() {
   return b();
 }")
 
+(test-str #:id "global function refers to later global var"
+          5
+          "
+function getX() {
+  return x;
+}
+var x = 5;
+
+function main() {
+  return getX();
+}")
+
+(test-str #:id "main function refers to later global var"
+          5
+          "
+function main() {
+  return x;
+}
+
+var x = 5;")
+
+(test-str #:id "nested function refers to later global var"
+          5
+          "
+function main() {
+  function nested() {
+    return a;
+  }
+  return nested();
+}
+var a = 5;")
+
+
+(test-str #:id "nested function refers to later local var"
+          5
+          "
+function main() {
+  function nested() {
+    return a;
+  }
+  var a = 5;
+  return nested();
+}")
+
+
 ; ; Error Tests
 
 (error-str #:id "invoking undefined function in top level var declaration"
@@ -683,6 +728,17 @@ function f() {
 
 function main() {
   return x;
+}")
+
+(error-str #:id "invoking nested function before its definition in the same scope"
+           #:catch #t
+           "
+function main() {
+  a = nested();
+  function nested() {
+    return 1;
+  }
+  return a;
 }")
 
 (error-str #:id "Passing too many arguments"

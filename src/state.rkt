@@ -85,9 +85,9 @@
 (define make-scoper
   (lambda (declare-state)
     (lambda (invoke-state)
-      (state-of (vars declare-state)
+      (state-of (bottom-layers (vars invoke-state) (height (vars declare-state)))
                 (bottom-layers (funs invoke-state) (height (funs declare-state)))
-                (stack-trace invoke-state)))))
+                (stack-trace invoke-state)))))))))
 
 ;;;; var mappings
 
@@ -112,7 +112,7 @@
               (funs state)
               (stack-trace state))))
 
-;; State with 
+;; State with val assigned to this varname in the most recent scope containing such a name
 (define assign-var
   (lambda (name val state)
     (state-of (var-table:assign-var name val (vars state))
