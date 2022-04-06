@@ -56,12 +56,15 @@
 ;; Given a state, creates a function that takes a state
 ; and returns the portion in-scope according to the original state
 ; the vars present in declare state
-; the functions present in the layers present in both invoke and declare state
+; the functions present in layers of invoke-state as high as declare-state
+(define bottom-layers take-right) ; get the bottom/last layers of a function table
+(define height length) ; count the number of layers in a function table
+
 (define make-scoper
   (lambda (declare-state)
     (lambda (invoke-state)
       (state-of (vars declare-state)
-                (take-right (funs invoke-state) (length (funs declare-state)))))))
+                (bottom-layers (funs invoke-state) (height (funs declare-state)))))))
 
 ;;;; var mappings
 
