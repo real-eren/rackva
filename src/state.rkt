@@ -36,8 +36,16 @@
 ;; pair of a var-table and a function table
 
 (define state-of
-  (lambda (vars funs stack-trace)
+  (lambda ([state new-state]
+           #:vars [vars (vars state)]
+           #:funs [funs (funs state)]
+           #:stack-trace [stack-trace (stack-trace state)])
     (list vars funs stack-trace)))
+
+(define new-state (state-of null ; null arg is required to break a circular dependency
+                            #:vars new-var-table
+                            #:funs new-function-table
+                            #:stack-trace null))
 
 (define vars first)
 (define funs second)
@@ -48,32 +56,29 @@
 ;; State with the top scope removed from the stack and function table
 (define pop-layer
   (lambda (state)
-    (state-of (var-table:pop-frame (vars state))
-              (function-table:pop-layer (funs state))
-              (stack-trace state))))
+    (state-of state
+              #:vars (var-table:pop-frame (vars state))
+              #:funs (function-table:pop-layer (funs state)))))
 
 ;; State with a blank frame added to the stack and function table
 (define push-new-layer
   (lambda (state)
-    (state-of (var-table:push-new-frame (vars state))
-              (function-table:push-new-layer (funs state))
-              (stack-trace state))))
+    (state-of state
+              #:vars (var-table:push-new-frame (vars state))
+              #:funs (function-table:push-new-layer (funs state)))))
 
 
 ;;;; function call stack-trace
 (define push-stack-trace
   (lambda (fun-name state)
-    (state-of (vars state)
-              (funs state)
-              (cons fun-name (stack-trace state)))))
+    (state-of state
+              #:stack-trace (cons fun-name (stack-trace state)))))
 
 (define pop-stack-trace
   (lambda (state)
-    (state-of (vars state)
-              (funs state)
-              (cdr (stack-trace state)))))
+    (state-of state
+              #:stack-trace (cdr (stack-trace state)))))
 
-(define new-state (state-of new-var-table new-function-table null))
 
 ;; Given a state, creates a function that takes a state
 ; and returns the portion in-scope according to the original state
@@ -85,39 +90,35 @@
 (define make-scoper
   (lambda (declare-state)
     (lambda (invoke-state)
-      (state-of (bottom-layers (vars invoke-state) (height (vars declare-state)))
-                (bottom-layers (funs invoke-state) (height (funs declare-state)))
-                (stack-trace invoke-state)))))
+      (state-of #:vars (bottom-layers (vars invoke-state) (height (vars declare-state)))
+                #:funs (bottom-layers (funs invoke-state) (height (funs declare-state)))
+                #:stack-trace (stack-trace invoke-state)))))
 
 ;;;; var mappings
 
 ;; State with this varname declared in the current scope and initialized to this value
 (define declare-var-with-box
   (lambda (name box state)
-    (state-of (var-table:declare-var-with-box name box (vars state))
-              (funs state)
-              (stack-trace state))))
+    (state-of state
+              #:vars (var-table:declare-var-with-box name box (vars state)))))
 
 ;; State with this varname declared in the current scope and initialized to this value
 (define declare-var-with-value
   (lambda (name value state)
-    (state-of (var-table:declare-var-with-value name value (vars state))
-              (funs state)
-              (stack-trace state))))
+    (state-of state
+              #:vars (var-table:declare-var-with-value name value (vars state)))))
 
 ;; State with this varname declared in the current scope
 (define declare-var
   (lambda (name state)
-    (state-of (var-table:declare-var name (vars state))
-              (funs state)
-              (stack-trace state))))
+    (state-of state
+              #:vars (var-table:declare-var name (vars state)))))
 
 ;; State with val assigned to this varname in the most recent scope containing such a name
 (define assign-var
   (lambda (name val state)
-    (state-of (var-table:assign-var name val (vars state))
-              (funs state)
-              (stack-trace state))))
+    (state-of state
+              #:vars (var-table:assign-var name val (vars state)))))
 
 ;; Is a variable with this name in scope?
 (define var-declared?
@@ -160,9 +161,12 @@
 ;; State with this fun declared in the current layer
 (define declare-fun
   (lambda (name params body scoper state)
-    (state-of (vars state)
-              (function-table:declare-fun name params body scoper (funs state))
-              (stack-trace state))))
+    (state-of state
+              #:funs (function-table:declare-fun name
+                                                 params
+                                                 body
+                                                 scoper
+                                                 (funs state)))))
 
 
 
