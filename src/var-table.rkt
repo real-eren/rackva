@@ -32,17 +32,6 @@
 
 (define frame-var-box map-get)
 
-(define frame-var-value
-  (lambda (var-name frame)
-    (unbox (frame-var-box var-name frame))))
-
-;; assumes var is already declared
-(define frame-assign-var
-  (lambda (var-name val frame)
-    (begin
-      (set-box! (frame-var-box var-name frame) val)
-      frame)))
-
 (define frame-assign-box
   (lambda (var-name box frame)
     (map-put var-name box frame)))
@@ -82,10 +71,7 @@
 ; declares and assigns the var with the given value
 (define declare-var-with-value
   (lambda (var-name value var-table)
-    (push-frame (frame-assign-var var-name
-                                  value
-                                  (frame-declare-var var-name (peek-frame var-table)))
-                (pop-frame var-table))))
+    (declare-var-with-box var-name (box value) var-table)))
 
 ; declares the var in the top frame
 (define declare-var
@@ -97,17 +83,9 @@
 ; find frame that declares it, update that frame
 (define assign-var
   (lambda (var-name value var-table)
-    (cond
-      [(no-frames? var-table)                           (error "assigning to undeclared var")]
-      [(frame-var-declared? var-name
-                            (peek-frame var-table))     (push-frame (frame-assign-var var-name
-                                                                                      value
-                                                                                      (peek-frame var-table))
-                                                                    (pop-frame var-table))]
-      [else                                             (push-frame (peek-frame var-table)
-                                                                    (assign-var var-name
-                                                                                value
-                                                                                (pop-frame var-table)))])))
+    (begin
+      (set-box! (var-box var-name var-table) value)
+      var-table)))
 
 (define var-declared-top-frame?
   (lambda (var-name var-table)
@@ -128,6 +106,8 @@
     (not (null? (var-value var-name var-table)))))
 
 ;; returns the box bound to the var-name in the top frame that has it declared
+; use var-initialized? beforehand
+; returns error if no such binding exists
 (define var-box
   (lambda (var-name var-table)
     (cond
@@ -137,10 +117,7 @@
       [else                                          (var-box var-name
                                                               (pop-frame var-table))])))
 
-
 ; returns the value bound to the var-name in the top frame that has it declared
-; use var-initialized? beforehand
-; returns error if no such binding exists
 (define var-value
   (lambda (var-name var-table)
     (unbox (var-box var-name var-table))))

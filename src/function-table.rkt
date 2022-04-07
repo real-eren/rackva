@@ -15,8 +15,9 @@
 
 
 ;;;; function table
-;; stack of maps of functions
-;; entry   name : (params body scoper)
+;; a function table is a stack of layers
+;; a layer is a map of function bindings
+;; bindings { name : (params body scoper) }
 
 ;; closures functions
 (define closure:params first)
@@ -35,14 +36,16 @@
   (lambda (name layer)
     (map-get name layer)))
 
-(define layer-put-fun
+(define layer:put-fun
   (lambda (name closure layer)
     (map-put name closure layer)))
 
 (define new-layer map-empty)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;; stack operations
-(define new-function-table null)
+(define new-function-table (list new-layer))
 
 (define push-layer cons)
 
@@ -74,7 +77,7 @@
 ;; adds function to table
 (define declare-fun
   (lambda (name params body scoper table)
-    (push-layer (layer-put-fun name
+    (push-layer (layer:put-fun name
                                (closure-of params body scoper)
                                (peek-layer table))
                 (pop-layer table))))
