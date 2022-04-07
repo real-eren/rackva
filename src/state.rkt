@@ -73,7 +73,7 @@
               (funs state)
               (cdr (stack-trace state)))))
 
-(define new-state (push-new-layer (state-of new-var-table new-function-table null)))
+(define new-state (state-of new-var-table new-function-table null))
 
 ;; Given a state, creates a function that takes a state
 ; and returns the portion in-scope according to the original state
