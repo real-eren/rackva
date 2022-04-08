@@ -308,21 +308,11 @@
 
 (define Mstate-fun
   (lambda (expr state conts)
-    (if (state:has-fun? (fun-name expr) state)
-        (Mvalue-fun-impl (fun-name expr)
-                         (state:get-closure (fun-name expr) state)
-                         (fun-inputs expr) 
-                         state
-                         (conts-of conts
-                                   #:next       (lambda (s) ((next conts) state))
-                                   #:continue   default-continue
-                                   #:break      default-break
-                                   #:throw      (lambda (e s) ((throw conts) state))
-                                   #:return     (lambda (v s) ((next conts) state))))
-        (myerror (string-append "function "
-                                (symbol->string (fun-name expr))
-                                " not in scope.")
-                 state))))
+    (Mshared-fun expr
+                 state
+                 (conts-of conts
+                           #:next       (lambda (s) ((next conts) state))
+                           #:return     (lambda (v s) ((next conts) state))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BREAK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -601,21 +591,29 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define Mvalue-fun
   (lambda (expr state conts evaluate)
+    (Mshared-fun expr
+                 state
+                 (conts-of conts
+                           #:next      (lambda (s) (myerror "The function did not return any values!" s))
+                           #:return    (lambda (v s) (evaluate v state))))))
+
+;; common logic for Mstate-fun and Mvalue-fun
+(define Mshared-fun
+  (lambda (expr state conts)
     (if (state:has-fun? (fun-name expr) state)
         (Mvalue-fun-impl (fun-name expr)
                          (state:get-closure (fun-name expr) state)
-                         (fun-inputs expr) 
+                         (fun-inputs expr)
                          state
                          (conts-of conts
-                                   #:next      (lambda (s) (myerror "The function did not return any values!" s))
-                                   #:continue  default-continue
-                                   #:break     default-break
-                                   #:throw     (lambda (e s) ((throw conts) e state))
-                                   #:return    (lambda (v s) (evaluate v state))))
+                                   #:continue default-continue
+                                   #:break    default-break
+                                   #:throw    (lambda (e s) ((throw conts) e state))))
         (myerror (string-append "function "
                                 (symbol->string (fun-name expr))
                                 " not in scope.")
                  state))))
+
 
 (define Mvalue-fun-impl
   (lambda (fun-name fun-closure fun-inputs state conts)
