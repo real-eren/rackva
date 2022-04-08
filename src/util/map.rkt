@@ -1,6 +1,6 @@
 #lang racket
 
-(provide (prefix-out map-
+(provide (prefix-out map:
                      (combine-out empty
                                   empty?
                                   contains?
@@ -108,3 +108,71 @@
     (from-interlaced-entry-list lis)))
 
 
+;;;; Unit Tests
+(module+ test
+  (require rackunit)
+
+  ;; newly constructed maps are empty
+  (check-true (empty? empty))
+
+  (define map-3 (put 'a 1 (put 'b 2 (put 'c 3 empty))))
+  (define map-3i (from-interlaced-entry-list '(a 1
+                                               b 2
+                                               c 3)
+                                             empty))
+
+  ; may have to replace with unordered equality
+  (check-true (equal? map-3
+                      (reverse map-3i)))
+
+  ;; contains finds most recent
+  (check-true (contains? 'a map-3))
+  ;; middle entered
+  (check-true (contains? 'b map-3))
+  ;; first entered
+  (check-true (contains? 'c map-3))
+  ;; only 3 elements
+  (check-eq? 3 (length map-3))
+  ;; not present
+  (check-false (contains? 'not-in-map map-3))
+
+  (check-true (contains? 'a (remove 'not-a-key map-3)))
+  (check-true (contains? 'a (remove 'b map-3)))
+
+
+  ;;;; updating existing map
+  ;; entry gone after removing
+  (check-false (contains? 'a (remove 'a map-3)))
+
+  (check-true (contains? 'r (put 'r 123 map-3)))
+  (check-eq? 4 (length (put 'r 123 map-3)))
+
+  (check-true (contains? 'a (put 'a 123 map-3)))
+
+  (check-true (let ([new-v 123]
+                    [key   'a])
+                (let ([new-map (put key new-v map-3)])
+                  (and (contains? key new-map)
+                       (eq? (get key new-map) new-v)))))
+
+  ;; removing each element results in an empty map
+  (check-true (let ([new-map (remove 'c
+                                     (remove 'b
+                                             (remove 'a map-3)))])
+                (empty? new-map)))
+
+  ;; remove-every removes multiple
+  (check-false (contains? 'b (remove 'b (put 'b 0 map-3))))
+  ;; remove-every doesn't remove other
+  (check-true (contains? 'a (remove 'b (put 'b 0 map-3))))
+
+
+  ;; put-if-absent behaves as claimed
+  (check-true (contains? 'a map-3))
+  (check-true (contains? 'a (put-if-absent 'a 999 map-3)))
+  (check-eq? (get 'a map-3) (get 'a (put-if-absent 'a 999 map-3)))
+
+  (check-false (contains? 'z map-3))
+  (check-true (contains? 'z (put-if-absent 'z 999 map-3)))
+  (check-eq? 999 (get 'z (put-if-absent 'z 999 map-3)))
+  )

@@ -30,17 +30,17 @@
 
 ;; layer is a map of { name : closure }
 
-(define layer:has-fun? map-contains?)
+(define layer:has-fun? map:contains?)
 
 (define layer:get-fun
   (lambda (name layer)
-    (map-get name layer)))
+    (map:get name layer)))
 
 (define layer:put-fun
   (lambda (name closure layer)
-    (map-put name closure layer)))
+    (map:put name closure layer)))
 
-(define new-layer map-empty)
+(define new-layer map:empty)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

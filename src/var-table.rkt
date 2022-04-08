@@ -26,19 +26,19 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;; Frame
-(define new-frame map-empty)
+(define new-frame map:empty)
 
-(define frame-var-declared? map-contains?)
+(define frame-var-declared? map:contains?)
 
-(define frame-var-box map-get)
+(define frame-var-box map:get)
 
 (define frame-assign-box
   (lambda (var-name box frame)
-    (map-put var-name box frame)))
+    (map:put var-name box frame)))
 
 (define frame-declare-var
   (lambda (var-name frame)
-    (map-put var-name (box null) frame)))
+    (map:put var-name (box null) frame)))
 
 ;;;; stack operations
 (define no-frames? null?)

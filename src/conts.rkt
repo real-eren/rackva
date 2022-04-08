@@ -17,7 +17,7 @@
 ;;;; Container of continuations used by the interpreter
 ;; these include return, next, break, continue, throw, catch, finally
 
-(define empty-conts map-empty)
+(define empty-conts map:empty)
 
 ;; takes an initial conts and returns a new conts
 ;; with the changes applied
@@ -29,22 +29,22 @@
            #:continue [con (continue conts)]
            #:next     [nxt (next conts)]
            #:throw    [thr (throw conts)])
-    (map-from-interlaced-entry-list
+    (map:from-interlaced-entry-list
      (list return-key   ret
            break-key    brk
            continue-key con
            next-key     nxt
            throw-key    thr
            )
-     map-empty)))
+     map:empty)))
 
 (define setter
   (lambda (key)
-    (lambda (value conts) (map-put key value conts))))
+    (lambda (value conts) (map:put key value conts))))
 
 (define getter
   (lambda (key)
-    (lambda (conts) (map-get key conts))))
+    (lambda (conts) (map:get key conts))))
 
 
 (define return-key 'return)
