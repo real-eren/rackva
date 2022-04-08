@@ -913,16 +913,16 @@ function main() {
 }")
 
 ; not specified whether params can be shadowed by locals
-;(error-str #:id "local name collides with param name"
-;           #:catch #t
-;           "
-;function foo(x) {
-;  var x = 2;
-;  return x;
-;}
-;function main() {
-;  return foo(5);
-;}")
+(error-str #:id "local name collides with param name"
+           #:catch #t
+           "
+function foo(x) {
+  var x = 2;
+  return x;
+}
+function main() {
+  return foo(5);
+}")
 
 (error-str #:id "reading from reference to uninitialized variable"
            #:catch #t

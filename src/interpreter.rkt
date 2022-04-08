@@ -101,9 +101,7 @@
   (lambda (state)
     (Mvalue-fun '(funcall main)
                 state
-                (conts-of
-                 #:next (lambda (s) (myerror "main function terminated without returning"))
-                 #:throw default-throw)
+                (conts-of #:throw default-throw)
                 (lambda (v s) (prep-val-for-output v)))))
 
 
@@ -608,7 +606,7 @@
                          (conts-of conts
                                    #:continue default-continue
                                    #:break    default-break
-                                   #:throw    (lambda (e s) ((throw conts) e state))))
+                                   #:throw    (lambda (e s) ((throw conts) e (state:push-stack-trace (fun-name expr) state)))))
         (myerror (string-append "function "
                                 (symbol->string (fun-name expr))
                                 " not in scope.")
@@ -640,13 +638,9 @@
                              (lambda (p l s)
                                (bind-boxed-params p
                                                   l
-                                                  ((closure:scoper fun-closure) state)
+                                                  (state:push-new-layer ((closure:scoper fun-closure) s))
                                                   (lambda (s2)
-                                                    (next (state:declare-fun fun-name
-                                                                             (closure:params   fun-closure)
-                                                                             (closure:body     fun-closure)
-                                                                             (closure:scoper   fun-closure)
-                                                                             (state:push-new-layer s2)))))))))
+                                                    (next s2)))))))
 
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
