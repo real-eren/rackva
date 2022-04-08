@@ -127,8 +127,6 @@ function main() {
   return x;
 }")
 
-
-
 (test-str #:id "Main with no globals" 
           10 "
 function main() {
@@ -145,6 +143,8 @@ function main() {
     min = z;
   return min;
 }")
+
+; ; Main + other top-level statements
 
 (test-str #:id "Main reads global variables."
           14 "
@@ -513,7 +513,7 @@ function divide(x, y) {
 }
 ")
 
-(test-str #:id "Call-by-reference test. "
+(test-str #:id "Call-by-reference"
           3421 "
 function swap1(x, y) {
   var temp = x;
@@ -808,6 +808,18 @@ function main() {
   return x;
 }")
 
+(error-str #:id "absent main function"
+           #:catch #t
+           "var a = 2;")
+
+(error-str #:id "main without return"
+           #:catch #t
+           "
+function main() {
+  var a = 2;
+}
+")
+
 (error-str #:id "throw in main"
            #:catch #t
            "
@@ -912,6 +924,35 @@ function main() {
 ;  return foo(5);
 ;}")
 
+(error-str #:id "reading from reference to uninitialized variable"
+           #:catch #t
+           "
+function foo(&a) {
+  return a;
+}
+function main() {
+  var x;
+  return foo(x);
+}
+")
+(error-str #:id "stack trace unwinds after function call"
+           #:catch #t ; set to #f to check the stack-trace
+           "
+function foo() {
+  return bar();
+}
+function bar() {
+  continue;
+}
+function ok() {
+  function ok2() {
+    return 1;
+  }
+  return ok2();
+}
+var a = ok();
+var b = foo();
+")
 (error-str #:id "function w/out return used as expression"
            #:catch #t
            "
