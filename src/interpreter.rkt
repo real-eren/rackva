@@ -885,15 +885,17 @@
 ;;;;;;; Custom error functions
 
 ;; retrieves the stack-trace from state and returns it in a form fit for output
-(define formatted-stack-trace
+(define stack-trace:formatted
   (lambda (state)
-    (string-join (map symbol->string (reverse (state:stack-trace state)))
-                 " -> "
-                 #:before-first "stack trace: ")))
+    (if (empty? (state:stack-trace state))
+        ""
+        (string-join (map symbol->string (reverse (state:stack-trace state)))
+                     " -> "
+                     #:before-first "stack trace: "))))
 ;; for user-facing errors
 (define myerror
   (lambda (msg state)
-    (raise-user-error (string-append msg "\n" (formatted-stack-trace state)))))
+    (raise-user-error (string-append msg "\n" (stack-trace:formatted state)))))
 
 ;;;;;;;; Common Continuations
 
