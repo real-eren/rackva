@@ -935,6 +935,7 @@ function main() {
   return foo(x);
 }
 ")
+
 (error-str #:id "stack trace unwinds after function call"
            #:catch #t ; set to #f to check the stack-trace
            "
@@ -953,6 +954,38 @@ function ok() {
 var a = ok();
 var b = foo();
 ")
+
+(error-str #:id "stack trace unwinds between function calls in expression"
+           #:catch #t
+           "
+function a() {
+  return 1;
+}
+function b() {
+  return 2;
+}
+function c() {
+  return 3;
+}
+var a = a() + b() + c() + d();
+")
+
+(error-str #:id "stack-trace preserved after deeply nested throw"
+           #:catch #t
+           "
+function c() {
+  throw 1;
+}
+function b() {
+  c();
+}
+function a() {
+  b();
+}
+function main() {
+  a();
+}")
+
 (error-str #:id "function w/out return used as expression"
            #:catch #t
            "
