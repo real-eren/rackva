@@ -811,7 +811,7 @@
 ;; keys are symbols representative of a construct type
 ;; values are the corresponding constructs (type of statement)
 (define constructs-table
-  (map-from-interlaced-entries
+  (map:from-interlaced-entries
    'return   Mstate-return
    'while    Mstate-while
    'if       Mstate-if
@@ -828,19 +828,19 @@
 ;; returns whether the statement is a recognized construct
 (define is-construct?
   (lambda (statement)
-    (map-contains? (action statement) constructs-table)))
+    (map:contains? (action statement) constructs-table)))
 
 ;; returns the Mstate function that goes with this statement,
 ;; assuming it is a valid construct
 (define get-Mstate
   (lambda (statement)
-    (map-get (action statement) constructs-table)))
+    (map:get (action statement) constructs-table)))
 
 
 ;; returns whether a nested expression is of the boolean variety
 (define is-nested-boolean-expr?
   (lambda (nested-expr)
-    (map-contains? (action nested-expr) boolean-op-table)))
+    (map:contains? (action nested-expr) boolean-op-table)))
 
 (define is-&&? (checker-of '&&))
 (define is-||? (checker-of '||))
@@ -848,14 +848,14 @@
 ;; Takes a nested expression and returns whether it contains a recognized operation
 (define has-op?
   (lambda (expr)
-    (or (map-contains? (action expr) arithmetic-op-table)
-        (map-contains? (action expr) boolean-op-table))))
+    (or (map:contains? (action expr) arithmetic-op-table)
+        (map:contains? (action expr) boolean-op-table))))
 
 
 ;; associative lists from op-symbols to functions
 
 (define boolean-op-table
-  (map-from-interlaced-entries
+  (map:from-interlaced-entries
    '&& error ; short-circuit ops must be handled as a special case
    '|| error
    '!  not
@@ -867,7 +867,7 @@
    '>= >=))
 
 (define arithmetic-op-table
-  (map-from-interlaced-entries
+  (map:from-interlaced-entries
    '+  +
    '-  -
    '/  quotient
@@ -877,15 +877,15 @@
 ;; assuming the atom is an op-symbol, returns the associated function
 (define op-of-symbol
   (lambda (op-symbol)
-    (if (map-contains? op-symbol arithmetic-op-table)
-        (map-get op-symbol arithmetic-op-table)
-        (map-get op-symbol boolean-op-table))))
+    (if (map:contains? op-symbol arithmetic-op-table)
+        (map:get op-symbol arithmetic-op-table)
+        (map:get op-symbol boolean-op-table))))
 
 
 ;;;;;;; Custom error functions
 
 ;; retrieves the stack-trace from state and returns it in a form fit for output
-(define stack-trace:formatted
+(define formatted-stack-trace
   (lambda (state)
     (if (empty? (state:stack-trace state))
         ""
@@ -895,7 +895,7 @@
 ;; for user-facing errors
 (define myerror
   (lambda (msg state)
-    (raise-user-error (string-append msg "\n" (stack-trace:formatted state)))))
+    (raise-user-error (string-append msg "\n" (formatted-stack-trace state)))))
 
 ;;;;;;;; Common Continuations
 
