@@ -447,21 +447,21 @@
                                  #:throw (cond
                                            [(null? catch-block)     (lambda (e s)
                                                                       (Mstate-block-impl (finally-body finally-block)
-                                                                                         s
+                                                                                         (state:with-stack-trace (state:stack-trace state) s)
                                                                                          (conts-of conts
                                                                                                    #:next (lambda (s2)
-                                                                                                            ((throw conts) e s2)))))]
+                                                                                                            ((throw conts) e (state:with-stack-trace (state:stack-trace s) s2))))))]
                                            [(null? finally-block)   (lambda (e s)
                                                                       (Mstate-block-impl (catch-body catch-block)
                                                                                          (state:declare-var-with-value (catch-var catch-block)
                                                                                                                        e
-                                                                                                                       s)
+                                                                                                                       (state:with-stack-trace (state:stack-trace state) s))
                                                                                          conts))]
                                            [else                    (lambda (e s)
                                                                       (Mstate-block-impl (catch-body catch-block)
                                                                                          (state:declare-var-with-value (catch-var catch-block)
                                                                                                                        e
-                                                                                                                       s)
+                                                                                                                       (state:with-stack-trace (state:stack-trace state) s))
                                                                                          (conts-of conts ; after catch, before finally
                                                                                                    #:next (lambda (s2)
                                                                                                             (Mstate-block-impl (finally-body finally-block)
@@ -605,7 +605,7 @@
                          (conts-of conts
                                    #:continue default-continue
                                    #:break    default-break
-                                   #:throw    (lambda (e s) ((throw conts) e state))))
+                                   #:throw    (lambda (e s) ((throw conts) e (state:with-stack-trace (state:stack-trace s) state)))))
         (myerror (format "function `~a` not in scope"
                          (fun-name expr))
                  state))))
