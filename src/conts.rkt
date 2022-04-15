@@ -3,6 +3,7 @@
 (require "util/map.rkt")
 
 (provide (combine-out conts-of
+                      w/suffix
                       return
                       break
                       continue
@@ -30,6 +31,25 @@
      continue-key con
      next-key     nxt
      throw-key    thr)))
+
+;;;; Helper function for adding a common 'and-then' effect to conts
+(define identity (lambda (v) v))
+(define w/suffix
+  (lambda (conts
+           #:state-fun [sfun identity]
+           #:error-fun [efun identity]
+           #:value-fun [vfun identity])
+    (conts-of
+     #:return  (lambda (v s)
+                 ((return conts) (vfun v) (sfun s)))
+     #:break   (lambda (s)
+                 ((break conts) (sfun s)))
+     #:continue (lambda (s)
+                  ((continue conts) (sfun s)))
+     #:next     (lambda (s)
+                  ((next conts) (sfun s)))
+     #:throw    (lambda (e s)
+                  ((throw conts) (efun e) (sfun s))))))
 
 (define getter
   (lambda (key)
