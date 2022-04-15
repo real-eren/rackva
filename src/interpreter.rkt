@@ -287,7 +287,7 @@
 (define Mstate-decl-fun-impl
   (lambda (fun-name fun-params fun-body state conts)
     (if (state:has-fun? fun-name state)
-        (myerror (format "function `~s` is already declared in this scope."
+        (myerror (format "function `~s` is already declared in the current scope."
                          fun-name)
                  state)
         ((next conts) (state:declare-fun fun-name 
@@ -613,27 +613,24 @@
 
 (define Mvalue-fun-impl
   (lambda (fun-name fun-closure fun-inputs state conts)
-    (get-environment fun-name 
-                     fun-closure
-                     fun-inputs
-                     (state:push-stack-trace fun-name state)
-                     conts
-                     (lambda (s)
-                       (Mstate-stmt-list (closure:body fun-closure) 
-                                         s
-                                         (conts-of ; when exiting the function body, remove its frame/layer from the state
-                                          #:return (lambda (v s) ((return conts) v (state:pop-layer s)))
-                                          #:next (lambda (s) ((next conts) (state:pop-layer s)))
-                                          #:break (lambda (s) ((break conts) (state:pop-layer s)))
-                                          #:continue (lambda (s) ((continue conts) (state:pop-layer s)))
-                                          #:throw (lambda (e s) ((throw conts) e (state:pop-layer s)))))))))
+    (Mstate-stmt-list (closure:body fun-closure)
+                      (get-environment fun-name 
+                                       fun-closure
+                                       fun-inputs
+                                       (state:push-stack-trace fun-name state)
+                                       conts)
+                      (conts-of ; when exiting the function body, remove its frame/layer from the state
+                       #:return (lambda (v s) ((return conts) v (state:pop-layer s)))
+                       #:next (lambda (s) ((next conts) (state:pop-layer s)))
+                       #:break (lambda (s) ((break conts) (state:pop-layer s)))
+                       #:continue (lambda (s) ((continue conts) (state:pop-layer s)))
+                       #:throw (lambda (e s) ((throw conts) e (state:pop-layer s)))))))
 
 
 ;; Takes in the function name, the function closure, the input expression
-;; the state, the conts and the evaluation
-;; It should evaluate the state that should be used during the function call
+;; the state, the conts
 (define get-environment
-  (lambda (fun-name fun-closure inputs state conts next)
+  (lambda (fun-name fun-closure inputs state conts)
     (if (eq? (closure:num-formal-params fun-closure)
              (length inputs))
         (get-inputs-list-box-cps (closure:params fun-closure)
@@ -643,9 +640,7 @@
                                  (lambda (p l s)
                                    (bind-boxed-params p
                                                       l
-                                                      (state:push-new-layer ((closure:scoper fun-closure) s))
-                                                      (lambda (s2)
-                                                        (next s2)))))
+                                                      (state:push-new-layer ((closure:scoper fun-closure) s)))))
         (myerror (format "`~a` expected ~a argument(s), got ~a."
                          fun-name
                          (closure:num-formal-params fun-closure)
@@ -693,14 +688,11 @@
 
 ;; Binds the names of the formal-params to boxes representing the actual parameters
 (define bind-boxed-params
-  (lambda (formal-params box-list state next)
-    (if (null? box-list)
-        (next state)
-        (bind-boxed-params (cdr formal-params) 
-                           (cdr box-list)
-                           state
-                           (lambda (s)
-                             (next (state:declare-var-with-box (car formal-params) (car box-list) s)))))))
+  (lambda (formal-params box-list state)
+    (foldl state:declare-var-with-box
+           state
+           formal-params
+           box-list)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -787,9 +779,7 @@
 
 ;;;; functions that may be useful in more than one context
 
-;; takes a nested expr (list), returns what should be an action symbol
-;; use is-___ functions to determine whether the
-;;  returned symbol actually represents a particular action
+;; takes a statement or nested expr (list), returns what should be an action symbol
 (define action car)
 
 ;; takes an expression and returns whether it contains other expressions
