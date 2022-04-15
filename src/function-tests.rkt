@@ -13,7 +13,7 @@
         #f
         (string-append "test ID: " (if (string? id)
                                        id
-                                       (format "~s" id))))))
+                                       (format "~a" id))))))
 
 
 (define test-file
@@ -307,13 +307,9 @@ function main() {
 var x = 0;
 var y = 0;
 
-function setx(a) {
-  x = a;
-}
+function setx(a) { x = a; }
 
-function sety(b) {
-  y = b;
-}
+function sety(b) { y = b; }
 
 function main() {
   setx(5);
@@ -325,13 +321,9 @@ function main() {
 (test-str #:id "Functions inside functions. "
           90 "
 function main() {
-  function h() {
-    return 10;
-  }
+  function h() { return 10; }
 
-  function g() {
-    return 100;
-  }
+  function g() { return 100; }
 
   return g() - h();
 }
@@ -406,9 +398,7 @@ function main() {
   function getpow(a) {
      var x;
 
-     function setanswer(n) {
-        result = n;
-     }
+     function setanswer(n) { result = n; }
 
      function recurse(m) {
        if (m > 0) {
@@ -591,13 +581,9 @@ function main () {
 (test-str #:id "global function invokes function defined later"
           2
           "
-function a() {
-  return b();
-}
+function a() { return b(); }
 
-function b() {
-  return 2;
-}
+function b() { return 2; }
 function main() {
   return a();
 }")
@@ -608,19 +594,13 @@ function main() {
 function main() {
   return a();
 }
-function a() {
-  return b();
-}
-function b() {
-  return 2;
-}")
+function a() { return b(); }
+function b() { return 2; }")
 
 (test-str #:id "function w/ return used as statement"
           0
           "
-function f() {
-  return 2;
-}
+function f() { return 2; }
 function main() {
   f();
   return 0;
@@ -637,7 +617,7 @@ function decrement(x) {
 function main() {
   return decrement(1);
 }")
-
+ ; insufficient, should test whether the old values are actually preserved
 (test-str #:id "recursion between two global functions, matching param names"
           303
           "
@@ -673,9 +653,7 @@ function main() {
 (test-str #:id "global function refers to later global var"
           5
           "
-function getX() {
-  return x;
-}
+function getX() { return x; }
 var x = 5;
 
 function main() {
@@ -695,9 +673,7 @@ var x = 5;")
           5
           "
 function main() {
-  function nested() {
-    return a;
-  }
+  function nested() { return a; }
   return nested();
 }
 var a = 5;")
@@ -707,9 +683,7 @@ var a = 5;")
           5
           "
 function main() {
-  function nested() {
-    return a;
-  }
+  function nested() { return a; }
   var a = 5;
   return nested();
 }")
@@ -722,9 +696,7 @@ function main() {
            "
 var x = f();
 
-function f() {
-  return 2;
-}
+function f() { return 2; }
 
 function main() {
   return x;
@@ -735,18 +707,14 @@ function main() {
            "
 function main() {
   a = nested();
-  function nested() {
-    return 1;
-  }
+  function nested() { return 1; }
   return a;
 }")
 
 (error-str #:id "Passing too many arguments"
            #:catch #t
            "
-function f(a) {
-  return a*a;
-}
+function f(a) { return a*a; }
 
 function main() {
   return f(10, 11, 12);
@@ -755,9 +723,7 @@ function main() {
 (error-str #:id "Passing too few arguments"
            #:catch #t
            "
-function f(a, b, c) {
-  return a + b + c;
-}
+function f(a, b, c) { return a + b + c; }
 function main() {
   return f(1);
 }")
@@ -765,9 +731,7 @@ function main() {
 (error-str #:id "Passing expressions to a reference parameter"
            #:catch #t
            "
-function f(&a) {
-  a = a + 1;
-}
+function f(&a) { a = a + 1; }
 function main() {
   return f(1);
 }")
@@ -797,12 +761,8 @@ function main() {
 (error-str #:id "global function defined twice"
            #:catch #t
            "
-function foo() {
-  return 1;
-}
-function foo() {
-  return 2;
-}
+function foo() { return 1; }
+function foo() { return 2; }
 function main() {
   var x = foo();
   return x;
@@ -837,9 +797,7 @@ function main() {
 (error-str #:id "break in function w/out while"
            #:catch #t
            "
-function f() {
-  break;
-}
+function f() { break; }
 function main() {
   return f();
 }")
@@ -854,9 +812,7 @@ function main() {
 (error-str #:id "continue in function w/out while"
            #:catch #t
            "
-function f() {
-  continue;
-}
+function f() { continue; }
 function main() {
   return f();
 }")
@@ -865,9 +821,7 @@ function main() {
            #:catch #t
            "
 var x = f();
-function f() {
-  return 5;
-}
+function f() { return 5; }
 function main() {
   return x;
 }")
@@ -876,13 +830,9 @@ function main() {
            #:catch #t
            "
 function main() {
-  function bar() {
-    return nephew();
-  }
+  function bar() { return nephew(); }
   function sibling() {
-    function newphew() {
-      return 5;
-    }
+    function newphew() { return 5; }
   }
   return bar();
 }")
@@ -893,20 +843,14 @@ function main() {
 function main() {
   function a1() {
     function a2() {
-      function a3() {
-        return b2();
-      }
+      function a3() { return b2(); }
       return a3();
     }
     return a2();
   }
   function b1() {
-    function b2() {
-      return 5;
-    }
-    function b2b() {
-      return a1();
-    }
+    function b2() { return 5; }
+    function b2b() { return a1(); }
     return b2b();
   }
   return b1();
@@ -927,9 +871,7 @@ function main() {
 (error-str #:id "reading from reference to uninitialized variable"
            #:catch #t
            "
-function foo(&a) {
-  return a;
-}
+function foo(&a) { return a; }
 function main() {
   var x;
   return foo(x);
@@ -939,51 +881,85 @@ function main() {
 (error-str #:id "stack trace unwinds after function call"
            #:catch #t ; set to #f to check the stack-trace
            "
-function foo() {
-  return bar();
-}
-function bar() {
-  continue;
-}
+function foo() { return bar(); }
+function bar() { continue; }
 function ok() {
-  function ok2() {
-    return 1;
-  }
-  return ok2();
+  function shouldnot() { return appear(); }
+  function appear() { return instacktrace(); }
+  function instacktrace() { return 100; }
+  return shouldnot();
 }
 var a = ok();
 var b = foo();
 ")
 
-(error-str #:id "stack trace unwinds between function calls in expression"
+(error-str #:id "stack trace unwinds between function calls in expression. should see `main`"
            #:catch #t
            "
-function a() {
-  return 1;
-}
-function b() {
-  return 2;
-}
-function c() {
-  return 3;
-}
+function a() { return 1; }
+function b() { return 2; }
+function c() { return 3; }
 var a = a() + b() + c() + d();
 ")
 
-(error-str #:id "stack-trace preserved after deeply nested throw"
+(error-str #:id "stack trace unwinds between function calls in expression. should see `main,d`"
            #:catch #t
            "
-function c() {
-  throw 1;
-}
-function b() {
-  c();
-}
-function a() {
-  b();
-}
+function a() { return 1; }
+function b() { return 2; }
+function c() { return 3; }
+function d() { throw 5; }
+var a = a() + b() + c() + d();
+")
+
+(error-str #:id "stack-trace preserved after deeply nested throw. should see `main,a,b,c`"
+           #:catch #t
+           "
+function c() { throw 123; }
+function b() { c(); }
+function a() { b(); }
 function main() {
   a();
+}")
+
+(error-str #:id "stack trace of throw discarded after being caught. only g1-3 should appear"
+           #:catch #t
+           "
+function f1() { f2(); }
+function f2() { f3(); }
+function f3() { throw 10; }
+
+function g1() { g2(); }
+function g2() { g3(); }
+function g3() { throw 5; }
+
+function main() {
+  try {
+    f1();
+  }
+  catch (e) {
+    g1();
+  }
+}")
+
+(error-str #:id "stack trace of uncaught throw discarded after new exception in finally. only g1-3 should appear"
+           #:catch #t
+           "
+function f1() { f2(); }
+function f2() { f3(); }
+function f3() { throw 10; }
+
+function g1() { g2(); }
+function g2() { g3(); }
+function g3() { throw 5; }
+
+function main() {
+  try {
+    f1();
+  }
+  finally {
+    g1();
+  }
 }")
 
 (error-str #:id "function w/out return used as expression"
