@@ -609,10 +609,7 @@
                                        fun-inputs
                                        (state:push-stack-trace fun-name state)
                                        conts)
-                      ; use 'original' state for continuations,
-                      ; as the state passed to the cont is based on the truncated state
-                      ; in which the function body was executed
-                      (w/suffix conts #:state-fun (const state)))))
+                      conts)))
 
 
 ;; Takes in the function name, the function closure, the input expression
