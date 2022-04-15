@@ -11,6 +11,7 @@
                                   pop-stack-trace
 
                                   stack-trace
+                                  with-stack-trace
 
                                   make-scoper
 
@@ -69,6 +70,10 @@
 
 
 ;;;; function call stack-trace
+(define with-stack-trace
+  (lambda (stack-trace state)
+    (state-of state
+              #:stack-trace stack-trace)))
 (define push-stack-trace
   (lambda (fun-name state)
     (state-of state
