@@ -27,13 +27,13 @@
 (define error-file
   (lambda (file #:id [test-id #f] #:catch [suppress #t])
     (if suppress
-        (check-exn exn:fail? (lambda () (interpret file)) (format-test-id test-id))
+        (check-exn exn:fail:user? (lambda () (interpret file)) (format-test-id test-id))
         (test-file 'error file #:id test-id))))
 
 (define error-str
   (lambda (str #:id [test-id #f] #:catch [suppress #t])
     (if suppress
-        (check-exn exn:fail? (lambda () (interpret-str str)) (format-test-id test-id))
+        (check-exn exn:fail:user? (lambda () (interpret-str str)) (format-test-id test-id))
         (test-str 'error str #:id test-id))))
 
 
