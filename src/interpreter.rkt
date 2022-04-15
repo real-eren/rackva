@@ -149,17 +149,7 @@
   (lambda (stmt-list state conts)
     (Mstate-stmt-list stmt-list
                       (state:push-new-layer state)
-                      (conts-of conts
-                                #:next (lambda (s)
-                                         ((next conts) (state:pop-layer s)))
-                                #:break (lambda (s)
-                                          ((break conts) (state:pop-layer s)))
-                                #:continue (lambda (s)
-                                             ((continue conts) (state:pop-layer s)))
-                                #:throw (lambda (v s)
-                                          ((throw conts) v (state:pop-layer s)))
-                                #:return (lambda (v s)
-                                           ((return conts) v (state:pop-layer s)))))))
+                      (w/suffix conts #:state-fun state:pop-layer))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; WHILE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -619,12 +609,10 @@
                                        fun-inputs
                                        (state:push-stack-trace fun-name state)
                                        conts)
-                      (conts-of ; when exiting the function body, remove its frame/layer from the state
-                       #:return (lambda (v s) ((return conts) v (state:pop-layer s)))
-                       #:next (lambda (s) ((next conts) (state:pop-layer s)))
-                       #:break (lambda (s) ((break conts) (state:pop-layer s)))
-                       #:continue (lambda (s) ((continue conts) (state:pop-layer s)))
-                       #:throw (lambda (e s) ((throw conts) e (state:pop-layer s)))))))
+                      ; use 'original' state for continuations,
+                      ; as the state passed to the cont is based on the truncated state
+                      ; in which the function body was executed
+                      (w/suffix conts #:state-fun (const state)))))
 
 
 ;; Takes in the function name, the function closure, the input expression
