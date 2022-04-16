@@ -1,6 +1,7 @@
 #lang racket
 
-(require "var-table.rkt"
+(require "util/map.rkt"
+         "var-table.rkt"
          "function-table.rkt")
 
 (provide new-state
@@ -34,24 +35,34 @@
 
 
 ;;;; State
-;; pair of a var-table and a function table
+;; Entire (global + local) state of a program being interpreted
+;; map w/ entries for
+;; var-table
+;; fun-table
+;; stack-trace
+
+(define vars-key 'vars)
+(define vars (map:getter vars-key))
+(define funs-key 'funs)
+(define funs (map:getter funs-key))
+; stack of the functions called
+(define stack-trace-key 'stack-trace)
+(define stack-trace (map:getter stack-trace-key))
 
 (define state-of
   (lambda ([state new-state]
            #:vars [vars (vars state)]
            #:funs [funs (funs state)]
            #:stack-trace [stack-trace (stack-trace state)])
-    (list vars funs stack-trace)))
+    (map:from-interlaced-entries
+     vars-key vars
+     funs-key funs
+     stack-trace-key stack-trace)))
 
-(define new-state (state-of null ; null arg is required to break a circular dependency
+(define new-state (state-of map:empty
                             #:vars new-var-table
                             #:funs new-function-table
                             #:stack-trace null))
-
-(define vars first)
-(define funs second)
-; stack of the functions called
-(define stack-trace third)
 
 
 ;; State with the top scope removed from the stack and function table
