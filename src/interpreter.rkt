@@ -101,8 +101,9 @@
   (lambda (state)
     (Mvalue-fun '(funcall main)
                 state
-                (conts-of #:throw default-throw)
-                (lambda (v s) (prep-val-for-output v)))))
+                (conts-of
+                 #:throw default-throw
+                 #:return (lambda (v s) (prep-val-for-output v))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -149,7 +150,7 @@
   (lambda (stmt-list state conts)
     (Mstate-stmt-list stmt-list
                       (state:push-new-layer state)
-                      (w/suffix conts #:state-fun state:pop-layer))))
+                      (w/preproc conts #:map-state state:pop-layer))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; WHILE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -492,7 +493,7 @@
 (define bool-left-op second)
 (define bool-right-op third)
 
-;; takes an expression and evaluate it
+;; takes an expression and evaluates it
 ;; error if not bool
 (define Mbool
   (lambda (expr state conts evaluate)
@@ -537,9 +538,7 @@
                                               (evaluate (assert-bool b) s)))]
       [(is-fun? expr)            (Mvalue-fun expr 
                                              state 
-                                             conts 
-                                             (lambda (b s)
-                                               (evaluate (assert-bool b) s)))]
+                                             (w/preproc conts #:map-value assert-bool))]
       [else                      (error "not considered to be a boolean type expr: " expr)])))
 
 
@@ -565,8 +564,8 @@
     (cond
       [(null? expr)                         (error "called Mvalue on a null expression")]
       [(not (nested? expr))                 (Mvalue-base expr state conts evaluate)]
-      [(is-fun? expr)                       (Mvalue-fun expr state conts evaluate)]
-      [(is-assign? expr)                    (Mvalue (assign-expr expr) 
+      [(is-fun? expr)                       (Mvalue-fun expr state (conts-of conts #:return evaluate))]
+      [(is-assign? expr)                    (Mvalue (assign-expr expr)
                                                     state
                                                     conts
                                                     (lambda (v s) 
@@ -577,12 +576,12 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define Mvalue-fun
-  (lambda (expr state conts evaluate)
+  (lambda (expr state conts)
     (Mshared-fun expr
                  state
                  (conts-of conts
                            #:next      (lambda (s) (myerror "The function did not return any values!" s))
-                           #:return    (lambda (v s) (evaluate v state))))))
+                           #:return    (lambda (v s) ((return conts) v state))))))
 
 ;; common logic for Mstate-fun and Mvalue-fun
 (define Mshared-fun
