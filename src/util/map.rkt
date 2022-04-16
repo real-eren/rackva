@@ -9,8 +9,12 @@
                                   put
                                   put-if-absent
                                   remove
+                                  
                                   from-interlaced-entries
-                                  from-interlaced-entry-list)))
+                                  from-interlaced-entry-list
+
+                                  getter
+                                  setter)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;; A list-backed map ;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -74,16 +78,16 @@
 (define put
   (lambda (key value map)
     (if (contains? key map) ; calling remove when absent produces O(n) garbage
-        (update key value map)
+        (replace key value map)
         (insert key value map))))
 
 ;; replaces the first entry with a matching key to have the given value
 ; assumes key is in map
-(define update
+(define replace
   (lambda (key value map)
     (if (equal? key (entry-key (first map)))
         (insert-entry (entry-of key value) (rest map))
-        (insert-entry (first map) (update key value (rest map))))))
+        (insert-entry (first map) (replace key value (rest map))))))
 
 ;; inserts the entry iff there is not already an entry with the key
 (define put-if-absent
@@ -106,6 +110,16 @@
 (define from-interlaced-entries
   (lambda lis
     (from-interlaced-entry-list lis)))
+
+;; `Factories` for key-specific getters and setters
+(define getter
+  (lambda (key)
+    (lambda (map)
+      (get key map))))
+(define setter
+  (lambda (key)
+    (lambda (value map)
+      (put key value map))))
 
 
 ;;;; Unit Tests

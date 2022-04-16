@@ -53,22 +53,18 @@
      #:throw    (lambda (e s)
                   ((throw conts) (efun e) (sfun s))))))
 
-(define getter
-  (lambda (key)
-    (lambda (conts) (map:get key conts))))
-
 
 (define return-key 'return)
-(define return (getter return-key))
+(define return (map:getter return-key))
 
 (define break-key 'break)
-(define break (getter break-key))
+(define break (map:getter break-key))
 
 (define continue-key 'continue)
-(define continue (getter continue-key))
+(define continue (map:getter continue-key))
 
 (define next-key 'next)
-(define next (getter next-key))
+(define next (map:getter next-key))
 
 (define throw-key 'throw)
-(define throw (getter throw-key))
+(define throw (map:getter throw-key))
