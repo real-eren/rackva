@@ -173,26 +173,26 @@
   (lambda (condition body state conts)
     (Mbool condition
            state
-           conts
-           (lambda (b s1)
-             (if b
-                 (Mstate-statement body 
-                                   s1
-                                   (conts-of conts
-                                             #:next (lambda (s2)
-                                                      (Mstate-while-impl condition
-                                                                         body
-                                                                         s2
-                                                                         conts))
-                                             #:break (next conts)
-                                             #:continue (lambda (s3)
-                                                          (Mstate-while-impl condition
-                                                                             body
-                                                                             s3
-                                                                             conts))))
-                 ((next conts) s1))))))
-
-
+           (conts-of conts
+                     #:return (lambda (b s1)
+                                (if b
+                                    (Mstate-statement body 
+                                                      s1
+                                                      (conts-of conts
+                                                                #:next (lambda (s2)
+                                                                         (Mstate-while-impl condition
+                                                                                            body
+                                                                                            s2
+                                                                                            conts))
+                                                                #:break (next conts)
+                                                                #:continue (lambda (s3)
+                                                                             (Mstate-while-impl condition
+                                                                                                body
+                                                                                                s3
+                                                                                                conts))))
+                                    ((next conts) s1)))))))
+  
+  
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; IF ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;; takes an if statement
@@ -217,12 +217,12 @@
   (lambda (condition then-body maybe-else-body state conts)
     (Mbool condition
            state
-           conts
-           (lambda (b s)
-             (cond
-               [b                        (Mstate-statement then-body s conts)]
-               [(null? maybe-else-body)  ((next conts) s)]
-               [else                     (Mstate-statement (get maybe-else-body) s conts)])))))
+           (conts-of conts
+                     #:return (lambda (b s)
+                                (cond
+                                  [b                        (Mstate-statement then-body s conts)]
+                                  [(null? maybe-else-body)  ((next conts) s)]
+                                  [else                     (Mstate-statement (get maybe-else-body) s conts)]))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; RETURN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -237,9 +237,7 @@
   (lambda (statement state conts)
     (Mvalue (return-expr-part statement)
             state
-            conts
-            (lambda (v s)
-              ((return conts) v s)))))
+            conts)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; THROW ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -254,9 +252,8 @@
   (lambda (statement state conts)
     (Mvalue (throw-expr-part statement)
             state
-            conts
-            (lambda (v s)
-              ((throw conts) v s)))))
+            (conts-of conts #:return (throw conts)))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;   FUNCTION DECLARATION   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -350,11 +347,11 @@
       [(null? maybe-expr)                               ((next conts) (state:declare-var var-name state))]
       [else                                             (Mvalue (get maybe-expr)
                                                                 state
-                                                                conts
-                                                                (lambda (v s)
-                                                                  ((next conts) (state:declare-var-with-value var-name 
-                                                                                                              v
-                                                                                                              s))))])))
+                                                                (conts-of conts
+                                                                          #:return (lambda (v s)
+                                                                                     ((next conts) (state:declare-var-with-value var-name 
+                                                                                                                                 v
+                                                                                                                                 s)))))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ASSIGN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -376,8 +373,11 @@
 (define Mstate-assign-impl
   (lambda (var-name val-expr state conts)
     (if (state:var-declared? var-name state)
-        (Mvalue val-expr state conts (lambda (v s)
-                                       ((next conts) (state:assign-var var-name v s))))
+        (Mvalue val-expr
+                state
+                (conts-of conts
+                          #:return (lambda (v s)
+                                     ((next conts) (state:assign-var var-name v s)))))
         ; else assigning to undeclared var
         (myerror (format "tried to assign to `~a` before declaring it."
                          var-name)
@@ -496,47 +496,35 @@
 ;; takes an expression and evaluates it
 ;; error if not bool
 (define Mbool
-  (lambda (expr state conts evaluate)
+  (lambda (expr state conts)
+    (Mbool-impl expr state (w/preproc conts #:map-value assert-bool))))
+
+(define Mbool-impl
+  (lambda (expr state conts)
     (cond
-      [(not (nested? expr))      (Mvalue-base expr
-                                              state
-                                              (conts-of conts #:return (lambda (v s) (evaluate (assert-bool v) s))))]
+      [(not (nested? expr))      (Mvalue-base expr state conts)]
       [(is-||? expr)             (Mbool (bool-left-op expr)
                                         state
-                                        conts
-                                        (lambda (b1 s1)
-                                          (if b1
-                                              (evaluate b1 s1)
-                                              (Mbool (bool-right-op expr)
-                                                     s1
-                                                     conts
-                                                     (lambda (b2 s2)
-                                                       (evaluate b2 s2))))))]
+                                        (conts-of conts
+                                                  #:return (lambda (b1 s1)
+                                                             (if b1
+                                                                 ((return conts) b1 s1)
+                                                                 (Mbool (bool-right-op expr)
+                                                                        s1
+                                                                        conts)))))]
       [(is-&&? expr)             (Mbool (bool-left-op expr)
                                         state
-                                        conts
-                                        (lambda (b1 s1)
-                                          (if (not b1)
-                                              (evaluate b1 s1)
-                                              (Mbool (bool-right-op expr)
-                                                     s1
-                                                     conts
-                                                     (lambda (b2 s2)
-                                                       (evaluate b2 s2))))))]
-      [(is-assign? expr)         (Mvalue expr
-                                         state
-                                         conts
-                                         (lambda (b s)
-                                           (evaluate (assert-bool b) s)))]
+                                        (conts-of conts
+                                                  #:return (lambda (b1 s1)
+                                                             (if (not b1)
+                                                                 ((return conts) b1 s1)
+                                                                 (Mbool (bool-right-op expr)
+                                                                        s1
+                                                                        conts)))))]
+      [(is-assign? expr)         (Mvalue expr state conts)]
       [(is-nested-boolean-expr?
-        expr)                    (Mvalue-op expr
-                                            state
-                                            conts
-                                            (lambda (b s)
-                                              (evaluate (assert-bool b) s)))]
-      [(is-fun? expr)            (Mvalue-fun expr 
-                                             state 
-                                             (w/preproc conts #:map-value assert-bool))]
+        expr)                    (Mvalue-op expr state conts)]
+      [(is-fun? expr)            (Mvalue-fun expr state conts)]
       [else                      (error "not considered to be a boolean type expr: " expr)])))
 
 
@@ -558,18 +546,18 @@
 
 ;; returns the value of an expression, in the context of the given state
 (define Mvalue
-  (lambda (expr state conts evaluate)
+  (lambda (expr state conts)
     (cond
       [(null? expr)                         (error "called Mvalue on a null expression")]
-      [(not (nested? expr))                 (Mvalue-base expr state (conts-of conts #:return evaluate))]
-      [(is-fun? expr)                       (Mvalue-fun expr state (conts-of conts #:return evaluate))]
+      [(not (nested? expr))                 (Mvalue-base expr state conts)]
+      [(is-fun? expr)                       (Mvalue-fun expr state conts)]
       [(is-assign? expr)                    (Mvalue (assign-expr expr)
                                                     state
-                                                    conts
-                                                    (lambda (v s) 
-                                                      (evaluate v (state:assign-var (assign-var expr) v s))))]
-      [(is-nested-boolean-expr? expr)       (Mbool expr state conts evaluate)]
-      [(has-op? expr)                       (Mvalue-op expr state conts evaluate)]
+                                                    (conts-of conts
+                                                              #:return (lambda (v s) 
+                                                                         ((return conts) v (state:assign-var (assign-var expr) v s)))))]
+      [(is-nested-boolean-expr? expr)       (Mbool expr state conts)]
+      [(has-op? expr)                       (Mvalue-op expr state conts)]
       [else                                 (error "unreachable in Mvalue")])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -645,16 +633,16 @@
       [(not (eq? (car formal-params)
                  '&))                   (Mvalue (car actual-params)
                                                 state
-                                                conts
-                                                (lambda (v1 s1)
-                                                  (get-inputs-list-box-cps (cdr formal-params)
-                                                                           (cdr actual-params)
-                                                                           s1
-                                                                           conts
-                                                                           (lambda (p1 l1 s2)
-                                                                             (evaluation (cons (car formal-params) p1) 
-                                                                                         (cons (box v1) l1) 
-                                                                                         s2)))))]
+                                                (conts-of conts
+                                                          #:return (lambda (v1 s1)
+                                                                     (get-inputs-list-box-cps (cdr formal-params)
+                                                                                              (cdr actual-params)
+                                                                                              s1
+                                                                                              conts
+                                                                                              (lambda (p1 l1 s2)
+                                                                                                (evaluation (cons (car formal-params) p1) 
+                                                                                                            (cons (box v1) l1) 
+                                                                                                            s2))))))]
       ;; by reference
       [(symbol? (car actual-params))    (get-inputs-list-box-cps (cddr formal-params)
                                                                  (cdr actual-params)
@@ -716,40 +704,38 @@
 ;; takes a nested expression containing an op
 ;; and evaluates it
 (define Mvalue-op
-  (lambda (expr state conts evaluate)
+  (lambda (expr state conts)
     (map-expr-list-to-value-list (op-param-list expr)
                                  state
-                                 conts
-                                 (lambda (v1 s) 
-                                   (op-apply (op-of-symbol (op-op-symbol expr)) 
-                                             v1
-                                             (lambda (v2)
-                                               (evaluate v2 s)))))))
+                                 (w/preproc conts
+                                            #:map-value (lambda (val-list)
+                                                          (op-apply (op-of-symbol (op-op-symbol expr)) val-list))))))
 
 
 ;; takes a list of exprs and maps them to values,
 ;; propagating the state changes (so that they evaluate correctly)
 (define map-expr-list-to-value-list
-  (lambda (expr-list state conts evaluate)
+  (lambda (expr-list state conts)
     (if (null? expr-list)
-        (evaluate expr-list state)
+        ((return conts) expr-list state)
         (Mvalue (car expr-list)
                 state
-                conts
-                (lambda (v1 s1)
-                  (map-expr-list-to-value-list (cdr expr-list)
-                                               s1
-                                               conts
-                                               (lambda (v2 s2) (evaluate (cons v1 v2) s2))))))))
+                (conts-of conts
+                          #:return (lambda (v1 s1)
+                                     (map-expr-list-to-value-list (cdr expr-list)
+                                                                  s1
+                                                                  (conts-of conts
+                                                                            #:return (lambda (v2 s2)
+                                                                                       ((return conts) (cons v1 v2) s2))))))))))
 
 
 ;; takes an op and a val-list * already in order of associativity
 ;; returns the value of the op applied to the list of values
 (define op-apply
-  (lambda (op val-list evaluate)
+  (lambda (op val-list)
     (cond
-      [(eq? 1 (length val-list))                  (evaluate (op (first val-list)))]
-      [(eq? 2 (length val-list))                  (evaluate (op (first val-list) (second val-list)))]
+      [(eq? 1 (length val-list))                  (op (first val-list))]
+      [(eq? 2 (length val-list))                  (op (first val-list) (second val-list))]
       [else                                       (error op val-list)])))
 
 
