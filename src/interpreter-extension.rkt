@@ -12,7 +12,7 @@
          function-interpret-file)
   
 ;; Useful functions not in the scope of the interpreter project
-;; Some depend on a modified copy of lex and simpleParser,
+;; Some depend on a modified copy of lex and the parsers,
 ;; and thus would not function properly in the environment used for grading
 
 
@@ -26,19 +26,28 @@
 
 (define simple-interpret-str
   (lambda (str)
-    (simple-interpret-parse-tree (simple:parser-str str))))
+    (simple-interpret-parse-tree (simple:parser-str str)
+                                 default-return
+                                 default-throw)))
 
 (define simple-interpret-file
   (lambda (filename)
-    (simple-interpret-parse-tree (simple:parser filename))))
+    (simple-interpret-parse-tree (simple:parser filename)
+                                 default-return
+                                 default-throw)))
 
 
 (define function-interpret-str
   (lambda (str)
-    (interpret-parse-tree (function:parser-str str))))
+    (function-interpret-parse-tree (function:parser-str str)
+                                   default-return
+                                   default-throw)))
 
 (define function-interpret-file
   (lambda (filename)
-    (interpret-parse-tree (function:parser filename))))
+    (function-interpret-parse-tree (function:parser filename)
+                                   default-return
+                                   default-throw)))
+
 
 (define interpret-str function-interpret-str)

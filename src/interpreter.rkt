@@ -12,8 +12,11 @@
          "functionParser.rkt")
 
 (provide interpret
-         interpret-parse-tree
-         simple-interpret-parse-tree)
+         function-interpret-parse-tree
+         simple-interpret-parse-tree
+
+         default-return
+         default-throw)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -27,27 +30,30 @@
 ;; and returns the result
 (define interpret
   (lambda (file-name)
-    (interpret-parse-tree (parser file-name))))
+    (function-interpret-parse-tree (parser file-name)
+                                   default-return
+                                   default-throw)))
 
-(define interpret-parse-tree
-  (lambda (parse-tree)
+
+(define function-interpret-parse-tree
+  (lambda (parse-tree return throw)
     (Mstate-top-level parse-tree
                       (state:push-stack-trace 'top-level new-state)
                       (conts-of ; only next and throw are actually reachable
                        #:return (lambda (v s) (myerror "return as top-level statement" s))
-                       #:next (lambda (s) (Mstate-main (state:pop-stack-trace s)))
-                       #:throw default-throw
+                       #:next (lambda (s) (Mstate-main (state:pop-stack-trace s) return throw))
+                       #:throw throw
                        #:break (lambda (s) (myerror "break as top-level statement" s))
                        #:continue (lambda (s) (myerror "continue as top-level statement" s))))))
 
 ;; legacy, for testing
 ;; interprets programs accepted by simpleParser.rkt
 (define simple-interpret-parse-tree
-  (lambda (simple-parse-tree)
+  (lambda (simple-parse-tree return throw)
     (Mstate-stmt-list simple-parse-tree
                       new-state
                       (conts-of
-                       #:return (lambda (v s) (prep-val-for-output v))
+                       #:return return
                        #:next (lambda (s) (raise-user-error "reached end of program without return"))
                        #:throw default-throw
                        #:break default-break
@@ -83,8 +89,7 @@
                                          #:next (lambda (s)
                                                   (Mstate-top-level (cdr stmt-list)
                                                                     s
-                                                                    conts))
-                                         #:throw default-throw)))))
+                                                                    conts)))))))
 
 ;; Evaluates a single top level statement
 (define Mstate-top-level-stmt
@@ -98,12 +103,12 @@
 ;; Find and execute the main function with the initial state
 ; should be run after executing all other top-level statements
 (define Mstate-main
-  (lambda (state)
+  (lambda (state return throw)
     (Mvalue-fun '(funcall main)
                 state
                 (conts-of
-                 #:throw default-throw
-                 #:return (lambda (v s) (prep-val-for-output v))))))
+                 #:throw throw
+                 #:return return))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -862,6 +867,7 @@
 
 ;;;;;;;; Common Continuations
 
+(define default-return (lambda (v s) (prep-val-for-output v)))
 (define default-throw (lambda (v s) (myerror (format "uncaught exception: ~a" v) s)))
 (define default-break (lambda (s) (myerror "break statement outside of loop" s)))
 (define default-continue (lambda (s) (myerror "continue statement outside of loop" s)))
