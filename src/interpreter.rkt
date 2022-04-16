@@ -500,9 +500,7 @@
     (cond
       [(not (nested? expr))      (Mvalue-base expr
                                               state
-                                              conts
-                                              (lambda (v s)
-                                                (evaluate (assert-bool v) s)))]
+                                              (conts-of conts #:return (lambda (v s) (evaluate (assert-bool v) s))))]
       [(is-||? expr)             (Mbool (bool-left-op expr)
                                         state
                                         conts
@@ -563,7 +561,7 @@
   (lambda (expr state conts evaluate)
     (cond
       [(null? expr)                         (error "called Mvalue on a null expression")]
-      [(not (nested? expr))                 (Mvalue-base expr state conts evaluate)]
+      [(not (nested? expr))                 (Mvalue-base expr state (conts-of conts #:return evaluate))]
       [(is-fun? expr)                       (Mvalue-fun expr state (conts-of conts #:return evaluate))]
       [(is-assign? expr)                    (Mvalue (assign-expr expr)
                                                     state
@@ -684,14 +682,17 @@
 ;; returns the value of the token given the state
 ;; token = 1 | 'x | 'true 
 (define Mvalue-base
-  (lambda (token state conts evaluate)
-    (cond
-      [(number? token)            (evaluate token state)]
-      [(eq? 'true token)          (evaluate #t state)]
-      [(eq? 'false token)         (evaluate #f state)]
-      [(symbol? token)            (evaluate (read-var token state) state)]
-      [else                       (error "not a bool/int literal or symbol: " token)])))
+  (lambda (token state conts)
+    ((return conts) (Mvalue-base-impl token state) state)))
 
+(define Mvalue-base-impl
+  (lambda (token state)
+    (cond
+      [(number? token)            token]
+      [(eq? 'true token)          #t]
+      [(eq? 'false token)         #f]
+      [(symbol? token)            (read-var token state)]
+      [else                       (error "not a bool/int literal or symbol: " token)])))
 
 ;; retrieves value of a var from state
 ;; throws appropriate errors if undeclared or uninitialized
