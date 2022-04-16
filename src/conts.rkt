@@ -3,7 +3,8 @@
 (require "util/map.rkt")
 
 (provide (combine-out conts-of
-                      w/suffix
+                      w/preproc
+                      
                       return
                       break
                       continue
@@ -32,13 +33,14 @@
      next-key     nxt
      throw-key    thr)))
 
-;;;; Helper function for adding a common 'and-then' effect to conts
+;;;; Helper function for applying a common mapping function to the state, error and value params
 (define identity (lambda (v) v))
-(define w/suffix
+;; returns conts that behave like the given conts but w/ preprocessing on e, s, and v
+(define w/preproc
   (lambda (conts
-           #:state-fun [sfun identity]
-           #:error-fun [efun identity]
-           #:value-fun [vfun identity])
+           #:map-state [sfun identity]
+           #:map-error [efun identity]
+           #:map-value [vfun identity])
     (conts-of
      #:return  (lambda (v s)
                  ((return conts) (vfun v) (sfun s)))
