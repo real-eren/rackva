@@ -779,7 +779,7 @@
 ;; keys are symbols representative of a construct type
 ;; values are the corresponding constructs (type of statement)
 (define constructs-table
-  (map:from-interlaced-entries
+  (map:of
    'return   Mstate-return
    'while    Mstate-while
    'if       Mstate-if
@@ -823,7 +823,7 @@
 ;; associative lists from op-symbols to functions
 
 (define boolean-op-table
-  (map:from-interlaced-entries
+  (map:of
    '&& error ; short-circuit ops must be handled as a special case
    '|| error
    '!  not
@@ -835,7 +835,7 @@
    '>= >=))
 
 (define arithmetic-op-table
-  (map:from-interlaced-entries
+  (map:of
    '+  +
    '-  -
    '/  quotient
