@@ -18,16 +18,19 @@ jobs:
 
       - name: Cache Racket Dependencies
         uses: actions/cache@v2
+        id: racketcache
         with:
           path: |
             ~/.cache/racket
             ~/.local/share/racket
           key: ${{ runner.os }}-racket-8.2
       - name: Install Racket
+        if: steps.racketcache.outputs.cache-hit != 'true'
         uses: Bogdanp/setup-racket@v1.6.1
         with:
           architecture: 'x64'
           distribution: 'full'
+          variant: 'CS'
           version: '8.2'
 #       - name: Install Dependencies
 #         run: raco pkg install --auto --batch
