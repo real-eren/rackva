@@ -1,7 +1,6 @@
 #lang racket/base
 
 (require rackunit
-         "interpreter.rkt"
          "interpreter-extension.rkt")
 
 ; white space / newlines do not affect the parser,
@@ -18,22 +17,22 @@
 
 (define test-file
   (lambda (expected file #:id [test-id #f])
-    (check-equal? (interpret file) expected (format-test-id test-id))))
+    (check-equal? (interpret-v2-file file) expected (format-test-id test-id))))
 
 (define test-str
   (lambda (expected str #:id [test-id #f])
-    (check-equal? (interpret-str str) expected (format-test-id test-id))))
+    (check-equal? (interpret-v2-str str) expected (format-test-id test-id))))
 
 (define error-file
   (lambda (file #:id [test-id #f] #:catch [suppress #t])
     (if suppress
-        (check-exn exn:fail:user? (lambda () (interpret file)) (format-test-id test-id))
+        (check-exn exn:fail:user? (lambda () (interpret-v2-file file)) (format-test-id test-id))
         (test-file 'error file #:id test-id))))
 
 (define error-str
   (lambda (str #:id [test-id #f] #:catch [suppress #t])
     (if suppress
-        (check-exn exn:fail:user? (lambda () (interpret-str str)) (format-test-id test-id))
+        (check-exn exn:fail:user? (lambda () (interpret-v2-str str)) (format-test-id test-id))
         (test-str 'error str #:id test-id))))
 
 

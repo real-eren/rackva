@@ -9,11 +9,14 @@
 (require "conts.rkt"
          "state/state.rkt"
          "util/map.rkt"
-         "functionParser.rkt")
+         "functionParser.rkt"
+         ;"classParser.rkt"
+         )
 
 (provide interpret
-         function-interpret-parse-tree
-         simple-interpret-parse-tree
+         interpret-parse-tree-v3
+         interpret-parse-tree-v2
+         interpret-parse-tree-v1
 
          default-return
          default-throw)
@@ -30,12 +33,17 @@
 ;; and returns the result
 (define interpret
   (lambda (file-name)
-    (function-interpret-parse-tree (parser file-name)
-                                   default-return
-                                   default-throw)))
+    (interpret-parse-tree-v2 (parser file-name)
+                             default-return
+                             default-throw)))
 
+;; interprets parse-trees produced by classParser.rkt
+(define interpret-parse-tree-v3
+  (lambda (parse-tree entry-point return throw)
+    (error "not implemented")))
 
-(define function-interpret-parse-tree
+;;interprets parse-trees produced by functionParser.rkt
+(define interpret-parse-tree-v2
   (lambda (parse-tree return throw)
     (Mstate-top-level parse-tree
                       (state:push-stack-trace 'top-level new-state)
@@ -47,8 +55,8 @@
                        #:continue (lambda (s) (myerror "continue as top-level statement" s))))))
 
 ;; legacy, for testing
-;; interprets programs accepted by simpleParser.rkt
-(define simple-interpret-parse-tree
+;; interprets parse-trees produced by simpleParser.rkt
+(define interpret-parse-tree-v1
   (lambda (simple-parse-tree return throw)
     (Mstate-stmt-list simple-parse-tree
                       new-state

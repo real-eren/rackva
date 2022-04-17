@@ -16,22 +16,22 @@
 
 (define test-file
   (lambda (expected file #:id [test-id #f])
-    (check-equal? (simple-interpret-file file) expected (format-test-id test-id))))
+    (check-equal? (interpret-v1-file file) expected (format-test-id test-id))))
 
 (define test-str
   (lambda (expected str #:id [test-id #f])
-    (check-equal? (simple-interpret-str str) expected (format-test-id test-id))))
+    (check-equal? (interpret-v1-str str) expected (format-test-id test-id))))
 
 (define error-file
   (lambda (file #:id [test-id #f] #:catch [suppress #t])
     (if suppress
-        (check-exn exn:fail:user? (lambda () (simple-interpret-file file)) (format-test-id test-id))
+        (check-exn exn:fail:user? (lambda () (interpret-v1-file file)) (format-test-id test-id))
         (test-file 'error file #:id test-id))))
 
 (define error-str
   (lambda (str #:id [test-id #f] #:catch [suppress #t])
     (if suppress
-        (check-exn exn:fail:user? (lambda () (simple-interpret-str str)) (format-test-id test-id))
+        (check-exn exn:fail:user? (lambda () (interpret-v1-str str)) (format-test-id test-id))
         (test-str 'error str #:id test-id))))
 
 ; ; Literal Tests
