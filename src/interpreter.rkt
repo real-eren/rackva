@@ -9,6 +9,7 @@
 (require "conts.rkt"
          "state/state.rkt"
          "util/map.rkt"
+         "util/predicates.rkt"
          "functionParser.rkt"
          ;"classParser.rkt"
          )
@@ -36,23 +37,30 @@
     (interpret-parse-tree-v2 (parser file-name)
                              default-return
                              default-throw)))
-
+;todo: consider refactoring interpret-parse-tree s.t. they share 
 ;; interprets parse-trees produced by classParser.rkt
 (define interpret-parse-tree-v3
   (lambda (parse-tree entry-point return throw)
-    (error "not implemented")))
+    (Mstate-stmt-list parse-tree
+                      (state:push-stack-trace 'top-level new-state)
+                      (conts-of
+                       ; lookup entry-point class (name), do Mstate-main w/ popped stack-trace and forwarded return & throw
+                       #:next (lambda (s) (string->symbol entry-point))
+                       )
+                      #:legal-construct? (is-class-decl?))))
 
 ;;interprets parse-trees produced by functionParser.rkt
 (define interpret-parse-tree-v2
   (lambda (parse-tree return throw)
-    (Mstate-top-level parse-tree
+    (Mstate-stmt-list parse-tree
                       (state:push-stack-trace 'top-level new-state)
                       (conts-of ; only next and throw are actually reachable
                        #:return (lambda (v s) (myerror "return as top-level statement" s))
                        #:next (lambda (s) (Mstate-main (state:pop-stack-trace s) return throw))
                        #:throw throw
                        #:break (lambda (s) (myerror "break as top-level statement" s))
-                       #:continue (lambda (s) (myerror "continue as top-level statement" s))))))
+                       #:continue (lambda (s) (myerror "continue as top-level statement" s)))
+                      #:legal-construct? (join|| is-declare? is-assign? is-fun-decl?))))
 
 ;; legacy, for testing
 ;; interprets parse-trees produced by simpleParser.rkt
@@ -86,27 +94,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TOP-LEVEL ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; Evaluates all the top level statements
-(define Mstate-top-level
-  (lambda (stmt-list state conts)
-    (if (null? stmt-list)
-        ((next conts) state)
-        (Mstate-top-level-stmt (car stmt-list)
-                               state
-                               (conts-of conts
-                                         #:next (lambda (s)
-                                                  (Mstate-top-level (cdr stmt-list)
-                                                                    s
-                                                                    conts)))))))
-
-;; Evaluates a single top level statement
-(define Mstate-top-level-stmt
-  (lambda (statement state conts)
-    (if (or (is-declare? statement)
-            (is-assign? statement)
-            (is-fun-decl? statement))
-        (Mstate-statement statement state conts)
-        (myerror "illegal top-level statement" state)))); unreachable w/ functionParser
 
 ;; Find and execute the main function with the initial state
 ; should be run after executing all other top-level statements
@@ -123,17 +110,21 @@
 
 ;; executes a list of statements with a given initial state
 ;; and returns the resulting state
+; optionally takes a filter function (on statement) and throws an error if an
+; encountered statement does not pass the filter
 (define Mstate-stmt-list
-  (lambda (statement-list state conts)
-    (if (null? statement-list)
-        ((next conts) state)
-        (Mstate-statement (car statement-list)
-                          state
-                          (conts-of conts
-                                    #:next (lambda (s)
-                                             (Mstate-stmt-list (cdr statement-list) 
-                                                               s
-                                                               conts)))))))
+  (lambda (statement-list state conts #:legal-construct? [legal? (λ (v) #T)])
+    (cond
+      [(null? statement-list)         ((next conts) state)]
+      [(legal? (car statement-list))  (Mstate-statement (car statement-list)
+                                                        state
+                                                        (conts-of conts
+                                                                  #:next (lambda (s)
+                                                                           (Mstate-stmt-list (cdr statement-list) 
+                                                                                             s
+                                                                                             conts))))]
+      ; indicative of bug in program
+      [else                           (error "encountered illegal construct type" (car statement-list))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -145,7 +136,7 @@
     (cond
       [(null? statement)                    (error "called Mstate on null statement")]
       [(is-construct? statement)            ((get-Mstate statement) statement state conts)]
-      [else                                 (myerror (format "unrecognized stmt: ~a" statement) state)])))
+      [else                                 (error (format "unrecognized stmt: ~a" statement))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -783,6 +774,7 @@
 (define is-declare? (checker-of 'var))
 (define is-fun-decl? (checker-of 'function))
 (define is-fun? (checker-of 'funcall))
+(define is-class-decl? (checker-of 'class))
 
 ;; keys are symbols representative of a construct type
 ;; values are the corresponding constructs (type of statement)
