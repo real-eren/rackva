@@ -4,9 +4,9 @@
 
 (provide new-function-table
          (prefix-out function-table:
-                     (combine-out closure:params
-                                  closure:body
-                                  closure:scoper
+                     (combine-out closure:$params
+                                  closure:$body
+                                  closure:$scoper
                                   push-new-layer
                                   pop-layer
                                   has-fun?
@@ -20,13 +20,16 @@
 ;; bindings { name : (params body scoper) }
 
 ;; closures functions
-(define closure:params first)
-(define closure:body second)
-(define closure:scoper third)
+(define closure:$params 'formal-params)
+(define closure:$body   'body)
+(define closure:$scoper 'scoper)
 
-(define closure-of
-  (lambda (params body state)
-    (list params body state)))
+(define closure:of
+  (lambda (params body scoper)
+    (map:of
+     closure:$params  params
+     closure:$body    body
+     closure:$scoper  scoper)))
 
 ;; layer is a map of { name : closure }
 
@@ -78,6 +81,6 @@
 (define declare-fun
   (lambda (name params body scoper table)
     (push-layer (layer:put-fun name
-                               (closure-of params body scoper)
+                               (closure:of params body scoper)
                                (peek-layer table))
                 (pop-layer table))))
