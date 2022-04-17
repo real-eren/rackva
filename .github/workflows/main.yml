@@ -21,7 +21,7 @@ jobs:
         id: racketcache
         with:
           path: |
-            ~/cache/racket
+            ~/.cache/racket
           key: ${{ runner.os }}-racket-8.2
       - name: Install Racket
 #         if: steps.racketcache.outputs.cache-hit != 'true'
@@ -29,7 +29,6 @@ jobs:
         with:
           architecture: 'x64'
           distribution: 'full'
-          dest: '~/cache/racket'
           variant: 'CS'
           version: '8.2'
 #       - name: Install Dependencies
