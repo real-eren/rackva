@@ -55,7 +55,7 @@
                       (conts-of
                        #:return return
                        #:next (lambda (s) (raise-user-error "reached end of program without return"))
-                       #:throw default-throw
+                       #:throw throw
                        #:break default-break
                        #:continue default-continue))))
 
