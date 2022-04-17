@@ -18,9 +18,9 @@
 ; interpret a program and return the state
 (define interpret-str:stack-trace
   (lambda (str)
-    (function-interpret-parse-tree (parser-str str)
-                                   (lambda (v s) (error "should not reach"))
-                                   (lambda (e s) (state:stack-trace s)))))
+    (interpret-parse-tree-v2 (parser-str str)
+                             (lambda (v s) (error "should not reach"))
+                             (lambda (e s) (state:stack-trace s)))))
 
 (define test-str
   (lambda (expected str #:id [test-id #f])
