@@ -15,8 +15,8 @@
                                   in*?
                                   update*
                                   
-                                  from-interlaced-entries
-                                  from-interlaced-entry-list
+                                  of
+                                  of-list
 
                                   getter
                                   setter)))
@@ -155,15 +155,15 @@
 ;; does not check for uniqueness
 ;; treats the first and second elems as key and value
 ;; returns a map with the entries
-(define from-interlaced-entry-list
+(define of-list
   (lambda (lis [map empty])
     (if (null? lis)
         map
-        (from-interlaced-entry-list (cdr (cdr lis))
-                                    (insert (first lis) (second lis) map)))))
-(define from-interlaced-entries
+        (of-list (cdr (cdr lis))
+                 (insert (first lis) (second lis) map)))))
+(define of
   (lambda lis
-    (from-interlaced-entry-list lis)))
+    (of-list lis)))
 
 ;; `Factories` for key-specific getters and setters
 (define getter
@@ -184,10 +184,9 @@
   (check-true (empty? empty))
 
   (define map-3 (put 'a 1 (put 'b 2 (put 'c 3 empty))))
-  (define map-3i (from-interlaced-entry-list '(a 1
-                                               b 2
-                                               c 3)
-                                             empty))
+  (define map-3i (of 'a 1
+                     'b 2
+                     'c 3))
 
   ; may have to replace with unordered equality
   (check-true (equal? map-3
@@ -245,18 +244,18 @@
   (check-eq? 999 (get 'z (put-if-absent 'z 999 map-3)))
 
   ;;;; deep accessor functions
-  (define c-map (from-interlaced-entries 'c1 0
-                                         'c2 12
-                                         'c3 232))
-  (define d-map (from-interlaced-entries 'd1 c-map
-                                         'd2 '()
-                                         'd3 7))
-  (define e-map (from-interlaced-entries 'e1 5
-                                         'e2 d-map
-                                         'e3 7))
-  (define f-map (from-interlaced-entries 'f1 5
-                                         'f2 6
-                                         'f3 e-map))
+  (define c-map (of 'c1 0
+                    'c2 12
+                    'c3 232))
+  (define d-map (of 'd1 c-map
+                    'd2 '()
+                    'd3 7))
+  (define e-map (of 'e1 5
+                    'e2 d-map
+                    'e3 7))
+  (define f-map (of 'f1 5
+                    'f2 6
+                    'f3 e-map))
   (check-eq? 232 (get* f-map 'f3 'e2 'd1 'c3))
   (check-eq? 0 (get* c-map 'c1))
   (check-eq? '() (get* e-map 'e2 'd2))
@@ -281,7 +280,7 @@
   (define put-test
     (lambda (map val . keys)
       (check-eq? val (get*-list (put*-list f-map val keys)
-                              keys))))
+                                keys))))
   (put-test f-map 'new-value 'f3 'e2' 'd1 'c3)
   (put-test f-map 'new-value 'f3 'e2' 'd1)
   (put-test f-map 'new-value 'f3 'e2' 'x 'x 'x)

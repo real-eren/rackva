@@ -26,7 +26,7 @@
            #:continue [con (continue conts)]
            #:next     [nxt (next conts)]
            #:throw    [thr (throw conts)])
-    (map:from-interlaced-entries
+    (map:of
      return-key   ret
      break-key    brk
      continue-key con

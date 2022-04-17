@@ -54,10 +54,9 @@
            #:vars [vars (vars state)]
            #:funs [funs (funs state)]
            #:stack-trace [stack-trace (stack-trace state)])
-    (map:from-interlaced-entries
-     vars-key vars
-     funs-key funs
-     stack-trace-key stack-trace)))
+    (map:of vars-key          vars
+            funs-key          funs
+            stack-trace-key   stack-trace)))
 
 (define new-state (state-of map:empty
                             #:vars new-var-table
