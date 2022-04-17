@@ -1,6 +1,6 @@
 #lang racket
 
-(require "util/map.rkt")
+(require "../util/map.rkt")
 
 (provide new-var-table
          (prefix-out var-table:

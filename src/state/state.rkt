@@ -1,6 +1,6 @@
 #lang racket
 
-(require "util/map.rkt"
+(require "../util/map.rkt"
          "var-table.rkt"
          "function-table.rkt")
 
