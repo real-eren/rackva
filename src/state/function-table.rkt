@@ -1,6 +1,6 @@
 #lang racket
 
-(require "util/map.rkt")
+(require "../util/map.rkt")
 
 (provide new-function-table
          (prefix-out function-table:

@@ -7,7 +7,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (require "conts.rkt"
-         "state.rkt"
+         "state/state.rkt"
          "util/map.rkt"
          "functionParser.rkt")
 
