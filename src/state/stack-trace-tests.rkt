@@ -2,10 +2,10 @@
 ;;;; Unit tests for the stack trace
 
 (require rackunit
-         "interpreter.rkt"
-         "functionParser.rkt"
+         "../interpreter.rkt"
+         "../functionParser.rkt"
          "state.rkt"
-         "interpreter-extension.rkt")
+         "../interpreter-extension.rkt")
 
 (define format-test-id
   (lambda (id)
