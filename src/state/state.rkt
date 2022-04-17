@@ -186,7 +186,7 @@
 
 
 ;; extract portions of a closure
-(define closure:params function-table:closure:params)
-(define closure:body function-table:closure:body)
-(define closure:scoper function-table:closure:scoper)
+(define closure:params (map:getter function-table:closure:$params))
+(define closure:body (map:getter function-table:closure:$body))
+(define closure:scoper (map:getter function-table:closure:$scoper))
 
