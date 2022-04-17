@@ -41,22 +41,22 @@
 ;; fun-table
 ;; stack-trace
 
-(define vars-key 'vars)
-(define vars (map:getter vars-key))
-(define funs-key 'funs)
-(define funs (map:getter funs-key))
+(define $vars 'vars)
+(define vars (map:getter $vars))
+(define $funs 'funs)
+(define funs (map:getter $funs))
 ; stack of the functions called
-(define stack-trace-key 'stack-trace)
-(define stack-trace (map:getter stack-trace-key))
+(define $stack-trace 'stack-trace)
+(define stack-trace (map:getter $stack-trace))
 
 (define state-of
   (lambda ([state new-state]
            #:vars [vars (vars state)]
            #:funs [funs (funs state)]
            #:stack-trace [stack-trace (stack-trace state)])
-    (map:of vars-key          vars
-            funs-key          funs
-            stack-trace-key   stack-trace)))
+    (map:of $vars          vars
+            $funs          funs
+            $stack-trace   stack-trace)))
 
 (define new-state (state-of map:empty
                             #:vars new-var-table

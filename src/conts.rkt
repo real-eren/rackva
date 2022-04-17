@@ -27,11 +27,11 @@
            #:next     [nxt (next conts)]
            #:throw    [thr (throw conts)])
     (map:of
-     return-key   ret
-     break-key    brk
-     continue-key con
-     next-key     nxt
-     throw-key    thr)))
+     $return   ret
+     $break    brk
+     $continue con
+     $next     nxt
+     $throw    thr)))
 
 ;;;; Helper function for applying a common mapping function to the state, error and value params
 (define identity (lambda (v) v))
@@ -54,17 +54,17 @@
                   ((throw conts) (efun e) (sfun s))))))
 
 
-(define return-key 'return)
-(define return (map:getter return-key))
+(define $return 'return)
+(define return (map:getter $return))
 
-(define break-key 'break)
-(define break (map:getter break-key))
+(define $break 'break)
+(define break (map:getter $break))
 
-(define continue-key 'continue)
-(define continue (map:getter continue-key))
+(define $continue 'continue)
+(define continue (map:getter $continue))
 
-(define next-key 'next)
-(define next (map:getter next-key))
+(define $next 'next)
+(define next (map:getter $next))
 
-(define throw-key 'throw)
-(define throw (map:getter throw-key))
+(define $throw 'throw)
+(define throw (map:getter $throw))
