@@ -35,13 +35,9 @@
 
 (define layer:has-fun? map:contains?)
 
-(define layer:get-fun
-  (lambda (name layer)
-    (map:get name layer)))
+(define layer:get-fun map:get)
 
-(define layer:put-fun
-  (lambda (name closure layer)
-    (map:put name closure layer)))
+(define layer:put-fun map:put)
 
 (define new-layer map:empty)
 
@@ -63,24 +59,15 @@
 ;; whether this table has a function with the given name
 (define has-fun?
   (lambda (name table)
-    (cond
-      [(no-layers? table)                        #f]
-      [(layer:has-fun? name (peek-layer table))  #t]
-      [else                                      (has-fun? name (pop-layer table))])))
+    (ormap (curry layer:has-fun? name) table)))
 
 ;; assumes function exists
 ; call has-fun? beforehand
 (define get-closure
   (lambda (name table)
-    (cond
-      [(no-layers? table)                        (error "'" name "' is not declared")]
-      [(layer:has-fun? name (peek-layer table))  (layer:get-fun name (peek-layer table))]
-      [else                                      (get-closure name (pop-layer table))])))
+    (layer:get-fun name (findf (curry layer:has-fun? name) table))))
 
 ;; adds function to table
 (define declare-fun
   (lambda (name params body scoper table)
-    (push-layer (layer:put-fun name
-                               (closure:of params body scoper)
-                               (peek-layer table))
-                (pop-layer table))))
+    (list-update table 0 (curry layer:put-fun name (closure:of params body scoper)))))

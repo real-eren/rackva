@@ -32,9 +32,7 @@
 
 (define frame-var-box map:get)
 
-(define frame-assign-box
-  (lambda (var-name box frame)
-    (map:put var-name box frame)))
+(define frame-assign-box map:put)
 
 (define frame-declare-var
   (lambda (var-name frame)
@@ -63,10 +61,7 @@
 ; declares and assigns the var with the given box
 (define declare-var-with-box
   (lambda (var-name box var-table)
-    (push-frame (frame-assign-box var-name
-                                  box
-                                  (peek-frame var-table))
-                (pop-frame var-table))))
+    (list-update var-table 0 (curry frame-assign-box var-name box))))
 
 ; declares and assigns the var with the given value
 (define declare-var-with-value
@@ -76,9 +71,7 @@
 ; declares the var in the top frame
 (define declare-var
   (lambda (var-name var-table)
-    (push-frame (frame-declare-var var-name
-                                   (peek-frame var-table))
-                (pop-frame var-table))))
+    (list-update var-table 0 (curry frame-declare-var var-name))))
 
 ; find frame that declares it, update that frame
 (define assign-var
@@ -93,29 +86,17 @@
 
 (define var-declared?
   (lambda (var-name var-table)
-    ;(ormap (lambda (frame) (frame-var-declared? var-name frame)) var-table)))
-    (cond
-      [(no-frames? var-table)                            #f]
-      [(var-declared-top-frame? var-name var-table)      #t]
-      [else                                              (var-declared? var-name
-                                                                        (pop-frame var-table))])))
-
+    (ormap (curry frame-var-declared? var-name) var-table)))
 
 (define var-initialized?
   (lambda (var-name var-table)
     (not (null? (var-value var-name var-table)))))
 
 ;; returns the box bound to the var-name in the top frame that has it declared
-; use var-initialized? beforehand
-; returns error if no such binding exists
+; use var-initialized? beforehand, error if no such binding exists
 (define var-box
   (lambda (var-name var-table)
-    (cond
-      [(no-frames? var-table)                        (error "failed to check for existence of variable before accessing")]
-      [(frame-var-declared? var-name
-                            (peek-frame var-table))  (frame-var-box var-name (peek-frame var-table))]
-      [else                                          (var-box var-name
-                                                              (pop-frame var-table))])))
+    (frame-var-box var-name (findf (curry frame-var-declared? var-name) var-table))))
 
 ; returns the value bound to the var-name in the top frame that has it declared
 (define var-value
