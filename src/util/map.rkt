@@ -14,6 +14,9 @@
                                   put*
                                   in*?
                                   update*
+
+                                  insert
+                                  get-all
                                   
                                   of
                                   of-list
@@ -63,6 +66,11 @@
       [(equal? key (entry-key (first map)))       (entry-value (first map))]
       [else                                       (get-default key default (rest map))])))
 
+;; returns a list of all entries whose key matches
+; use with insert
+(define get-all
+  (lambda (key mapp)
+    (map entry-value (filter (lambda (e) (equal? key (car e))) mapp))))
 
 ;; inserts the entry into the entry list
 (define insert-entry cons)
@@ -82,10 +90,10 @@
       [else                                     (cons (first map)
                                                       (remove key (rest map)))])))
 
-;; inserts the entry, removing any previous entry with a matching key
+;; inserts the entry, removing the first entry with a matching key, if any
 (define put
   (lambda (key value map)
-    (if (contains? key map) ; calling remove when absent produces O(n) garbage
+    (if (contains? key map) ; calling remove when absent would produce O(n) garbage
         (replace key value map)
         (insert key value map))))
 
@@ -210,6 +218,11 @@
                   (and (contains? key new-map)
                        (eq? (get key new-map) new-v)))))
 
+  ;; get-all
+  (check-equal? '() (get-all 'x map-3))
+  (check-equal? '(1 2 3) (get-all 'a (of 'a 3 'a 2 'a 1)))
+  (check-equal? '(1 2 3) (get-all 'a (of 'a 3 'b 0 'c 0 'a 2 'a 1)))
+  
   ;; removing each element results in an empty map
   (check-true (let ([new-map (remove 'c
                                      (remove 'b
@@ -221,7 +234,7 @@
   ;; remove-every doesn't remove other
   (check-true (contains? 'a (remove 'b (put 'b 0 map-3))))
 
-
+  
   ;; put-if-absent behaves as claimed
   (check-true (contains? 'a map-3))
   (check-true (contains? 'a (put-if-absent 'a 999 map-3)))
