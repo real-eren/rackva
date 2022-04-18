@@ -2,6 +2,13 @@
 
 Interpreter for a C/Java-like language, written in Scheme/Racket
 
+## Features
+
+
+Abuse of higher-order functions to arbitrarily shorten code
+
+## Notable files
+
 `interpreter.rkt` contains 
  - interpret
  - Mstate

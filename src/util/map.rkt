@@ -43,7 +43,10 @@
 ; returns whether an entry with the given key exists in the map
 (define contains?
   (lambda (key map)
-    (ormap (lambda (entry) (equal? key (entry-key entry))) map)))
+    (ormap (lambda (entry)
+             (and (pair? entry)
+                  (equal? key (entry-key entry))))
+           map)))
 
 ;; returns, if present, the value of the entry in the map-list with the given key
 ;; else null
@@ -105,50 +108,35 @@
 ;; keys are applied left-to-right
 ;; invalid queries w/ get return null
 ;; syntax : (get* map key1 key2 key3 ...)
-;;          (put* map val key1 key2 key3 ...)
-;;          (update* map update-fun key1 key2 key3)
+;;          (put* val map key1 key2 key3 ...)
+;;          (update* update-fun map key1 key2 key3)
 (define get*
   (lambda (map . keys)
-    (get*-list map keys)))
-
-(define get*-list
-  (lambda (map keys)
     (if (null? keys)
         map
-        (get*-list (get (car keys) map) (cdr keys)))))
+        (apply get* (get (car keys) map) (cdr keys)))))
 
+;; if path DNE, creates it
 (define put*
-  (lambda (map value key . keys)
-    (put*-list map value (cons key keys))))
+  (lambda (value map key . keys)
+    (if (null? keys)
+        (put key value map)
+        (put key (apply put* value (get key map) keys) map))))
 
-(define put*-list
-  (lambda (map value keys)
-    (cond
-      [(null? keys)          map]
-      [(null? (cdr keys))    (put (car keys) value map)]
-      [else                  (put (car keys)
-                                  (put*-list (get (car keys) map)
-                                             value
-                                             (cdr keys))
-                                  map)])))
 ;; does the map contain this sequence of keys
 (define in*?
   (lambda (map key . keys)
-    (in*?-list map (cons key keys))))
-(define in*?-list
-  (lambda (map keys)
     (cond
-      [(or (empty? map)
-           (not (list? map)))    #f]
-      [(null? (cdr keys))        (contains? (car keys) map)]
-      [else                      (in*?-list (get (car keys) map) (cdr keys))])))
+      [(not (list? map))   #f]
+      [(null? keys)        (contains? key map)]
+      [else                (apply in*? (get key map) keys)])))
 
 ;; map an existing entry to a new value with a given function
 ;; map is unchanged if key absent
 (define update*
-  (lambda (map updater . keys)
-    (if (in*?-list map keys)
-        (put*-list map (updater (get*-list map keys)) keys)
+  (lambda (updater map key . keys)
+    (if (apply in*? map key keys)
+        (apply put* (updater (apply get* map key keys)) map key keys)
         map)))
 
 ;; takes an initial map and adds the given list to it
@@ -269,30 +257,31 @@
   (check-true (in*? f-map 'f3 'e2 'd3))
   (check-true (in*? f-map 'f3 'e2 'd1 'c3))
   (check-true (in*? f-map 'f3 'e2 'd2))
-  
+
+  (check-false (in*? '() 'x))
+  (check-false (in*? '(1 2 3) 'x))
   (check-false (in*? f-map 'x))
   (check-false (in*? f-map 'f3 'e1 'x))
   (check-false (in*? f-map 'f3 'x))
   (check-false (in*? f-map 'f3 'e2 'x))
   (check-false (in*? f-map 'f3 'e2 'd1 'x))
   (check-false (in*? f-map 'x 'x 'x))
-  
-  (define put-test
-    (lambda (map val . keys)
-      (check-eq? val (get*-list (put*-list f-map val keys)
-                                keys))))
-  (put-test f-map 'new-value 'f3 'e2' 'd1 'c3)
-  (put-test f-map 'new-value 'f3 'e2' 'd1)
-  (put-test f-map 'new-value 'f3 'e2' 'x 'x 'x)
+
+  (define put-get
+    (lambda (val map . keys)
+      (apply get* (apply put* val f-map keys) keys)))
+  (check-equal? 'new-value (put-get 'new-value f-map 'f3 'e2' 'd1 'c3))
+  (check-equal? 'new-value (put-get 'new-value f-map 'f3 'e2' 'd1))
+  (check-equal? 'new-value (put-get 'new-value f-map 'f3 'e2' 'x 'x 'x))
 
   ; don't modify map if key absent
-  (check-equal? f-map (update* f-map (λ (v) 0) 'x))
-  (check-equal? f-map (update* f-map (λ (v) 0) 'f1 'x))
-  (check-equal? f-map (update* f-map (λ (v) 0) 'f3 'x))
+  (check-equal? f-map (update* (λ (v) 0) f-map  'x))
+  (check-equal? f-map (update* (λ (v) 0) f-map  'f1 'x))
+  (check-equal? f-map (update* (λ (v) 0) f-map  'f3 'x))
 
-  (define f-map1 (update* f-map (lambda (v) 'new-value) 'f2))
-  (define f-map2 (update* f-map - 'f3 'e3))
-  (define f-map3 (update* f-map (λ (v) (* 2 v)) 'f3 'e2 'd3))
+  (define f-map1 (update* (lambda (v) 'new-value) f-map 'f2))
+  (define f-map2 (update* - f-map 'f3 'e3))
+  (define f-map3 (update* (λ (v) (* 2 v)) f-map 'f3 'e2 'd3))
 
   (check-eq? 'new-value (get* f-map1 'f2)) ; updated entry
   ; should be untouched

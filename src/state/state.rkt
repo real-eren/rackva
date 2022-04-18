@@ -204,7 +204,7 @@
 (define declare-class
   (lambda (class state)
     state))
-
+(map:update* state () state:$global-funs)
 
 ;; extract portions of a closure
 (define closure:params (map:getter function-table:closure:$params))
