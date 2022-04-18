@@ -99,7 +99,5 @@
     (frame-var-box var-name (findf (curry frame-var-declared? var-name) var-table))))
 
 ; returns the value bound to the var-name in the top frame that has it declared
-(define var-value
-  (lambda (var-name var-table)
-    (unbox (var-box var-name var-table))))
+(define var-value (compose unbox var-box))
 
