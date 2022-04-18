@@ -4,14 +4,16 @@
 
 (provide new-function-table
          (prefix-out function-table:
-                     (combine-out closure:$params
-                                  closure:$body
-                                  closure:$scoper
-                                  push-new-layer
+                     (combine-out push-new-layer
                                   pop-layer
                                   has-fun?
                                   get-closure
-                                  declare-fun)))
+                                  declare-fun))
+         (prefix-out function:
+                     (combine-out $params
+                                  $body
+                                  $scoper
+                                  )))
 
 
 ;;;; function table
@@ -19,17 +21,31 @@
 ;; a layer is a map of function bindings
 ;; bindings { name : (params body scoper) }
 
-;; closures functions
-(define closure:$params 'formal-params)
-(define closure:$body   'body)
-(define closure:$scoper 'scoper)
+;;;; function property keys
+;; list of formal parameters
+(define $params 'formal-params)
+;; statement list that forms the body of the function
+(define $body   'body)
+;; state mapping function that filters the layers that should be visible during execution
+(define $scoper 'scoper)
+; what class this function is defined in, if applicable.
+; Null if type == free
+(define $class  'class)
+;; what kind of function is this
+; constants for Static | Instance | Free | Abstract
+(define $type   'type)
+(define type:static   'static)
+(define type:instance 'instance)
+(define type:free     'free)
+(define type:abstract 'abstract)
 
-(define closure:of
+
+(define function:of
   (lambda (params body scoper)
     (map:of
-     closure:$params  params
-     closure:$body    body
-     closure:$scoper  scoper)))
+     $params  params
+     $body    body
+     $scoper  scoper)))
 
 ;; layer is a map of { name : closure }
 
@@ -70,4 +86,4 @@
 ;; adds function to table
 (define declare-fun
   (lambda (name params body scoper table)
-    (list-update table 0 (curry layer:put-fun name (closure:of params body scoper)))))
+    (list-update table 0 (curry layer:put-fun name (function:of params body scoper)))))

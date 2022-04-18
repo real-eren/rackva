@@ -613,7 +613,7 @@
 
 (define Mvalue-fun-impl
   (lambda (fun-name fun-closure fun-inputs state conts)
-    (Mstate-stmt-list (closure:body fun-closure)
+    (Mstate-stmt-list (function:body fun-closure)
                       (get-environment fun-name 
                                        fun-closure
                                        fun-inputs
@@ -626,26 +626,26 @@
 ;; the state, the conts
 (define get-environment
   (lambda (fun-name fun-closure inputs state conts)
-    (if (eq? (closure:num-formal-params fun-closure)
+    (if (eq? (function:num-formal-params fun-closure)
              (length inputs))
-        (get-inputs-list-box-cps (closure:params fun-closure)
+        (get-inputs-list-box-cps (function:params fun-closure)
                                  inputs
                                  state
                                  conts
                                  (lambda (p l s)
                                    (bind-boxed-params p
                                                       l
-                                                      (state:push-new-layer ((closure:scoper fun-closure) s)))))
+                                                      (state:push-new-layer ((function:scoper fun-closure) s)))))
         (myerror (format "`~a` expected ~a argument(s), got ~a."
                          fun-name
-                         (closure:num-formal-params fun-closure)
+                         (function:num-formal-params fun-closure)
                          (length inputs))
                  state))))
 
 ;; returns the number of formal parameters in a closure
-(define closure:num-formal-params
+(define function:num-formal-params
   (lambda (closure)
-    (length (filter (lambda (p) (not (eq? '& p))) (closure:params closure)))))
+    (length (filter (lambda (p) (not (eq? '& p))) (function:params closure)))))
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
