@@ -139,6 +139,27 @@
       [else                                 (error (format "unrecognized stmt: ~a" statement))])))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CLASS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define class:name second)
+(define maybe-extend third)
+(define parent-or-null
+  (lambda (maybe-extend)
+    (if (null? maybe-extend)
+        null
+        (second maybe-extend))))
+
+;; Takes a class declaration statement and adds it to the state
+(define Mstate-class-decl
+  (lambda (statement state conts)
+    (Mstate-class-decl-impl (class:name statement)
+                            (parent-or-null ))))
+
+(define Mstate-class-decl-impl
+  (lambda (class-name parent body state)
+    (state:declare-class ('make-class class-name parent body state)
+                         state)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; returns a list of the statements in a block statement
@@ -195,8 +216,8 @@
                                                                                                 s3
                                                                                                 conts))))
                                     ((next conts) s1)))))))
-  
-  
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; IF ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;; takes an if statement

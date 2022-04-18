@@ -28,7 +28,11 @@
 
                                   has-fun?
                                   get-closure
-                                  declare-fun))
+                                  declare-fun
+
+                                  has-class?
+                                  get-class
+                                  declare-class))
          closure:params
          closure:body
          closure:scoper)
@@ -40,6 +44,8 @@
 ;; var-table
 ;; fun-table
 ;; stack-trace
+;; classes
+; TODO: add scope-stack to state, or modify stack-trace
 
 (define $vars 'vars)
 (define vars (map:getter $vars))
@@ -48,6 +54,8 @@
 ; stack of the functions called
 (define $stack-trace 'stack-trace)
 (define stack-trace (map:getter $stack-trace))
+(define $classes 'classes)
+(define classes (map:getter $classes))
 
 (define state-of
   (lambda ([state new-state]
@@ -183,6 +191,19 @@
                                                  scoper
                                                  (funs state)))))
 
+;;;; class
+
+(define has-class?
+  (lambda (class-name state)
+    #f))
+
+(define get-class
+  (lambda (class-name state)
+    null))
+
+(define declare-class
+  (lambda (class state)
+    state))
 
 
 ;; extract portions of a closure
