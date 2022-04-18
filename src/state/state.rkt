@@ -26,8 +26,9 @@
                                   get-var-box
                                   get-var-value
 
+                                  current-scope-has-fun?
                                   has-fun?
-                                  get-closure
+                                  get-function
                                   declare-fun
 
                                   has-class?
@@ -171,17 +172,28 @@
 
 ;;;; fun mappings
 
-;; Is a function with this name in scope?
+;; Is a function with this signature in the current scope (according to stack trace)
+(define current-scope-has-fun?
+  (lambda (name arg-list state)
+    ; TODO has-fun && there exists a matching fun in the current scope
+    (function-table:has-fun? name arg-list (funs state))))
+
+;; Is a function with this signature in scope?
 (define has-fun?
-  (lambda (name state)
-    (function-table:has-fun? name (funs state))))
+  (lambda (name arg-list state)
+    (function-table:has-fun? name arg-list (funs state))))
 
-;; Get closure for the first (layer-wise) function with this name
-(define get-closure
+(define get-all-funs
   (lambda (name state)
-    (function-table:get-closure name (funs state))))
+    (function-table:get-all-funs name (funs state))))
+;; Get closure for the first function with this signature
+; traverses scopes in this order:
+; local -> instance -> static -> global
+(define get-function
+  (lambda (name arg-list state)
+    (function-table:get-function name arg-list (funs state))))
 
-;; State with this fun declared in the current layer
+;; State with this fun declared in the current scope
 (define declare-fun
   (lambda (name params body scoper state)
     (state-of state

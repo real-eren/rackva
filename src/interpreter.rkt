@@ -299,7 +299,8 @@
 
 (define Mstate-decl-fun-impl
   (lambda (fun-name fun-params fun-body state conts)
-    (if (state:has-fun? fun-name state)
+    ; fun w/ same signature can't be in same scope
+    (if (state:current-scope-has-fun? fun-name fun-params state)
         (myerror (format "function `~s` is already declared in the current scope."
                          fun-name)
                  state)
@@ -597,17 +598,23 @@
 ;; common logic for Mstate-fun and Mvalue-fun
 (define Mshared-fun
   (lambda (expr state conts)
-    (if (state:has-fun? (fun-name expr) state)
-        (Mvalue-fun-impl (fun-name expr)
-                         (state:get-closure (fun-name expr) state)
-                         (fun-inputs expr)
+    (Mshared-fun-impl (fun-name expr)
+                      (fun-inputs expr)
+                      state
+                      conts)))
+(define Mshared-fun-impl
+  (lambda (name arg-list state conts)
+    (if (state:has-fun? name arg-list state)
+        (Mvalue-fun-impl name
+                         (state:get-function name arg-list state)
+                         arg-list
                          state
                          (conts-of conts
                                    #:continue default-continue
                                    #:break    default-break
                                    #:throw    (lambda (e s) ((throw conts) e (state:with-stack-trace (state:stack-trace s) state)))))
-        (myerror (format "function `~a` not in scope"
-                         (fun-name expr))
+        (myerror (format "function `~a` not in scope" ; specify # args given
+                         name) ; print list of funs in scope w/ same name
                  state))))
 
 

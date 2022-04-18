@@ -7,7 +7,8 @@
                      (combine-out push-new-layer
                                   pop-layer
                                   has-fun?
-                                  get-closure
+                                  get-all-funs
+                                  get-function
                                   declare-fun))
          (prefix-out function:
                      (combine-out $params
@@ -52,6 +53,7 @@
 (define layer:has-fun? map:contains?)
 
 (define layer:get-fun map:get)
+(define layer:get-all map:get-all)
 
 (define layer:put-fun map:put)
 
@@ -72,15 +74,20 @@
 (define pop-layer cdr)
 (define no-layers? empty?)
 
-;; whether this table has a function with the given name
+;; whether this table has a function with the given signature
 (define has-fun?
-  (lambda (name table)
+  (lambda (name arg-list table)
     (ormap (curry layer:has-fun? name) table)))
 
-;; assumes function exists
-; call has-fun? beforehand
-(define get-closure
+;; list of all functions in this table with a matching name
+(define get-all-funs
   (lambda (name table)
+    (foldl append '() (map (curry layer:get-all name) table))))
+;; assumes function with signature exists
+; null if absent
+; call has-fun? beforehand
+(define get-function
+  (lambda (name arg-list table)
     (layer:get-fun name (findf (curry layer:has-fun? name) table))))
 
 ;; adds function to table
