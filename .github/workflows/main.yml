@@ -3,7 +3,6 @@ name: CI Tests
 
 on:
   push:
-    branches: [ main ]
   pull_request:
 
   workflow_dispatch:
@@ -24,5 +23,5 @@ jobs:
           version: '8.2'
           
       - name: Run Tests
-        run: raco test --timeout 120 --table --jobs 10 src
+        run: raco test -e --timeout 120 --table --jobs 10 src
         
