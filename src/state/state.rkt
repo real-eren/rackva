@@ -33,9 +33,9 @@
                                   has-class?
                                   get-class
                                   declare-class))
-         closure:params
-         closure:body
-         closure:scoper)
+         function:params
+         function:body
+         function:scoper)
 
 
 ;;;; State
@@ -204,10 +204,10 @@
 (define declare-class
   (lambda (class state)
     state))
-(map:update* state () state:$global-funs)
+
 
 ;; extract portions of a closure
-(define closure:params (map:getter function-table:closure:$params))
-(define closure:body (map:getter function-table:closure:$body))
-(define closure:scoper (map:getter function-table:closure:$scoper))
+(define function:params (map:getter function:$params))
+(define function:body (map:getter function:$body))
+(define function:scoper (map:getter function:$scoper))
 
