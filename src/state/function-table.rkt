@@ -14,6 +14,12 @@
                      (combine-out $params
                                   $body
                                   $scoper
+                                  $class
+                                  $type
+                                  type:static
+                                  type:instance
+                                  type:free
+                                  type:abstract
                                   )))
 
 
