@@ -21,6 +21,9 @@
                                   of
                                   of-list
 
+                                  withv
+                                  withf
+
                                   getter
                                   setter)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -147,10 +150,10 @@
         (apply put* (updater (apply get* map key keys)) map key keys)
         map)))
 
-;; takes an initial map and adds the given list to it
-;; does not check for uniqueness
+;; takes a list of intertwined keys and values
 ;; treats the first and second elems as key and value
 ;; returns a map with the entries
+;; does not check for uniqueness of keys
 (define of-list
   (lambda (lis [map empty])
     (if (null? lis)
@@ -160,6 +163,32 @@
 (define of
   (lambda lis
     (of-list lis)))
+
+;; takes an initial map and a list of intertwined keys and values
+;; treates the first and second elems as key and value
+;; returns [old map] + [new entries]
+;; new entries CAN overwrite old entries with the same key
+; ex: (with oldmap
+;           k1  v1
+;           k2  v2)
+(define withv
+  (lambda (map . lis)
+    (if (null? lis)
+        map
+        (apply withv
+               (put (first lis) (second lis) map)
+               (cddr lis)))))
+
+;; like withv but takes mapping functions per key
+; each mapping fun should take the old value and return a new value
+; undefined if key is absent
+(define withf
+  (lambda (map . lis)
+    (if (null? lis)
+        map
+        (apply withf
+               (replace (first lis) ((second lis) (get (first lis) map)) map)
+               (cddr lis)))))
 
 ;; `Factories` for key-specific getters and setters
 (define getter
@@ -316,4 +345,29 @@
   (check-eq? 7 (get* f-map3 'f3 'e3))
   (check-eq? c-map (get* f-map3 'f3 'e2 'd1))
   (check-eq? '() (get* f-map3 'f3 'e2 'd2))
+
+  (define g1-map (of 'c 1
+                     'd 2
+                     'e 3
+                     'f 4
+                     'g 5))
+  (define g2-map (withv g1-map
+                        'd 22
+                        'e 33
+                        'z 99))
+  (check-true (and (eq? 1  (get 'c g2-map))
+                   (eq? 22 (get 'd g2-map))
+                   (eq? 33 (get 'e g2-map))
+                   (eq? 4  (get 'f g2-map))
+                   (eq? 5  (get 'g g2-map))
+                   (eq? 99 (get 'z g2-map))))
+  (define g3-map (withf g1-map
+                        'd (curry + 1)
+                        'e (curry + 2)
+                        'f (curry + 3)))
+  (check-true (and (eq? 1 (get 'c g3-map))
+                   (eq? 3 (get 'd g3-map))
+                   (eq? 5 (get 'e g3-map))
+                   (eq? 7 (get 'f g3-map))
+                   (eq? 5 (get 'g g3-map))))
   )
