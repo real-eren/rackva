@@ -194,8 +194,6 @@
         state ; replace with cont call
         (class-stmt (car body) state))))
 
-(define is-static-fun-decl? (checker-of 'static-function))
-
 (define class-stmt
   (lambda (stmt state)
     (cond
@@ -848,6 +846,8 @@
 (define is-fun-decl? (checker-of 'function))
 (define is-fun-call? (checker-of 'funcall))
 (define is-class-decl? (checker-of 'class))
+
+(define is-static-fun-decl? (checker-of 'static-function))
 
 ;; keys are symbols representative of a construct type
 ;; values are the corresponding constructs (type of statement)

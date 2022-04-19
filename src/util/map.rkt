@@ -165,12 +165,12 @@
     (of-list lis)))
 
 ;; takes an initial map and a list of intertwined keys and values
-;; treates the first and second elems as key and value
+;; treats the first and second elems as key and value
 ;; returns [old map] + [new entries]
 ;; new entries CAN overwrite old entries with the same key
-; ex: (with oldmap
-;           k1  v1
-;           k2  v2)
+; ex: (withv oldmap
+;            k1  v1
+;            k2  v2)
 (define withv
   (lambda (map . lis)
     (if (null? lis)
