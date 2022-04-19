@@ -45,9 +45,13 @@
                       (state:push-stack-trace 'top-level new-state)
                       (conts-of
                        ; lookup entry-point class (name), do Mstate-main w/ popped stack-trace and forwarded return & throw
-                       #:next (lambda (s) (string->symbol entry-point))
+                       #:next (lambda (s)
+                                (Mstate-main (state:pop-stack-trace s)
+                                             return
+                                             throw
+                                             #:class (string->symbol entry-point)))
                        )
-                      #:legal-construct? (is-class-decl?))))
+                      #:legal-construct? is-class-decl?)))
 
 ;;interprets parse-trees produced by functionParser.rkt
 (define interpret-parse-tree-v2
@@ -60,7 +64,7 @@
                        #:throw throw
                        #:break (lambda (s) (myerror "break as top-level statement" s))
                        #:continue (lambda (s) (myerror "continue as top-level statement" s)))
-                      #:legal-construct? (join|| is-declare? is-assign? is-fun-decl?))))
+                      #:legal-construct? (join|| is-var-decl? is-assign? is-fun-decl?))))
 
 ;; legacy, for testing
 ;; interprets parse-trees produced by simpleParser.rkt
@@ -94,16 +98,17 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TOP-LEVEL ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-
 ;; Find and execute the main function with the initial state
 ; should be run after executing all other top-level statements
 (define Mstate-main
-  (lambda (state return throw)
-    (Mvalue-fun '(funcall main)
-                state
-                (conts-of
-                 #:throw throw
-                 #:return return))))
+  (lambda (state return throw #:class [class #f])
+    (if class
+        (error "lookup class and run its main")
+        (Mvalue-fun '(funcall main)
+                    state
+                    (conts-of
+                     #:throw throw
+                     #:return return)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -141,24 +146,64 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CLASS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define class:name second)
+(define class-name second)
 (define maybe-extend third)
 (define parent-or-null
   (lambda (maybe-extend)
     (if (null? maybe-extend)
         null
         (second maybe-extend))))
+(define class-body fourth)
 
 ;; Takes a class declaration statement and adds it to the state
 (define Mstate-class-decl
   (lambda (statement state conts)
-    (Mstate-class-decl-impl (class:name statement)
-                            (parent-or-null ))))
+    (Mstate-class-decl-impl (class-name statement)
+                            (parent-or-null (maybe-extend statement))
+                            (class-body statement)
+                            state
+                            conts)))
 
 (define Mstate-class-decl-impl
-  (lambda (class-name parent body state)
-    (state:declare-class ('make-class class-name parent body state)
-                         state)))
+  (lambda (class-name parent body state conts)
+    (if (or (null? parent)
+            (state:has-class? parent))
+        (state:declare-class (create-class class-name
+                                           parent
+                                           body
+                                           state
+                                           conts)
+                             state)
+        (myerror (format "parent class ~a has not been declared yet"
+                         parent)
+                 state))))
+
+(define create-class
+  (lambda (class-name parent body state conts)
+    (class-body-stage-1 body state)
+    ; first
+    ;   var : expr
+    ;   decl static and instance funs
+    ; second
+    ;   eval static vars
+    ((next conts) state)))
+
+(define class-body-stage-1
+  (lambda (body state)
+    (if (null body)
+        state ; replace with cont call
+        (class-stmt (car body) state))))
+
+(define is-static-fun-decl? (checker-of 'static-function))
+
+(define class-stmt
+  (lambda (stmt state)
+    (cond
+      ; static function
+      [(is-static-fun-decl? stmt) 1]
+      ; static var
+      )))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -289,15 +334,15 @@
 (define decl-fun-params third)
 (define decl-fun-body fourth)
 
-(define Mstate-decl-fun
+(define Mstate-fun-decl
   (lambda (statement state conts)
-    (Mstate-decl-fun-impl (decl-fun-name statement) 
+    (Mstate-fun-decl-impl (decl-fun-name statement) 
                           (decl-fun-params statement) 
                           (decl-fun-body statement) 
                           state
                           conts)))
 
-(define Mstate-decl-fun-impl
+(define Mstate-fun-decl-impl
   (lambda (fun-name fun-params fun-body state conts)
     ; fun w/ same signature can't be in same scope
     (if (state:current-scope-has-fun? fun-name fun-params state)
@@ -318,9 +363,9 @@
 (define fun-name second)
 (define fun-inputs cddr)
 
-(define Mstate-fun
-  (lambda (expr state conts)
-    (Mshared-fun expr
+(define Mstate-fun-call
+  (lambda (statement state conts)
+    (Mshared-fun statement
                  state
                  (conts-of conts
                            #:next       (lambda (s) ((next conts) state))
@@ -354,17 +399,17 @@
 
 ;; takes a declaration statement
 ;; returns the resulting state
-(define Mstate-declare
+(define Mstate-var-decl
   (lambda (statement state conts)
-    (Mstate-decl-impl (decl-var statement)
-                      (decl-maybe-expr statement)
-                      state
-                      conts)))
+    (Mstate-var-decl-impl (decl-var statement)
+                          (decl-maybe-expr statement)
+                          state
+                          conts)))
 
 ;; declares the variable,
 ;; error if already declared
 ;; initializes if expr is provided
-(define Mstate-decl-impl
+(define Mstate-var-decl-impl
   (lambda (var-name maybe-expr state conts)
     (cond
       [(state:var-declared-top-frame? var-name state)   (myerror (format "`~a` is already declared in the current scope."
@@ -550,7 +595,7 @@
       [(is-assign? expr)         (Mvalue expr state conts)]
       [(is-nested-boolean-expr?
         expr)                    (Mvalue-op expr state conts)]
-      [(is-fun? expr)            (Mvalue-fun expr state conts)]
+      [(is-fun-call? expr)       (Mvalue-fun expr state conts)]
       [else                      (error "not considered to be a boolean type expr: " expr)])))
 
 
@@ -576,7 +621,7 @@
     (cond
       [(null? expr)                         (error "called Mvalue on a null expression")]
       [(not (nested? expr))                 (Mvalue-base expr state conts)]
-      [(is-fun? expr)                       (Mvalue-fun expr state conts)]
+      [(is-fun-call? expr)                  (Mvalue-fun expr state conts)]
       [(is-assign? expr)                    (Mvalue (assign-expr expr)
                                                     state
                                                     (conts-of conts
@@ -799,9 +844,9 @@
 
 ;; these take a statement and return whether it is a particular construct
 (define is-assign? (checker-of '=))
-(define is-declare? (checker-of 'var))
+(define is-var-decl? (checker-of 'var))
 (define is-fun-decl? (checker-of 'function))
-(define is-fun? (checker-of 'funcall))
+(define is-fun-call? (checker-of 'funcall))
 (define is-class-decl? (checker-of 'class))
 
 ;; keys are symbols representative of a construct type
@@ -811,14 +856,15 @@
    'return   Mstate-return
    'while    Mstate-while
    'if       Mstate-if
-   'var      Mstate-declare
+   'class    Mstate-class-decl
+   'var      Mstate-var-decl
+   'function Mstate-fun-decl
+   'funcall  Mstate-fun-call
    '=        Mstate-assign
    'begin    Mstate-block
    'try      Mstate-try
    'throw    Mstate-throw
    'break    Mstate-break
-   'function Mstate-decl-fun
-   'funcall  Mstate-fun
    'continue Mstate-continue))
 
 ;; returns whether the statement is a recognized construct
