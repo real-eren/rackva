@@ -4,11 +4,9 @@
 
 (provide new-function-table
          (prefix-out function-table:
-                     (combine-out push-new-layer
-                                  pop-layer
-                                  has-fun?
-                                  get-all-funs
-                                  get-function
+                     (combine-out has-fun?
+                                  get-all
+                                  get
                                   declare-fun))
          (prefix-out function:
                      (combine-out $params
@@ -20,15 +18,16 @@
                                   type:instance
                                   type:free
                                   type:abstract
+                                  num-formal-params
                                   )))
 
 
 ;;;; function table
-;; a function table is a stack of layers
-;; a layer is a map of function bindings
+;; a function table a map of function bindings
 ;; bindings { name : (params body scoper) }
 
 ;;;; function property keys
+(define $name   'fun-name)
 ;; list of formal parameters
 (define $params 'formal-params)
 ;; statement list that forms the body of the function
@@ -48,55 +47,43 @@
 
 
 (define function:of
-  (lambda (params body scoper)
+  (lambda (name params body scoper)
     (map:of
+     $name    name
      $params  params
      $body    body
      $scoper  scoper)))
 
-;; layer is a map of { name : closure }
+;; returns the number of formal parameters in a function
+(define num-formal-params
+  (lambda (closure)
+    (length (filter (lambda (p) (not (eq? '& p))) (map:get $params closure)))))
 
-(define layer:has-fun? map:contains?)
 
-(define layer:get-fun map:get)
-(define layer:get-all map:get-all)
+(define new-function-table map:empty)
 
-(define layer:put-fun map:put)
+(define get-all map:get-all)
+; gets the function with a matching signature
+(define get
+  (lambda (name arg-list table)
+    (findf (lambda (f)
+             (eq? (length arg-list)
+                  (num-formal-params f)))
+           (get-all name table))))
 
-(define new-layer map:empty)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; stack operations
-(define new-function-table (list new-layer))
-
-(define push-layer cons)
-
-(define push-new-layer
-  (lambda (table)
-    (push-layer new-layer table)))
-
-(define peek-layer car)
-(define pop-layer cdr)
-(define no-layers? empty?)
-
-;; whether this table has a function with the given signature
+; get returns false if absent
 (define has-fun?
   (lambda (name arg-list table)
-    (ormap (curry layer:has-fun? name) table)))
+    (map:contains? name table)))
 
-;; list of all functions in this table with a matching name
-(define get-all-funs
-  (lambda (name table)
-    (foldl append '() (map (curry layer:get-all name) table))))
-;; assumes function with signature exists
-; null if absent
-; call has-fun? beforehand
-(define get-function
-  (lambda (name arg-list table)
-    (layer:get-fun name (findf (curry layer:has-fun? name) table))))
-
-;; adds function to table
 (define declare-fun
   (lambda (name params body scoper table)
-    (list-update table 0 (curry layer:put-fun name (function:of params body scoper)))))
+    (map:insert name
+                (function:of name
+                             params
+                             body
+                             scoper)
+                table)))
+
+
+
