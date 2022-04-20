@@ -43,11 +43,11 @@
 (define interpret-parse-tree-v3
   (lambda (parse-tree entry-point return throw)
     (Mstate-stmt-list parse-tree
-                      (state:push-stack-trace 'top-level new-state)
+                      (state:push-context 'top-level new-state)
                       (conts-of
                        ; lookup entry-point class (name), do Mstate-main w/ popped stack-trace and forwarded return & throw
                        #:next (lambda (s)
-                                (Mstate-main (state:pop-stack-trace s)
+                                (Mstate-main (state:pop-context s)
                                              return
                                              throw
                                              #:class (string->symbol entry-point)))
@@ -58,10 +58,10 @@
 (define interpret-parse-tree-v2
   (lambda (parse-tree return throw)
     (Mstate-stmt-list parse-tree
-                      (state:push-stack-trace 'top-level new-state)
+                      (state:push-context 'top-level new-state)
                       (conts-of ; only next and throw are actually reachable
                        #:return (lambda (v s) (myerror "return as top-level statement" s))
-                       #:next (lambda (s) (Mstate-main (state:pop-stack-trace s) return throw))
+                       #:next (lambda (s) (Mstate-main (state:pop-context s) return throw))
                        #:throw throw
                        #:break (lambda (s) (myerror "break as top-level statement" s))
                        #:continue (lambda (s) (myerror "continue as top-level statement" s)))
@@ -508,21 +508,21 @@
                                  #:throw (cond
                                            [(null? catch-block)     (lambda (e s)
                                                                       (Mstate-block-impl (finally-body finally-block)
-                                                                                         (state:with-stack-trace (state:stack-trace state) s)
+                                                                                         (state:with-context (state:context-stack state) s)
                                                                                          (conts-of conts
                                                                                                    #:next (lambda (s2)
-                                                                                                            ((throw conts) e (state:with-stack-trace (state:stack-trace s) s2))))))]
+                                                                                                            ((throw conts) e (state:with-context (state:context-stack s) s2))))))]
                                            [(null? finally-block)   (lambda (e s)
                                                                       (Mstate-block-impl (catch-body catch-block)
                                                                                          (state:declare-var-with-value (catch-var catch-block)
                                                                                                                        e
-                                                                                                                       (state:with-stack-trace (state:stack-trace state) s))
+                                                                                                                       (state:with-context (state:context-stack state) s))
                                                                                          conts))]
                                            [else                    (lambda (e s)
                                                                       (Mstate-block-impl (catch-body catch-block)
                                                                                          (state:declare-var-with-value (catch-var catch-block)
                                                                                                                        e
-                                                                                                                       (state:with-stack-trace (state:stack-trace state) s))
+                                                                                                                       (state:with-context (state:context-stack state) s))
                                                                                          (conts-of conts ; after catch, before finally
                                                                                                    #:next (lambda (s2)
                                                                                                             (Mstate-block-impl (finally-body finally-block)
@@ -656,7 +656,7 @@
                          (conts-of conts
                                    #:continue default-continue
                                    #:break    default-break
-                                   #:throw    (lambda (e s) ((throw conts) e (state:with-stack-trace (state:stack-trace s) state)))))
+                                   #:throw    (lambda (e s) ((throw conts) e (state:with-context (state:context-stack s) state)))))
         (myerror (format "function `~a` not in scope" ; specify # args given
                          name) ; print list of funs in scope w/ same name
                  state))))
@@ -668,7 +668,7 @@
                       (get-environment fun-name 
                                        fun-closure
                                        fun-inputs
-                                       (state:push-stack-trace fun-name state)
+                                       (state:push-context fun-name state)
                                        conts)
                       conts)))
 
@@ -922,12 +922,12 @@
 
 ;;;;;;; Custom error functions
 
-;; retrieves the stack-trace from state and returns it in a form fit for output
+;; retrieves the context-stack from state and returns it in a form fit for output
 (define formatted-stack-trace
   (lambda (state)
-    (if (empty? (state:stack-trace state))
+    (if (empty? (state:context-stack state))
         ""
-        (string-join (map symbol->string (reverse (state:stack-trace state)))
+        (string-join (map symbol->string (reverse (state:context-stack state)))
                      " -> "
                      #:before-first "stack trace: "))))
 ;; for user-facing errors

@@ -3,18 +3,19 @@
 (require "../util/map.rkt"
          "../util/stack.rkt"
          "var-table.rkt"
-         "function-table.rkt")
+         "function-table.rkt"
+         "context.rkt")
 
 (provide new-state
          (prefix-out state:
                      (combine-out push-new-layer
                                   pop-layer
-                                  push-stack-trace
-                                  pop-stack-trace
-
-                                  stack-trace
-                                  with-stack-trace
-
+                                  
+                                  context-stack
+                                  with-context
+                                  push-context
+                                  pop-context
+                                  
                                   make-scoper
 
                                   declare-var-with-box
@@ -43,11 +44,11 @@
 ;;;; State
 ;; Entire (global + local) state of a program being interpreted
 ;; map w/ entries for
-;; var-table
-;; fun-table
-;; stack-trace
+;; global vars and funs
+;; local vars and funs    (layered)
+;; context
 ;; classes
-; TODO: add scope-stack to state, or modify stack-trace
+
 
 (define $global-vars 'global-vars)
 (define global-vars (map:getter $global-vars))
@@ -62,9 +63,14 @@
 (define local-funs (map:getter $local-funs))
 
 
-; stack of the functions called
-(define $stack-trace 'stack-trace)
-(define stack-trace (map:getter $stack-trace))
+; stack of contexts. ex:
+; (top-level) ; global var and fun defs
+; (class-body 'A) ; class A declaration
+; (fun static (foo closure)) -> (fun instance (bar closure)) ; during A::foo called B::bar
+; 
+(define $context-stack 'context-stack)
+(define context-stack (map:getter $context-stack))
+; map of class names to class closures
 (define $classes 'classes)
 (define classes (map:getter $classes))
 
@@ -72,7 +78,7 @@
 ; (withv old-state
 ;        $local-funs  new-local-funs-table)
 ; (withf old-state
-;        $global-vars  (curry function-table:declare function v1 v2 v3))
+;        $global-vars  (curry function-table:declare function name params body scoper))
 (define withv map:withv)
 (define withf map:withf)
 (define of map:of)
@@ -81,7 +87,7 @@
                       $local-funs   (stack:of new-function-table)
                       $global-vars  new-var-table
                       $global-funs  new-function-table
-                      $stack-trace  null))
+                      $context-stack  null))
 
 
 ;; State with the top scope removed from the stack and function table
@@ -100,20 +106,20 @@
 
 
 ;;;; function call stack-trace
-(define with-stack-trace
+(define with-context
   (lambda (stack-trace state)
     (withv state
-           $stack-trace  stack-trace)))
+           $context-stack  stack-trace)))
 
-(define push-stack-trace
+(define push-context
   (lambda (fun-name state)
     (withf state
-           $stack-trace  (curry cons fun-name))))
+           $context-stack  (curry cons fun-name))))
 
-(define pop-stack-trace
+(define pop-context
   (lambda (state)
     (withf state
-           $stack-trace  cdr)))
+           $context-stack  cdr)))
 
 
 ;; Given a state, creates a function that takes a state
@@ -128,7 +134,7 @@
     (lambda (invoke-state)
       (of $local-vars  (bottom-layers (local-vars invoke-state) (height (local-vars declare-state)))
           $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))
-          $stack-trace  (stack-trace invoke-state)))))
+          $context-stack  (context-stack invoke-state)))))
 
 ;;;; var mappings
 
