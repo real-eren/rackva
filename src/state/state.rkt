@@ -91,7 +91,7 @@
            $local-vars  stack:pop
            $local-funs  stack:pop)))
 
-;; State with a blank frame added to the stack and function table
+;; State with a blank frame added to the local var and fun tables
 (define push-new-layer
   (lambda (state)
     (withf state
@@ -104,6 +104,7 @@
   (lambda (stack-trace state)
     (withv state
            $stack-trace  stack-trace)))
+
 (define push-stack-trace
   (lambda (fun-name state)
     (withf state
@@ -131,54 +132,62 @@
 
 ;;;; var mappings
 
-;; State with this varname declared in the current scope and initialized to this value
+;; State with this varname declared in the current scope and initialized to this box
 (define declare-var-with-box
   (lambda (name box state)
     (withf state
-           $local-vars  (curry var-table:declare-var-with-box name box))))
+           $local-vars  (curry stack:update-front (curry var-table:declare-var-with-box name box)))))
 
 ;; State with this varname declared in the current scope and initialized to this value
 (define declare-var-with-value
   (lambda (name value state)
-    (withf state
-           $local-vars  (curry var-table:declare-var-with-value name value))))
+    (declare-var-with-box name (box value) state)))
 
 ;; State with this varname declared in the current scope
 (define declare-var
   (lambda (name state)
     (withf state
-           $local-vars (curry var-table:declare-var name))))
+           $local-vars  (curry stack:update-front (curry var-table:declare-var name)))))
 
 ;; State with val assigned to this varname in the most recent scope containing such a name
 (define assign-var
   (lambda (name val state)
-    (withf state
-           $local-vars  (curry var-table:assign-value name val))))
+    (set-box! (get-var-box name state) val)
+    state))
 
-;; Is a variable with this name in scope?
-(define var-declared?
-  (lambda (name state)
-    (var-table:var-declared? name (local-vars state))))
 
-;; Is a variable with this name in scope in the current scope?
-(define var-declared-current-scope?
-  (lambda (name state)
-    (var-table:var-declared? name (local-vars state))))
-
-;; Is a variable with this name in scope and initialized?
-(define var-initialized?
-  (lambda (name state)
-    (var-table:var-initialized? name (local-vars state))))
-
-;; Get the box that backs this var
+;; Get the box that backs the in-scope var with this name
+; check if initialized first
 (define get-var-box
   (lambda (name state)
-    (var-table:var-box name (local-vars state))))
+    ; check local,
+    ; if instance context, check this' fields
+    ; if class context, check class' fields
+    ; if dotted
+    ; check global,
+    (var-table:var-box name (stack:firstf (curry var-table:var-declared? name) (local-vars state)))))
 
 ;; get the current value of this var
 (define get-var-value
   (lambda (name state)
-    (var-table:var-value name (local-vars state))))
+    (unbox (get-var-box name state))))
+
+
+;; Is a variable with this name in scope?
+(define var-declared?
+  (lambda (name state)
+    (stack:ormap (curry var-table:var-declared? name) (local-vars state))))
+
+;; Is a variable with this name in scope in the current scope?
+(define var-declared-current-scope?
+  (lambda (name state)
+    (var-table:var-declared? name (stack:peek (local-vars state)))))
+
+;; Is the in-scope variable with this name and initialized?
+; check if declared first
+(define var-initialized?
+  (lambda (name state)
+    (not (null? (get-var-value name state)))))
 
 
 ;;;; fun mappings
@@ -248,3 +257,35 @@
 (define function:body (map:getter function:$body))
 (define function:scoper (map:getter function:$scoper))
 
+
+(module+ test
+  (require rackunit)
+  (define s1 new-state)
+  (define s2 (declare-var 'a s1))
+  (check-true (var-declared? 'a s2))
+  (check-false (var-initialized? 'a s2))
+  
+  (define s3 (assign-var 'a 3 s2))
+  (check-true (var-initialized? 'a s3))
+  (check-eq? 3 (get-var-value 'a s3))
+  
+  (define s4 (push-new-layer s3))
+  (check-false (var-declared-current-scope? 'a s4))
+  (check-eq? 3 (get-var-value 'a s4))
+  (define s5 (declare-var-with-value 'a 7 s4))
+  (check-eq? 7 (get-var-value 'a s5))
+  (define s6 (pop-layer s5))
+  (check-eq? 3 (get-var-value 'a s6))
+
+  (define s7 (declare-var-with-box 'd (box 5)
+                                   (declare-var 'c
+                                                (declare-var-with-value 'b #T
+                                                                        (push-new-layer s6)))))
+  (check-eq? 5 (get-var-value 'd s7))
+  (check-false (var-initialized? 'c s7))
+  (check-eq? 5 (get-var-value 'd s7))
+  
+  (define s8 (assign-var 'd 10 (push-new-layer s7)))
+  (check-eq? 10 (get-var-value 'd s8))
+
+)
