@@ -15,25 +15,31 @@
 
 (define new-var-table map:empty)
 
+; check if initialized first
 (define var-box map:get)
+; check if initialized first
 (define var-value (compose1 unbox var-box))
 
 (define var-declared? map:contains?)
+; check if declared first
 (define var-initialized? (compose1 not null? var-value))
 
 (define assign-box map:put)
+; mutates in place!
 (define assign-value
-  (lambda (var-name value frame)
-    (set-box! (var-box var-name frame) value)
-    frame))
+  (lambda (var-name value table)
+    (begin
+      (set-box! (var-box var-name table) value)
+      table)))
 
+; adds an uninitialized entry to the table
 (define declare-var
-  (lambda (var-name frame)
-    (declare-var-with-value var-name null frame)))
+  (lambda (var-name table)
+    (declare-var-with-value var-name null table)))
   
 (define declare-var-with-box assign-box)
-  
+
 (define declare-var-with-value
-  (lambda (var-name value frame)
-    (assign-box var-name (box value) frame)))
+  (lambda (var-name value table)
+    (declare-var-with-box var-name (box value) table)))
 
