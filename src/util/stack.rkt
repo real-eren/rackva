@@ -19,6 +19,9 @@
 
 (define of list)
 
-
+;; returns the first layer in the stack that satisfies a predicate
+; false if absent
+; searches top to bottom
+(define firstf findf)
 
 
