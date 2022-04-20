@@ -69,13 +69,13 @@
       [(equal? key (entry-key (first map)))       (entry-value (first map))]
       [else                                       (get-default key default (rest map))])))
 
-;; returns a list of all entries whose key matches
+;; returns a list of the values of the entries whose key matches
 ; use with insert
 (define get-all
   (lambda (key mapp)
-    (map entry-value (filter (lambda (e) (equal? key (car e))) mapp))))
+    (map entry-value (filter (lambda (e) (equal? key (entry-key e))) mapp))))
 
-;; inserts the entry into the entry list
+;; inserts the entry into the map
 (define insert-entry cons)
 
 ;; adds the key-value pair to the map
