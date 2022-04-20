@@ -8,6 +8,7 @@
 
 (require "conts.rkt"
          "state/state.rkt"
+         "state/function-table.rkt"
          "util/map.rkt"
          "util/predicates.rkt"
          "functionParser.rkt"
@@ -410,9 +411,9 @@
 (define Mstate-var-decl-impl
   (lambda (var-name maybe-expr state conts)
     (cond
-      [(state:var-declared-top-frame? var-name state)   (myerror (format "`~a` is already declared in the current scope."
-                                                                         var-name)
-                                                                 state)]
+      [(state:var-declared-current-scope? var-name state)   (myerror (format "`~a` is already declared in the current scope."
+                                                                             var-name)
+                                                                     state)]
       [(null? maybe-expr)                               ((next conts) (state:declare-var var-name state))]
       [else                                             (Mvalue (get maybe-expr)
                                                                 state
@@ -691,11 +692,6 @@
                          (function:num-formal-params fun-closure)
                          (length inputs))
                  state))))
-
-;; returns the number of formal parameters in a closure
-(define function:num-formal-params
-  (lambda (closure)
-    (length (filter (lambda (p) (not (eq? '& p))) (function:params closure)))))
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
