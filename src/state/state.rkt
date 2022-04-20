@@ -1,6 +1,7 @@
 #lang racket
 
 (require "../util/map.rkt"
+         "../util/stack.rkt"
          "var-table.rkt"
          "function-table.rkt")
 
@@ -12,6 +13,7 @@
                                   pop-stack-trace
 
                                   stack-trace
+                                  with-stack-trace
 
                                   make-scoper
 
@@ -20,7 +22,7 @@
                                   declare-var
                                   assign-var
                                   var-declared?
-                                  var-declared-top-frame?
+                                  var-declared-current-scope?
                                   var-initialized?
                                   get-var-box
                                   get-var-value
@@ -75,7 +77,9 @@
 (define withf map:withf)
 (define of map:of)
 
-(define new-state (of $global-vars  new-var-table
+(define new-state (of $local-vars   (stack:of new-var-table)
+                      $local-funs   (stack:of new-function-table)
+                      $global-vars  new-var-table
                       $global-funs  new-function-table
                       $stack-trace  null))
 
@@ -84,27 +88,31 @@
 (define pop-layer
   (lambda (state)
     (withf state
-           $local-vars  cdr
-           $local-funs  cdr)))
+           $local-vars  stack:pop
+           $local-funs  stack:pop)))
 
 ;; State with a blank frame added to the stack and function table
 (define push-new-layer
   (lambda (state)
     (withf state
-           $local-vars  (curry cons new-var-table)
-           $local-funs  function-table:push-new-layer)))
+           $local-vars  (curry stack:push new-var-table)
+           $local-funs  (curry stack:push new-function-table))))
 
 
 ;;;; function call stack-trace
+(define with-stack-trace
+  (lambda (stack-trace state)
+    (withv state
+           $stack-trace  stack-trace)))
 (define push-stack-trace
   (lambda (fun-name state)
     (withf state
-           $stack-trace (curry cons fun-name))))
+           $stack-trace  (curry cons fun-name))))
 
 (define pop-stack-trace
   (lambda (state)
     (withf state
-           $stack-trace cdr)))
+           $stack-trace  cdr)))
 
 
 ;; Given a state, creates a function that takes a state
@@ -145,7 +153,7 @@
 (define assign-var
   (lambda (name val state)
     (withf state
-           $local-vars (curry var-table:assign-value name val))))
+           $local-vars  (curry var-table:assign-value name val))))
 
 ;; Is a variable with this name in scope?
 (define var-declared?
@@ -153,7 +161,7 @@
     (var-table:var-declared? name (local-vars state))))
 
 ;; Is a variable with this name in scope in the current scope?
-(define var-declared-top-frame?
+(define var-declared-current-scope?
   (lambda (name state)
     (var-table:var-declared? name (local-vars state))))
 
@@ -179,32 +187,46 @@
 (define current-scope-has-fun?
   (lambda (name arg-list state)
     ; TODO has-fun && there exists a matching fun in the current scope
-    (function-table:has-fun? name arg-list (local-funs state))))
+    ; if name is dotted
+    ; if in top-level -> check global function table
+    ; if in class body -> check class's function table
+    ; check local function table
+    ; if in instance context -> check class instance function table
+    ; if in static context -> check class static function table
+    (function-table:has-fun? name arg-list (stack:peek (local-funs state)))))
 
 ;; Is a function with this signature in scope?
 (define has-fun?
   (lambda (name arg-list state)
-    (function-table:has-fun? name arg-list (local-funs state))))
+    (ormap (curry function-table:has-fun? name arg-list)
+           (local-funs state))))
 
+; sweep through local, global, classes
 (define get-all-funs
   (lambda (name state)
-    (function-table:get-all-funs name (local-funs state))))
+    (foldl append
+           '()
+           (map (curry function-table:get-all name) (local-funs state)))))
 ;; Get closure for the first function with this signature
 ; traverses scopes in this order:
 ; local -> instance -> static -> global
 (define get-function
   (lambda (name arg-list state)
-    (function-table:get-function name arg-list (local-funs state))))
+    (first (get-all-funs name state))))
 
 ;; State with this fun declared in the current scope
 (define declare-fun
   (lambda (name params body scoper state)
+    ; if in function, add to local
+    ; if top level, global
+    ; if in class body, add to 
     (withf state
-           $local-funs (curry function-table:declare-fun
-                              name
-                              params
-                              body
-                              scoper))))
+           $local-funs  (curry stack:update-front
+                               (curry function-table:declare-fun
+                                      name
+                                      params
+                                      body
+                                      scoper)))))
 
 ;;;; class
 
