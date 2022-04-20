@@ -1,30 +1,19 @@
 #lang racket
 
-(require "../util/map.rkt")
+(require "../util/map.rkt"
+         "function.rkt")
 
 (provide new-function-table
          (prefix-out function-table:
                      (combine-out has-fun?
                                   get-all
                                   get
-                                  declare-fun))
-         (prefix-out function:
-                     (combine-out $params
-                                  $body
-                                  $scoper
-                                  $class
-                                  $type
-                                  type:static
-                                  type:instance
-                                  type:free
-                                  type:abstract
-                                  num-formal-params
-                                  )))
+                                  declare-fun)))
 
 
 ;;;; function table
 ;; a function table a map of function bindings
-;; bindings { name : (params body scoper) }
+;; bindings { name : function }
 
 ;;;; function property keys
 (define $name   'fun-name)
@@ -47,12 +36,13 @@
 
 
 (define function:of
-  (lambda (name params body scoper)
+  (lambda (name params body scoper type)
     (map:of
      $name    name
      $params  params
      $body    body
-     $scoper  scoper)))
+     $scoper  scoper
+     $type    type)))
 
 ;; returns the number of formal parameters in a function
 (define num-formal-params
@@ -77,13 +67,11 @@
     (map:contains? name table)))
 
 (define declare-fun
-  (lambda (name params body scoper table)
+  (lambda (name params body scoper type table)
     (map:insert name
                 (function:of name
                              params
                              body
-                             scoper)
+                             scoper
+                             type)
                 table)))
-
-
-
