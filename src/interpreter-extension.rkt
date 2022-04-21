@@ -27,43 +27,43 @@
 ; line2")
 
 (define interpret-v1-str
-  (lambda (str)
+  (lambda (str [return default-return] [throw default-throw])
     (interpret-parse-tree-v1 (simple:parser-str str)
-                             default-return
-                             default-throw)))
+                             return
+                             throw)))
 
 (define interpret-v1-file
-  (lambda (filename)
+  (lambda (filename [return default-return] [throw default-throw])
     (interpret-parse-tree-v1 (simple:parser filename)
-                             default-return
-                             default-throw)))
+                             return
+                             throw)))
 
 
 (define interpret-v2-str
-  (lambda (str)
+  (lambda (str [return default-return] [throw default-throw])
     (interpret-parse-tree-v2 (function:parser-str str)
-                             default-return
-                             default-throw)))
+                             return
+                             throw)))
 
 (define interpret-v2-file
-  (lambda (filename)
+  (lambda (filename [return default-return] [throw default-throw])
     (interpret-parse-tree-v2 (function:parser filename)
-                             default-return
-                             default-throw)))
+                             return
+                             throw)))
 
 (define interpret-v3-str
-  (lambda (str entry-point)
+  (lambda (str entry-point [return default-return] [throw default-throw])
     (interpret-parse-tree-v3 (class:parser-str str)
                              entry-point
-                             default-return
-                             default-throw)))
+                             return
+                             throw)))
 
 (define interpret-v3-file
-  (lambda (filename entry-point)
+  (lambda (filename entry-point [return default-return] [throw default-throw])
     (interpret-parse-tree-v3 (class:parser filename)
                              entry-point
-                             default-return
-                             default-throw)))
+                             return
+                             throw)))
 
 ;; str equivalent of the `interpret` function provided by `interpreter`
 ;; AKA latest version of interpret
