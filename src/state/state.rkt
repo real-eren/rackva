@@ -141,12 +141,14 @@
 ;;;; var mappings
 
 ;; State with this varname declared in the current scope and initialized to this box
+; top-level -> in global
+; in function body -> local
 (define declare-var-with-box
   (lambda (name box state)
     (withf state
            $local-vars  (curry stack:update-front (curry var-table:declare-var-with-box name box)))))
 
-;; State with this varname declared in the current scope and initialized to this value
+;; State with this varname declared in the current scope and initialized to this values
 (define declare-var-with-value
   (lambda (name value state)
     (declare-var-with-box name (box value) state)))
@@ -154,10 +156,10 @@
 ;; State with this varname declared in the current scope
 (define declare-var
   (lambda (name state)
-    (withf state
-           $local-vars  (curry stack:update-front (curry var-table:declare-var name)))))
+    (declare-var-with-value name null state)))
 
 ;; State with val assigned to this varname in the most recent scope containing such a name
+; assumes var has already been initialized
 (define assign-var
   (lambda (name val state)
     (set-box! (get-var-box name state) val)
@@ -201,16 +203,20 @@
 ;;;; fun mappings
 
 ;; Is a function with this signature in the current scope (according to stack trace)
+; used by interpreter to decide whether a declaration collides with an existing function
 (define current-scope-has-fun?
   (lambda (name arg-list state)
+    (cond
     ; TODO has-fun && there exists a matching fun in the current scope
     ; if name is dotted
     ; if in top-level -> check global function table
+      [(eq? (current-context state)
+            context:top-level)        (function-table:has-fun? name arg-list (global-funs state))]
     ; if in class body -> check class's function table
     ; check local function table
+      [else                           (function-table:has-fun? name arg-list (stack:peek (local-funs state)))])))
     ; if in instance context -> check class instance function table
     ; if in static context -> check class static function table
-    (function-table:has-fun? name arg-list (stack:peek (local-funs state)))))
 
 ;; Is a function with this signature in scope?
 (define has-fun?
@@ -219,7 +225,9 @@
         (ormap (curry function-table:has-fun? name arg-list)
                (local-funs state)))))
 
-; sweep through local, global, classes
+;; sweep through local, global, classes
+; primarily used by interpreter to display suggestions when reporting errors
+; for calling an undefined function
 (define get-all-funs
   (lambda (name state)
     (foldl append
@@ -234,7 +242,10 @@
       [(ormap (curry function-table:has-fun?
                      name
                      arg-list)
-              (local-funs state))            (function-table:get name arg-list (stack:firstf (curry function-table:has-fun?) (local-funs state)))]
+              (local-funs state))            (function-table:get name
+                                                                 arg-list
+                                                                 (stack:firstf (curry function-table:has-fun? name arg-list)
+                                                                               (local-funs state)))]
       [else                                  (function-table:get name arg-list (global-funs state))])))
 
 ;; State with this fun declared in the current scope
@@ -315,5 +326,26 @@
   
   (define s8 (assign-var 'd 10 (push-new-layer s7)))
   (check-eq? 10 (get-var-value 'd s8))
+
+  ;; local fun lookup
+  (let* ([s1      (push-context context:top-level new-state)]
+         [fmn     'main] [fma     '()]
+         [s2      (declare-fun fmn fma null null s1)]
+         [fm      (get-function fmn fma s2)]
+         [fan     'a] [faa     '()]
+         [fbn     'b] [fba     '()]
+         [s3      (declare-fun fan faa null null (push-context (context:of-fun-call fm) (push-new-layer s2)))]
+         [s4      (declare-fun fbn fba null null s3)]
+         [s5      (pop-context (pop-layer s4))]
+         )
+    (check-true (has-fun? fmn fma s4))
+    (check-true (has-fun? fan faa s4))
+    (check-true (has-fun? fbn fba s4))
+
+    (check-true (not (false? (get-function fan faa s4))))
+
+    (check-false (has-fun? fan faa s5))
+    (check-true (has-fun? fmn fma s5))
+    )
 
 )
