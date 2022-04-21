@@ -3,8 +3,10 @@
 (require "../util/map.rkt"
          "../util/stack.rkt"
          "var-table.rkt"
+         "function.rkt"
          "function-table.rkt"
-         "context.rkt")
+         "context.rkt"
+         "class.rkt")
 
 (provide new-state
          (prefix-out state:
@@ -62,7 +64,6 @@
 (define $local-funs 'local-funs)
 (define local-funs (map:getter $local-funs))
 
-
 ; stack of contexts. ex:
 ; (top-level) ; global var and fun defs
 ; (class-body 'A) ; class A declaration
@@ -105,16 +106,17 @@
            $local-funs  (curry stack:push new-function-table))))
 
 
-;;;; function call stack-trace
+;;;; stack of contexts - mostly fun calls
+(define current-context (compose1 stack:peek context-stack))
 (define with-context
-  (lambda (stack-trace state)
+  (lambda (context-stack state)
     (withv state
-           $context-stack  stack-trace)))
+           $context-stack  context-stack)))
 
 (define push-context
-  (lambda (fun-name state)
+  (lambda (context state)
     (withf state
-           $context-stack  (curry cons fun-name))))
+           $context-stack  (curry cons context))))
 
 (define pop-context
   (lambda (state)
@@ -132,9 +134,9 @@
 (define make-scoper
   (lambda (declare-state)
     (lambda (invoke-state)
-      (of $local-vars  (bottom-layers (local-vars invoke-state) (height (local-vars declare-state)))
-          $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))
-          $context-stack  (context-stack invoke-state)))))
+      (withv invoke-state
+             $local-vars  (bottom-layers (local-vars invoke-state) (height (local-vars declare-state)))
+             $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))))))
 
 ;;;; var mappings
 
@@ -213,8 +215,9 @@
 ;; Is a function with this signature in scope?
 (define has-fun?
   (lambda (name arg-list state)
-    (ormap (curry function-table:has-fun? name arg-list)
-           (local-funs state))))
+    (or (function-table:has-fun? name arg-list (global-funs state))
+        (ormap (curry function-table:has-fun? name arg-list)
+               (local-funs state)))))
 
 ; sweep through local, global, classes
 (define get-all-funs
@@ -227,35 +230,54 @@
 ; local -> instance -> static -> global
 (define get-function
   (lambda (name arg-list state)
-    (first (get-all-funs name state))))
+    (cond
+      [(ormap (curry function-table:has-fun?
+                     name
+                     arg-list)
+              (local-funs state))            (function-table:get name arg-list (stack:firstf (curry function-table:has-fun?) (local-funs state)))]
+      [else                                  (function-table:get name arg-list (global-funs state))])))
 
 ;; State with this fun declared in the current scope
+; only called for top-level or nested functions
+; class' instance and static methods are handled during the creation of the class closure
 (define declare-fun
   (lambda (name params body scoper state)
-    ; if in function, add to local
-    ; if top level, global
-    ; if in class body, add to 
-    (withf state
-           $local-funs  (curry stack:update-front
-                               (curry function-table:declare-fun
-                                      name
-                                      params
-                                      body
-                                      scoper)))))
+    ; if top level, as global (free)
+    (if (eq? context:type:top-level (context:type (current-context state)))
+        (withf state
+               $global-funs  (curry function-table:declare-fun
+                                    name
+                                    params
+                                    body
+                                    scoper
+                                    function:type:free
+                                    null))
+        
+        ; else in function, add to local. inherit type (and class) of current function
+        (withf state
+               $local-funs  (curry stack:update-front
+                                   (curry function-table:declare-fun
+                                          name
+                                          params
+                                          body
+                                          scoper
+                                          (map:get* (current-context state) context:fun-call:$fun function:$type)
+                                          (map:get* (current-context state) context:fun-call:$fun function:$class)))))))
+
 
 ;;;; class
 
 (define has-class?
   (lambda (class-name state)
-    #f))
+    (map:in*? state $classes class-name)))
 
 (define get-class
   (lambda (class-name state)
-    null))
+    (map:get* state $classes class-name)))
 
 (define declare-class
   (lambda (class state)
-    state))
+    (map:put* class state $classes ('classname))))
 
 
 ;; extract portions of a closure
