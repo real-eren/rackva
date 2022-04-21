@@ -5,15 +5,8 @@
          "../interpreter.rkt"
          "../functionParser.rkt"
          "state.rkt"
-         "../interpreter-extension.rkt")
-
-(define format-test-id
-  (lambda (id)
-    (if (eq? id #f)
-        #f
-        (string-append "test ID: " (if (string? id)
-                                       id
-                                       (format "~a" id))))))
+         "../interpreter-extension.rkt"
+         "../util/testing.rkt")
 
 ; interpret a program and return the state
 (define interpret-str:stack-trace
