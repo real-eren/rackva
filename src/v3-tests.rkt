@@ -11,7 +11,7 @@
 (define test-str (make-tester interpret-v3-str))
 
 
-(test-str #:id "single class, no fields, only main method"
+((const 0) test-str #:id "single class, no fields, only main method"
           10
           #:args (list "A") "
 class A {
