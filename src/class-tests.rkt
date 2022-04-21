@@ -1,17 +1,10 @@
 #lang racket
 (require rackunit
-         "interpreter-extension.rkt")
+         "interpreter-extension.rkt"
+         "util/testing.rkt")
 
 ; white space / newlines do not affect the parser,
 ; but are included for readability
-
-(define format-test-id
-  (lambda (id)
-    (if (eq? id #f)
-        #f
-        (string-append "test ID: " (if (string? id)
-                                       id
-                                       (format "~a" id))))))
 
 
 (define test-file
