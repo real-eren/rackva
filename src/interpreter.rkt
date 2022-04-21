@@ -7,7 +7,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (require "conts.rkt"
+         "state/context.rkt"
          "state/state.rkt"
+         "state/function.rkt"
          "state/function-table.rkt"
          "util/map.rkt"
          "util/predicates.rkt"
@@ -43,11 +45,11 @@
 (define interpret-parse-tree-v3
   (lambda (parse-tree entry-point return throw)
     (Mstate-stmt-list parse-tree
-                      (state:push-context 'top-level new-state)
+                      (state:push-context context:top-level new-state)
                       (conts-of
                        ; lookup entry-point class (name), do Mstate-main w/ popped stack-trace and forwarded return & throw
                        #:next (lambda (s)
-                                (Mstate-main (state:pop-context s)
+                                (Mstate-main s
                                              return
                                              throw
                                              #:class (string->symbol entry-point)))
@@ -58,10 +60,10 @@
 (define interpret-parse-tree-v2
   (lambda (parse-tree return throw)
     (Mstate-stmt-list parse-tree
-                      (state:push-context 'top-level new-state)
+                      (state:push-context context:top-level new-state)
                       (conts-of ; only next and throw are actually reachable
                        #:return (lambda (v s) (myerror "return as top-level statement" s))
-                       #:next (lambda (s) (Mstate-main (state:pop-context s) return throw))
+                       #:next (lambda (s) (Mstate-main s return throw))
                        #:throw throw
                        #:break (lambda (s) (myerror "break as top-level statement" s))
                        #:continue (lambda (s) (myerror "continue as top-level statement" s)))
@@ -169,17 +171,12 @@
   (lambda (class-name parent body state conts)
     (if (or (null? parent)
             (state:has-class? parent))
-        (state:declare-class (create-class class-name
-                                           parent
-                                           body
-                                           state
-                                           conts)
-                             state)
+        (eval-class-body body state conts)
         (myerror (format "parent class ~a has not been declared yet"
                          parent)
                  state))))
 
-(define create-class
+(define eval-class-body
   (lambda (class-name parent body state conts)
     (class-body-stage-1 body state)
     ; first
@@ -333,6 +330,7 @@
 (define decl-fun-params third)
 (define decl-fun-body fourth)
 
+; called for top-level and nested fun declarations
 (define Mstate-fun-decl
   (lambda (statement state conts)
     (Mstate-fun-decl-impl (decl-fun-name statement) 
@@ -668,7 +666,7 @@
                       (get-environment fun-name 
                                        fun-closure
                                        fun-inputs
-                                       (state:push-context fun-name state)
+                                       (state:push-context (context:of-fun-call fun-closure) state)
                                        conts)
                       conts)))
 
@@ -927,7 +925,7 @@
   (lambda (state)
     (if (empty? (state:context-stack state))
         ""
-        (string-join (map symbol->string (reverse (state:context-stack state)))
+        (string-join (map (curry format "~a") (reverse (state:context-stack state)))
                      " -> "
                      #:before-first "stack trace: "))))
 ;; for user-facing errors
