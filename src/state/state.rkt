@@ -83,6 +83,7 @@
 (define withv map:withv)
 (define withf map:withf)
 (define of map:of)
+(define update* map:update*)
 
 (define new-state (of $local-vars   (stack:of new-var-table)
                       $local-funs   (stack:of new-function-table)
@@ -120,8 +121,7 @@
 
 (define pop-context
   (lambda (state)
-    (withf state
-           $context-stack  cdr)))
+    (update* cdr state $context-stack)))
 
 
 ;; Given a state, creates a function that takes a state
@@ -252,28 +252,68 @@
 ; only called for top-level or nested functions
 ; class' instance and static methods are handled during the creation of the class closure
 (define declare-fun
-  (lambda (name params body scoper state)
-    ; if top level, as global (free)
-    (if (eq? context:type:top-level (context:type (current-context state)))
-        (withf state
-               $global-funs  (curry function-table:declare-fun
-                                    name
-                                    params
-                                    body
-                                    scoper
-                                    function:type:free
-                                    null))
-        
-        ; else in function, add to local. inherit type (and class) of current function
-        (withf state
-               $local-funs  (curry stack:update-front
-                                   (curry function-table:declare-fun
-                                          name
-                                          params
-                                          body
-                                          scoper
-                                          (map:get* (current-context state) context:fun-call:$fun function:$type)
-                                          (map:get* (current-context state) context:fun-call:$fun function:$class)))))))
+  (lambda (name params body state)
+    (let* ([ctxt       (current-context state)]
+           [ctxt-type  (context:type ctxt)])
+      (cond
+        [(eq? ctxt-type context:type:top-level)     (declare-fun-global name params body state)]
+        [(eq? ctxt-type context:type:fun-call)      (declare-fun-local name params body ctxt state)]
+        [else                                       (declare-method name params body ctxt state)]))))
+
+; global case of declare-fun
+(define declare-fun-global
+  (lambda (name params body state)
+    (withf state
+           $global-funs  (curry function-table:declare-fun
+                                name
+                                params
+                                body
+                                (make-scoper state)
+                                function:scope:free
+                                null))))
+
+; local case of declare-fun
+(define declare-fun-local
+  (lambda (name params body context state)
+    (withf state
+           $local-funs  (curry stack:update-front
+                               (curry function-table:declare-fun
+                                      name
+                                      params
+                                      body
+                                      (make-scoper state)
+                                      (function:scope (context:fun-call:fun context))
+                                      (function:class (context:fun-call:fun context)))))))
+
+; method case of declare-fun
+(define declare-method
+  (lambda (name params body context state)
+    (declare-method-impl name
+                         params
+                         body
+                         (context:class-def-member:scope context)
+                         (method-scope-to-table-key (context:class-def-member:scope context))
+                         (context:class-def:name (current-context (pop-context state)))
+                         state)))
+
+(define method-scope-to-table-key
+  (lambda (fun-scope)
+    (cond
+      [(eq? function:scope:static fun-scope)    class:$s-methods]
+      [(eq? function:scope:instance fun-scope)  class:$i-methods]
+      [(eq? function:scope:abstract fun-scope)  class:$a-methods])))
+
+(define declare-method-impl
+  (lambda (name params body fun-scope table-key class state)
+    (update* (curry function-table:declare-fun
+                    name
+                    params
+                    body
+                    (make-scoper state)
+                    fun-scope
+                    class)
+             state $classes class table-key)))
+
 
 
 ;;;; class
@@ -297,6 +337,7 @@
 (define function:scoper (map:getter function:$scoper))
 
 
+;;;;;;;; Unit Tests
 (module+ test
   (require rackunit)
   (define s1 new-state)
@@ -330,12 +371,12 @@
   ;; local fun lookup
   (let* ([s1      (push-context context:top-level new-state)]
          [fmn     'main] [fma     '()]
-         [s2      (declare-fun fmn fma null null s1)]
+         [s2      (declare-fun fmn fma null s1)]
          [fm      (get-function fmn fma s2)]
          [fan     'a] [faa     '()]
          [fbn     'b] [fba     '()]
-         [s3      (declare-fun fan faa null null (push-context (context:of-fun-call fm) (push-new-layer s2)))]
-         [s4      (declare-fun fbn fba null null s3)]
+         [s3      (declare-fun fan faa null (push-context (context:of-fun-call fm) (push-new-layer s2)))]
+         [s4      (declare-fun fbn fba null s3)]
          [s5      (pop-context (pop-layer s4))]
          )
     (check-true (has-fun? fmn fma s4))
