@@ -10,7 +10,6 @@
          "state/context.rkt"
          "state/state.rkt"
          "state/function.rkt"
-         "state/function-table.rkt"
          "util/map.rkt"
          "util/predicates.rkt"
          "functionParser.rkt"
@@ -802,9 +801,9 @@
 (define op-apply
   (lambda (op val-list)
     (cond
-      [(eq? 1 (length val-list))                  (op (first val-list))]
-      [(eq? 2 (length val-list))                  (op (first val-list) (second val-list))]
-      [else                                       (error op val-list)])))
+      [(eq? 1 (length val-list))       (op (first val-list))]
+      [(eq? 2 (length val-list))       (op (first val-list) (second val-list))]
+      [else                            (error op val-list)])))
 
 
 
@@ -912,9 +911,10 @@
 ;; assuming the atom is an op-symbol, returns the associated function
 (define op-of-symbol
   (lambda (op-symbol)
-    (if (map:contains? op-symbol arithmetic-op-table)
-        (map:get op-symbol arithmetic-op-table)
-        (map:get op-symbol boolean-op-table))))
+    (cond
+      [(map:get op-symbol arithmetic-op-table)]
+      [(map:get op-symbol boolean-op-table)]
+      [#f])))
 
 
 ;;;;;;; Custom error functions
