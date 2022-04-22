@@ -15,14 +15,15 @@
 ; what class this function is defined in, if applicable.
 ; null or absent if type == free
 (define $class  'class)
+(define class (map:getter $class))
 ;; what kind of function is this
-(define $type   'type)
-(define type (map:getter $type))
+(define $scope   'scope)
+(define scope (map:getter $scope))
 ; constants for Static | Instance | Free | Abstract
-(define type:static   'static)
-(define type:instance 'instance)
-(define type:free     'free)
-(define type:abstract 'abstract)
+(define scope:static   'static)
+(define scope:instance 'instance)
+(define scope:free     'free)
+(define scope:abstract 'abstract)
 
 
 (define of
@@ -30,21 +31,21 @@
            #:params params
            #:body body
            #:scoper scoper
-           #:type type
+           #:scope scope
            #:class class)
     (map:of
      $name    name
      $params  params
      $body    body
      $scoper  scoper
-     $type    type
+     $scope    scope
      $class   class)))
 
 (define of-abstract
   (lambda (name params)
-    (of $name  name
-        $params  params
-        $type  type:abstract)))
+    (map:of $name  name
+            $params  params
+            $scope  scope:abstract)))
 
 ;; returns the number of formal parameters in a function
 (define num-formal-params
