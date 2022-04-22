@@ -123,6 +123,16 @@
   (lambda (state)
     (update* cdr state $context-stack)))
 
+;; T/F whether the current context is of type `top-level`
+(define top-level-context?
+  (lambda (state)
+    (eq? context:type:top-level (context:type (current-context state)))))
+
+;; Function Closure / F whether the current context is of type `fun-call`
+(define fun-call-context?
+  (lambda (state)
+    (context:fun-call:fun (current-context state))))
+
 
 ;; Given a state, creates a function that takes a state
 ; and returns the portion in-scope according to the original state
@@ -170,12 +180,14 @@
 ; check if initialized first
 (define get-var-box
   (lambda (name state)
+    (cond
+      [(ormap (curry var-table:var-box name) (local-vars state))]
+      [else  (error "failed to check if var initialized before getting" name)])))
     ; check local,
     ; if instance context, check this' fields
     ; if class context, check class' fields
     ; if dotted
     ; check global,
-    (var-table:var-box name (stack:firstf (curry var-table:var-declared? name) (local-vars state)))))
 
 ;; get the current value of this var
 (define get-var-value
@@ -207,16 +219,16 @@
 (define current-scope-has-fun?
   (lambda (name arg-list state)
     (cond
-    ; TODO has-fun && there exists a matching fun in the current scope
-    ; if name is dotted
-    ; if in top-level -> check global function table
+      ; TODO has-fun && there exists a matching fun in the current scope
+      ; if name is dotted
+      ; if in top-level -> check global function table
       [(eq? (current-context state)
             context:top-level)        (function-table:has-fun? name arg-list (global-funs state))]
-    ; if in class body -> check class's function table
-    ; check local function table
+      ; if in class body -> check class's function table
+      ; check local function table
       [else                           (function-table:has-fun? name arg-list (stack:peek (local-funs state)))])))
-    ; if in instance context -> check class instance function table
-    ; if in static context -> check class static function table
+; if in instance context -> check class instance function table
+; if in static context -> check class static function table
 
 ;; Is a function with this signature in scope?
 (define has-fun?
@@ -239,26 +251,32 @@
 (define get-function
   (lambda (name arg-list state)
     (cond
-      [(ormap (curry function-table:has-fun?
-                     name
-                     arg-list)
-              (local-funs state))            (function-table:get name
-                                                                 arg-list
-                                                                 (stack:firstf (curry function-table:has-fun? name arg-list)
-                                                                               (local-funs state)))]
-      [else                                  (function-table:get name arg-list (global-funs state))])))
+      [(ormap (curry function-table:get name arg-list) (local-funs state))]
+      [(function-table:get name arg-list (global-funs state))]
+      [else #f])))
 
 ;; State with this fun declared in the current scope
 ; only called for top-level or nested functions
-; class' instance and static methods are handled during the creation of the class closure
 (define declare-fun
   (lambda (name params body state)
-    (let* ([ctxt       (current-context state)]
-           [ctxt-type  (context:type ctxt)])
+    (let* ([ctxt       (current-context state)])
       (cond
-        [(eq? ctxt-type context:type:top-level)     (declare-fun-global name params body state)]
-        [(eq? ctxt-type context:type:fun-call)      (declare-fun-local name params body ctxt state)]
-        [else                                       (declare-method name params body ctxt state)]))))
+        [(top-level-context? state)      (declare-fun-global name
+                                                             params
+                                                             body
+                                                             state)]
+        [(fun-call-context? state)  =>   (lambda (fc-fun)
+                                           (declare-fun-local name
+                                                              params
+                                                              body
+                                                              (function:scope fc-fun)
+                                                              (function:class fc-fun)
+                                                              state))]
+        [else                            (declare-method name
+                                                         params
+                                                         body
+                                                         ctxt
+                                                         state)]))))
 
 ; global case of declare-fun
 (define declare-fun-global
@@ -274,7 +292,7 @@
 
 ; local case of declare-fun
 (define declare-fun-local
-  (lambda (name params body context state)
+  (lambda (name params body scope class state)
     (withf state
            $local-funs  (curry stack:update-front
                                (curry function-table:declare-fun
@@ -282,8 +300,8 @@
                                       params
                                       body
                                       (make-scoper state)
-                                      (function:scope (context:fun-call:fun context))
-                                      (function:class (context:fun-call:fun context)))))))
+                                      scope
+                                      class)))))
 
 ; method case of declare-fun
 (define declare-method
@@ -389,4 +407,4 @@
     (check-true (has-fun? fmn fma s5))
     )
 
-)
+  )
