@@ -16,8 +16,10 @@
 (define new-var-table map:empty)
 
 ; check if initialized first
+; #F if absent
 (define var-box map:get)
 ; check if initialized first
+; error if absent
 (define var-value (compose1 unbox var-box))
 
 (define var-declared? map:contains?)
