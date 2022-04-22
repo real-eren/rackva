@@ -7,7 +7,6 @@
 ; but are included for readability
 
 
-(define test-file (make-tester interpret-v1-file))
 (define test-str (make-tester interpret-v1-str))
 
 ; ; Literal Tests
