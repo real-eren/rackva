@@ -349,7 +349,6 @@
         ((next conts) (state:declare-fun fun-name 
                                          fun-params
                                          fun-body
-                                         (state:make-scoper state)
                                          state)))))
 
 
