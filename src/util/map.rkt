@@ -55,10 +55,10 @@
            map)))
 
 ;; returns, if present, the value of the entry in the map-list with the given key
-;; else null
+;; else #f
 (define get
   (lambda (key map)
-    (get-default key null map)))
+    (get-default key #f map)))
 
 ;; returns value of first encountered entry with key,
 ;; returns default if no entries found
@@ -117,7 +117,7 @@
 
 ;;;; deep accessor functions
 ;; keys are applied left-to-right
-;; invalid queries w/ get return null
+;; invalid queries w/ get return #f
 ;; syntax : (get* map key1 key2 key3 ...)
 ;;          (put* val map key1 key2 key3 ...)
 ;;          (update* update-fun map key1 key2 key3)
@@ -125,14 +125,14 @@
   (lambda (map . keys)
     (if (null? keys)
         map
-        (apply get* (get (car keys) map) (cdr keys)))))
+        (apply get* (get-default (car keys) null map) (cdr keys)))))
 
 ;; if path DNE, creates it
 (define put*
   (lambda (value map key . keys)
     (if (null? keys)
         (put key value map)
-        (put key (apply put* value (get key map) keys) map))))
+        (put key (apply put* value (get-default key null map) keys) map))))
 
 ;; does the map contain this sequence of keys
 (define in*?
