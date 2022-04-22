@@ -1,0 +1,12 @@
+var x = 0;
+while(x < 12) {
+  try{
+    x = x + 10;
+    break;
+  }catch(e) {
+   
+  } finally {
+     x = x+1;
+  }
+}
+return x;
