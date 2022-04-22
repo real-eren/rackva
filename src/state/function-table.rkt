@@ -34,13 +34,13 @@
 
 
 (define declare-fun
-  (lambda (name params body scoper type class table)
+  (lambda (name params body scoper scope class table)
     (map:insert name
                 (function:of #:name name
                              #:params params
                              #:body body
                              #:scoper scoper
-                             #:type type
+                             #:scope scope
                              #:class class)
                 table)))
 
