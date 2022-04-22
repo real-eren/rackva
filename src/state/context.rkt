@@ -1,7 +1,8 @@
 #lang racket
 (require "../util/map.rkt")
 
-(provide (prefix-out context: (all-defined-out)))
+(provide (prefix-out context: (except-out (all-defined-out)
+                                          of)))
 
 ;;;; Context entered during execution of a program
 ;; A context is a map of information about the current context of the interpreter
@@ -43,6 +44,7 @@
 
 ; what kind of member is this. method | field ; may not need this
 (define class-def-member:$kind 'member-kind)
+(define class-def-member:kind (map:getter class-def-member:$kind))
 (define class-def-member:kind:method 'method)
 (define class-def-member:kind:field 'field)
 
@@ -62,6 +64,22 @@
     (of $type  type:class-def-member
         class-def-member:$scope  scope
         class-def-member:$kind  kind)))
+
+
+(define static-field-decl (of-class-member-def class-def-member:scope:static
+                                               class-def-member:kind:field))
+
+(define instance-field-decl (of-class-member-def class-def-member:scope:instance
+                                                 class-def-member:kind:field))
+
+(define static-method-decl (of-class-member-def class-def-member:scope:static
+                                                class-def-member:kind:method))
+
+(define instance-method-decl (of-class-member-def class-def-member:scope:instance
+                                                  class-def-member:kind:method))
+
+(define abstract-method-decl (of-class-member-def class-def-member:scope:abstract
+                                                  class-def-member:kind:method))
 
 (define top-level (of $type  type:top-level))
 
