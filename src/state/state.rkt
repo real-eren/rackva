@@ -89,6 +89,7 @@
 (define withf map:withf)
 (define of map:of)
 (define update* map:update*) ; nested map updated
+(define put* map:put*)
 
 (define new-state (of $local-vars   null
                       $local-funs   null
@@ -361,6 +362,16 @@
                     class)
              state $classes class class:$methods)))
 
+;; add an init function to a class
+; assumption: called exactly once during class-body
+(define declare-init
+  (lambda (body class state)
+    (put* (function:of 'init
+                       '()
+                       body
+                       function:scope:init
+                       class)
+          state $classes class class:$init)))
 
 ;;;; class
 
