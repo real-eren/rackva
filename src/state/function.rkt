@@ -19,11 +19,12 @@
 ;; what kind of function is this
 (define $scope   'scope)
 (define scope (map:getter $scope))
-; constants for Static | Instance | Free | Abstract
+; constants for Static | Instance | Free | Abstract | Init
 (define scope:static   'static)
 (define scope:instance 'instance)
 (define scope:free     'free)
 (define scope:abstract 'abstract)
+(define scope:init     'init)
 
 
 (define of
