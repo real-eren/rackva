@@ -43,7 +43,7 @@ function main() {
   return x;
 }")
 
-(test-str #:id "declare w/ literal, declare w/ reference to prior var, return sum"
+(test-str #:id "declare w/ literal, declare w/ reference to prior var, return product"
           220 "
 function main() {
   var x = 10;
@@ -655,5 +655,24 @@ function main() {
   function nested() { return a; }
   var a = 5;
   return nested();
+}")
+
+; ; Function Overloading
+
+(test-str #:id "two functions with same name, different # params"
+          1111
+          "
+function foo() {
+  return 1;
+}
+function foo(x) {
+  return x;
+}
+function foo(x, y) {
+  return x + y;
+}
+
+function main() {
+  return foo() + foo(10) + foo(100, 1000);
 }")
 
