@@ -12,8 +12,7 @@
          "state/function.rkt"
          "util/map.rkt"
          "util/predicates.rkt"
-         "functionParser.rkt"
-         ;"classParser.rkt"
+         "classParser.rkt"
          )
 
 (provide interpret
@@ -51,8 +50,7 @@
                                 (Mstate-main s
                                              return
                                              throw
-                                             #:class (string->symbol entry-point)))
-                       )
+                                             #:class (string->symbol entry-point))))
                       #:legal-construct? is-class-decl?)))
 
 ;;interprets parse-trees produced by functionParser.rkt
@@ -61,11 +59,8 @@
     (Mstate-stmt-list parse-tree
                       (state:push-context context:top-level new-state)
                       (conts-of ; only next and throw are actually reachable
-                       #:return (lambda (v s) (myerror "return as top-level statement" s))
                        #:next (lambda (s) (Mstate-main s return throw))
-                       #:throw throw
-                       #:break (lambda (s) (myerror "break as top-level statement" s))
-                       #:continue (lambda (s) (myerror "continue as top-level statement" s)))
+                       #:throw throw)
                       #:legal-construct? (join|| is-var-decl? is-assign? is-fun-decl?))))
 
 ;; legacy, for testing
@@ -168,6 +163,9 @@
 
 (define Mstate-class-decl-impl
   (lambda (class-name parent body state conts)
+    ; do method decls. instance (function) | static (static-function) | abstract (abstract-function)
+    ; collect instance field decls into init method (fun body)
+    ; defer static field decls
     (if (or (null? parent)
             (state:has-class? parent))
         (eval-class-body body state conts)
@@ -669,7 +667,7 @@
                       conts)))
 
 
-;; Takes in the function name, the function closure, the input expression
+;; Takes in the function name, the function closure, the input expression list
 ;; the state, the conts
 (define get-environment
   (lambda (fun-name fun-closure inputs state conts)
@@ -724,6 +722,7 @@
                                                  state)])))
 
 ;; Binds the names of the formal-params to boxes representing the actual parameters
+; before calling this, push a layer to state
 (define bind-boxed-params
   (lambda (formal-params box-list state)
     (foldl state:declare-var-with-box
