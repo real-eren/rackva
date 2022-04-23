@@ -55,6 +55,14 @@ function main() {
   return f(1);
 }")
 
+(error-str #:id "Passing an undeclared var to a reference parameter"
+           #:catch #t
+           "
+function f(&a) { a = a + 1; }
+function main() {
+  return f(x);
+}")
+
 (error-str #:id "Functions inside functions accessing out of scope variables."
            #:catch #t
            "

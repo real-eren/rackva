@@ -715,7 +715,7 @@
                                                                  conts
                                                                  (lambda (p b s)
                                                                    (evaluation (cons (second formal-params) p)
-                                                                               (cons (state:get-var-box (car actual-params) s) b)
+                                                                               (cons (read-var-box (car actual-params) s) b)
                                                                                s)))]
       [else                             (myerror (format "Function expects a reference for `~a`"
                                                          (second formal-params))
@@ -745,12 +745,12 @@
       [(number? token)            token]
       [(eq? 'true token)          #t]
       [(eq? 'false token)         #f]
-      [(symbol? token)            (read-var token state)]
+      [(symbol? token)            (read-var-value token state)]
       [else                       (error "not a bool/int literal or symbol: " token)])))
 
-;; retrieves value of a var from state
+;; retrieves box/value of a var from state
 ;; throws appropriate errors if undeclared or uninitialized
-(define read-var
+(define read-var-box
   (lambda (var-symbol state)
     (cond
       [(not (state:var-declared? var-symbol state))       (myerror (format "referenced `~a` before declaring it."
@@ -759,7 +759,11 @@
       [(not (state:var-initialized? var-symbol state))    (myerror (format "accessed `~a` before initializing it."
                                                                            var-symbol)
                                                                    state)]
-      [else                                               (state:get-var-value var-symbol state)])))
+      [else                                               (state:get-var-box var-symbol state)])))
+; assumes read-var-box validates the lookups
+(define read-var-value
+  (lambda (var-symbol state)
+    (unbox (read-var-box var-symbol state))))
 
 
 ;; takes an expression representing one with an operator
