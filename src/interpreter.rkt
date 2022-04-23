@@ -68,7 +68,7 @@
 (define interpret-parse-tree-v1
   (lambda (simple-parse-tree return throw)
     (Mstate-stmt-list simple-parse-tree
-                      new-state
+                      (state:push-context context:top-level new-state)
                       (conts-of
                        #:return return
                        #:next (lambda (s) (raise-user-error "reached end of program without return"))

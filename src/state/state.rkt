@@ -51,6 +51,9 @@
 ;; context
 ;; classes
 
+; general assumptions:
+; 1) context stack is non-empty before state is used
+
 
 (define $global-vars 'global-vars)
 (define global-vars (map:getter $global-vars))
@@ -77,22 +80,25 @@
 
 ;; ex:
 ; (withv old-state
-;        $local-funs  new-local-funs-table)
+;        $local-funs   new-local-funs-table)
+;        $global-funs  new-global-funs-table)
 ; (withf old-state
 ;        $global-vars  (curry function-table:declare function name params body scoper))
 (define withv map:withv)
 (define withf map:withf)
 (define of map:of)
-(define update* map:update*)
+(define update* map:update*) ; nested map updated
 
-(define new-state (of $local-vars   (stack:of new-var-table)
-                      $local-funs   (stack:of new-function-table)
+(define new-state (of $local-vars   null
+                      $local-funs   null
                       $global-vars  new-var-table
                       $global-funs  new-function-table
+                      $classes      map:empty
                       $context-stack  null))
 
 
 ;; State with the top scope removed from the stack and function table
+; assumption: non-empty stacks for local var and fun tables
 (define pop-layer
   (lambda (state)
     (withf state
@@ -107,26 +113,41 @@
            $local-funs  (curry stack:push new-function-table))))
 
 
-;;;; stack of contexts - mostly fun calls
-(define current-context (compose1 stack:peek context-stack))
+;;;; stack of contexts - top-level, fun-call, constructors, class-defs
 (define with-context
   (lambda (context-stack state)
     (withv state
            $context-stack  context-stack)))
 
+; assumption: existant & non-empty entry for context-stack
+(define current-context (compose1 stack:peek context-stack))
+
+; assumption: pre-existing entry for context-stack
 (define push-context
   (lambda (context state)
     (withf state
-           $context-stack  (curry cons context))))
+           $context-stack  (curry stack:push context))))
 
+; assumption: non-empty context-stack
 (define pop-context
   (lambda (state)
-    (update* cdr state $context-stack)))
+    (update* stack:pop
+             state $context-stack)))
 
 ;; T/F whether the current context is of type `top-level`
+; assumption: non-empty context-stack
 (define top-level-context?
   (lambda (state)
     (eq? context:type:top-level (context:type (current-context state)))))
+
+;; Whether declarations should go to the local tables
+; blocks, fun-calls
+; Assumptions:
+; 1) local-var-tables stack is empty when not in a local context
+; 2) a layer is always pushed when calling a function, entering a block
+(define local-context?
+  (lambda (state)
+    (< 0 (height (local-vars state)))))
 
 ;; Function Closure / F whether the current context is of type `fun-call`
 (define fun-call-context?
@@ -141,6 +162,11 @@
 (define bottom-layers take-right) ; get the bottom/last layers of a function table
 (define height length) ; count the number of layers in a function table
 
+; assumptions:
+; 1) invoke-state has at least as many layers as declare-state
+; 2) as many local layers as are in scope during declare-state belong in scope
+; 3) all of invoke state's classes and global tables belong in scope
+; why height and not copy? to capture bindings declared later in the same layer
 (define make-scoper
   (lambda (declare-state)
     (lambda (invoke-state)
@@ -155,8 +181,12 @@
 ; in function body -> local
 (define declare-var-with-box
   (lambda (name box state)
-    (withf state
-           $local-vars  (curry stack:update-front (curry var-table:declare-var-with-box name box)))))
+    (cond
+      [(local-context? state)    (withf state
+                                        $local-vars  (curry stack:update-front (curry var-table:declare-var-with-box name box)))]
+      [(top-level-context? state) (withf state
+                                         $global-vars (curry var-table:declare-var-with-box name box))]
+      )))
 
 ;; State with this varname declared in the current scope and initialized to this values
 (define declare-var-with-value
@@ -169,7 +199,9 @@
     (declare-var-with-value name null state)))
 
 ;; State with val assigned to this varname in the most recent scope containing such a name
-; assumes var has already been initialized
+; Assumptions:
+; 1) var has already been initialized
+; 2) get-var-box returns the box of the appropriate binding
 (define assign-var
   (lambda (name val state)
     (set-box! (get-var-box name state) val)
@@ -182,6 +214,7 @@
   (lambda (name state)
     (cond
       [(ormap (curry var-table:var-box name) (local-vars state))]
+      [(var-table:var-box name (global-vars state))]
       [else  (error "failed to check if var initialized before getting" name)])))
     ; check local,
     ; if instance context, check this' fields
@@ -190,6 +223,7 @@
     ; check global,
 
 ;; get the current value of this var
+; assumption: get-var-box works correctly
 (define get-var-value
   (lambda (name state)
     (unbox (get-var-box name state))))
@@ -198,15 +232,21 @@
 ;; Is a variable with this name in scope?
 (define var-declared?
   (lambda (name state)
-    (stack:ormap (curry var-table:var-declared? name) (local-vars state))))
+    (or (stack:ormap (curry var-table:var-declared? name) (local-vars state))
+        (var-table:var-declared? name (global-vars state)))))
 
 ;; Is a variable with this name in scope in the current scope?
 (define var-declared-current-scope?
   (lambda (name state)
-    (var-table:var-declared? name (stack:peek (local-vars state)))))
+    (cond
+      [(local-context? state)     (var-table:var-declared? name (stack:peek (local-vars state)))]
+      [(top-level-context? state) (var-table:var-declared? name (global-vars state))])))
 
 ;; Is the in-scope variable with this name and initialized?
 ; check if declared first
+; assumptions:
+; 1) uninitialized variables store `boxed null`
+; 2) get-var-value returns the appropriate variable
 (define var-initialized?
   (lambda (name state)
     (not (null? (get-var-value name state)))))
@@ -230,7 +270,7 @@
 ; if in instance context -> check class instance function table
 ; if in static context -> check class static function table
 
-;; Is a function with this signature in scope?
+;; Is a function with this signature in scope (reachable)?
 (define has-fun?
   (lambda (name arg-list state)
     (or (function-table:has-fun? name arg-list (global-funs state))
@@ -260,10 +300,7 @@
 (define declare-fun
   (lambda (name params body state)
     (cond
-      [(top-level-context? state)      (declare-fun-global name
-                                                           params
-                                                           body
-                                                           state)]
+      ; special case of local - inherit `type` of enclosing function
       [(fun-call-context? state)  =>   (lambda (fc-fun)
                                          (declare-fun-local name
                                                             params
@@ -271,6 +308,20 @@
                                                             (function:scope fc-fun)
                                                             (function:class fc-fun)
                                                             state))]
+      ; general case of local - if not in fun-call, assume free
+      ; ex: in top-level block statement. free but not global
+      [(local-context? state)          (declare-fun-local name
+                                                          params
+                                                          body
+                                                          function:scope:free
+                                                          null
+                                                          state)]
+      ; not in funcall or class body, not in block etc
+      [(top-level-context? state)      (declare-fun-global name
+                                                           params
+                                                           body
+                                                           state)]
+      ; todo, replace with separate declare-method function
       [else                            (declare-method name
                                                        params
                                                        body
@@ -347,35 +398,36 @@
 
 
 ;;;;;;;; Unit Tests
+;; more thorough coverage is currently handled by the functional-tests (v1-v3)
 (module+ test
   (require rackunit)
-  (define s1 new-state)
+  (define s1 (push-new-layer (push-context context:top-level new-state)))
   (define s2 (declare-var 'a s1))
   (check-true (var-declared? 'a s2))
   (check-false (var-initialized? 'a s2))
   
   (define s3 (assign-var 'a 3 s2))
   (check-true (var-initialized? 'a s3))
-  (check-eq? 3 (get-var-value 'a s3))
+  (check-eq? (get-var-value 'a s3) 3)
   
   (define s4 (push-new-layer s3))
   (check-false (var-declared-current-scope? 'a s4))
-  (check-eq? 3 (get-var-value 'a s4))
+  (check-eq? (get-var-value 'a s4) 3)
   (define s5 (declare-var-with-value 'a 7 s4))
-  (check-eq? 7 (get-var-value 'a s5))
+  (check-eq? (get-var-value 'a s5) 7)
   (define s6 (pop-layer s5))
-  (check-eq? 3 (get-var-value 'a s6))
+  (check-eq? (get-var-value 'a s6) 3)
 
   (define s7 (declare-var-with-box 'd (box 5)
                                    (declare-var 'c
                                                 (declare-var-with-value 'b #T
                                                                         (push-new-layer s6)))))
-  (check-eq? 5 (get-var-value 'd s7))
+  (check-eq? (get-var-value 'd s7) 5)
   (check-false (var-initialized? 'c s7))
-  (check-eq? 5 (get-var-value 'd s7))
+  (check-eq? (get-var-value 'd s7) 5)
   
   (define s8 (assign-var 'd 10 (push-new-layer s7)))
-  (check-eq? 10 (get-var-value 'd s8))
+  (check-eq? (get-var-value 'd s8) 10)
 
   ;; local fun lookup
   (let* ([s1      (push-context context:top-level new-state)]
