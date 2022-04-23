@@ -377,7 +377,7 @@
   (lambda (class-name parent-name state)
     (map:put* (class:of #:name class-name
                         #:parent parent-name)
-              state $classes ('classname))))
+              state $classes class-name)))
 
 
 ;; extract portions of a closure
