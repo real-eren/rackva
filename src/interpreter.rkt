@@ -7,7 +7,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (require "conts.rkt"
-         "state/context.rkt"
          "state/state.rkt"
          "state/function.rkt"
          "util/map.rkt"
@@ -43,7 +42,7 @@
 (define interpret-parse-tree-v3
   (lambda (parse-tree entry-point return throw)
     (Mstate-stmt-list parse-tree
-                      (state:push-context context:top-level new-state)
+                      (state:push-top-level-context new-state)
                       (conts-of
                        ; lookup entry-point class (name), do Mstate-main w/ popped stack-trace and forwarded return & throw
                        #:next (lambda (s)
@@ -57,7 +56,7 @@
 (define interpret-parse-tree-v2
   (lambda (parse-tree return throw)
     (Mstate-stmt-list parse-tree
-                      (state:push-context context:top-level new-state)
+                      (state:push-top-level-context new-state)
                       (conts-of ; only next and throw are actually reachable
                        #:next (lambda (s) (Mstate-main s return throw))
                        #:throw throw)
@@ -68,7 +67,7 @@
 (define interpret-parse-tree-v1
   (lambda (simple-parse-tree return throw)
     (Mstate-stmt-list simple-parse-tree
-                      (state:push-context context:top-level new-state)
+                      (state:push-top-level-context new-state)
                       (conts-of
                        #:return return
                        #:next (lambda (s) (raise-user-error "reached end of program without return"))
@@ -724,7 +723,7 @@
                       (get-environment fun-name 
                                        fun-closure
                                        fun-inputs
-                                       (state:push-context (context:of-fun-call fun-closure) state)
+                                       (state:push-fun-call-context fun-closure state)
                                        conts)
                       conts)))
 

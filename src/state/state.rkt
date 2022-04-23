@@ -15,7 +15,9 @@
                                   
                                   context-stack
                                   with-context
-                                  push-context
+                                  push-top-level-context
+                                  push-fun-call-context
+                                  push-class-def-context
                                   pop-context
                                   
                                   make-scoper
@@ -116,6 +118,7 @@
 
 
 ;;;; stack of contexts - top-level, fun-call, constructors, class-defs
+
 (define with-context
   (lambda (context-stack state)
     (withv state
@@ -125,6 +128,18 @@
 (define current-context (compose1 stack:peek context-stack))
 
 ; assumption: pre-existing entry for context-stack
+(define push-top-level-context
+  (lambda (state)
+    (push-context context:top-level state)))
+
+(define push-class-def-context
+  (lambda (class-name state)
+    (push-context (context:of-class-def) state)))
+
+(define push-fun-call-context
+  (lambda (fun state)
+    (push-context (context:of-fun-call fun) state)))
+
 (define push-context
   (lambda (context state)
     (withf state
@@ -401,7 +416,7 @@
 ;; more thorough coverage is currently handled by the functional-tests (v1-v3)
 (module+ test
   (require rackunit)
-  (define s1 (push-new-layer (push-context context:top-level new-state)))
+  (define s1 (push-new-layer (push-top-level-context new-state)))
   (define s2 (declare-var 'a s1))
   (check-true (var-declared? 'a s2))
   (check-false (var-initialized? 'a s2))
@@ -430,7 +445,7 @@
   (check-eq? (get-var-value 'd s8) 10)
 
   ;; local fun lookup
-  (let* ([s1      (push-context context:top-level new-state)]
+  (let* ([s1      (push-top-level-context new-state)]
          [fmn     'main] [fma     '()]
          [s2      (declare-fun fmn fma null s1)]
          [fm      (get-function fmn fma s2)]
