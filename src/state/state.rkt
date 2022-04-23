@@ -34,6 +34,7 @@
                                   has-fun?
                                   get-function
                                   declare-fun
+                                  declare-method
 
                                   has-class?
                                   get-class
@@ -322,10 +323,7 @@
                                                            body
                                                            state)]
       ; todo, replace with separate declare-method function
-      [else                            (declare-method name
-                                                       params
-                                                       body
-                                                       state)])))
+      [else                            (error "exhausted cases in declare-fun -> logical error")])))
 
 ; global case of declare-fun
 (define declare-fun-global
@@ -352,27 +350,16 @@
                                       scope
                                       class)))))
 
-; method case of declare-fun
+;; method case of declare-fun
 (define declare-method
-  (lambda (name params body state)
-    (declare-method-impl name
-                         params
-                         body
-                         (context:class-def-member:scope (current-context state))
-                         (context:class-def:name (current-context (pop-context state)))
-                         state)))
-
-(define declare-method-impl
-  (lambda (name params body fun-scope class state)
+  (lambda (name params body scope class state)
     (update* (curry function-table:declare-fun
                     name
                     params
                     body
-                    (make-scoper state)
-                    fun-scope
+                    scope
                     class)
              state $classes class class:$methods)))
-
 
 
 ;;;; class
@@ -387,8 +374,10 @@
 
 ;; declares an empty class
 (define declare-class
-  (lambda (class state)
-    (map:put* class state $classes ('classname))))
+  (lambda (class-name parent-name state)
+    (map:put* (class:of #:name class-name
+                        #:parent parent-name)
+              state $classes ('classname))))
 
 
 ;; extract portions of a closure
