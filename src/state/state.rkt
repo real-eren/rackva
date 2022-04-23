@@ -259,24 +259,22 @@
 ; only called for top-level or nested functions
 (define declare-fun
   (lambda (name params body state)
-    (let* ([ctxt       (current-context state)])
-      (cond
-        [(top-level-context? state)      (declare-fun-global name
-                                                             params
-                                                             body
-                                                             state)]
-        [(fun-call-context? state)  =>   (lambda (fc-fun)
-                                           (declare-fun-local name
-                                                              params
-                                                              body
-                                                              (function:scope fc-fun)
-                                                              (function:class fc-fun)
-                                                              state))]
-        [else                            (declare-method name
-                                                         params
-                                                         body
-                                                         ctxt
-                                                         state)]))))
+    (cond
+      [(top-level-context? state)      (declare-fun-global name
+                                                           params
+                                                           body
+                                                           state)]
+      [(fun-call-context? state)  =>   (lambda (fc-fun)
+                                         (declare-fun-local name
+                                                            params
+                                                            body
+                                                            (function:scope fc-fun)
+                                                            (function:class fc-fun)
+                                                            state))]
+      [else                            (declare-method name
+                                                       params
+                                                       body
+                                                       state)])))
 
 ; global case of declare-fun
 (define declare-fun-global
@@ -305,24 +303,16 @@
 
 ; method case of declare-fun
 (define declare-method
-  (lambda (name params body context state)
+  (lambda (name params body state)
     (declare-method-impl name
                          params
                          body
-                         (context:class-def-member:scope context)
-                         (method-scope-to-table-key (context:class-def-member:scope context))
+                         (context:class-def-member:scope (current-context state))
                          (context:class-def:name (current-context (pop-context state)))
                          state)))
 
-(define method-scope-to-table-key
-  (lambda (fun-scope)
-    (cond
-      [(eq? function:scope:static fun-scope)    class:$s-methods]
-      [(eq? function:scope:instance fun-scope)  class:$i-methods]
-      [(eq? function:scope:abstract fun-scope)  class:$a-methods])))
-
 (define declare-method-impl
-  (lambda (name params body fun-scope table-key class state)
+  (lambda (name params body fun-scope class state)
     (update* (curry function-table:declare-fun
                     name
                     params
@@ -330,7 +320,7 @@
                     (make-scoper state)
                     fun-scope
                     class)
-             state $classes class table-key)))
+             state $classes class class:$methods)))
 
 
 
@@ -344,6 +334,7 @@
   (lambda (class-name state)
     (map:get* state $classes class-name)))
 
+;; declares an empty class
 (define declare-class
   (lambda (class state)
     (map:put* class state $classes ('classname))))
