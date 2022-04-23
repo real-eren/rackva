@@ -168,23 +168,28 @@
     ; defer static field decls
     (if (or (null? parent)
             (state:has-class? parent))
-        (eval-class-body body state conts)
+        (eval-class-body class-name body state conts)
         (myerror (format "parent class ~a has not been declared yet"
                          parent)
                  state))))
 
 (define eval-class-body
   (lambda (class-name parent body state conts)
-    (class-func-decl  body 
-                      state (conts-of conts 
-                                      #:next (lambda (s) (class-static-field-decl body 
-                                                                                  s 
-                                                                                  conts))))
+    (class-func-decl  class-name
+                      body 
+                      state 
+                      (conts-of conts 
+                        #:next (lambda (s) 
+                        (class-static-field-decl  class-name
+                                                  body 
+                                                  s 
+                                                  conts))))
     ((next conts) state)))
 
 (define class-func-decl 
-  (lambda (body state conts)
-    (class-decl-with-filter (lambda (stmt) (or  (is-static-fun-decl? stmt) 
+  (lambda (class-name body state conts)
+    (class-decl-with-filter class-name
+                            (lambda (stmt) (or  (is-static-fun-decl? stmt) 
                                                 (is-fun-decl? stmt)))
                             body
                             state
@@ -192,21 +197,35 @@
   )
 
 (define class-static-field-decl
-  (lambda (body state conts)
-    (class-decl-with-filter is-static-var-decl?
+  (lambda (class-name body state conts)
+    (class-decl-with-filter class-name
+                            is-static-var-decl?
                             body
                             state
                             conts)))
 
+(define class-const-decl
+  (lambda (class-name body state conts)
+    (if (findf is-construct? body) 
+        (class-decl-with-filter class-name
+                                is-construct?
+                                body
+                                state
+                                conts)
+        (class-decl class-name
+                    '((constructor () ()))
+                    state
+                    conts))))
+
 (define class-decl-with-filter
-  (lambda (f body state conts)
-    (class-decl (filter f body) state conts)))
+  (lambda (class-name f body state conts)
+    (class-decl class-name (filter f body) state conts)))
   
 (define class-decl
-  (lambda (body state conts)
+  (lambda (class-name body state conts)
     (cond
       [(null? body) ((next conts) conts)]
-      [else (class-decl (cdr body) (class-stmt (car body) state) conts)])))
+      [else (class-decl class-name (cdr body) (class-stmt (car body) state) conts)])))
 
 (define class-stmt
   (lambda (class-name stmt state)
