@@ -98,13 +98,13 @@
 ; should be run after executing all other top-level statements
 (define Mstate-main
   (lambda (state return throw #:class [class #f])
-    (if class
-        (error "lookup class and run its main")
-        (Mvalue-fun '(funcall main)
-                    state
-                    (conts-of
-                     #:throw throw
-                     #:return return)))))
+    (Mvalue-fun '(funcall main)
+                (if class
+                    (state:set-current-type class state)
+                    state)
+                (conts-of
+                 #:throw throw
+                 #:return return))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -158,42 +158,127 @@
                             (parent-or-null (maybe-extend statement))
                             (class-body statement)
                             state
-                            conts)))
+                            (next conts))))
 
 (define Mstate-class-decl-impl
-  (lambda (class-name parent body state conts)
-    ; do method decls. instance (function) | static (static-function) | abstract (abstract-function)
-    ; collect instance field decls into init method (fun body)
-    ; defer static field decls
-    (if (or (null? parent)
-            (state:has-class? parent))
-        (eval-class-body class-name body state conts)
-        (myerror (format "parent class ~a has not been declared yet"
-                         parent)
-                 state))))
+  (lambda (class-name parent body state next)
+    (cond
+      [(state:has-class? class-name state)    (myerror (format "Attempted to redeclare class `~a`" class-name) state)]
+      [(or (null? parent)
+           (state:has-class? parent state))   (eval-class-body class-name
+                                                               parent
+                                                               body
+                                                               (state:declare-class class-name parent state)
+                                                               (lambda (s)
+                                                                 (next (state:end-class-decl class-name s))))]
+      [else                                   (myerror (format "parent class ~a has not been declared yet" parent) state)])))
 
+
+
+;; Run through the body of a class and apply the declarations to state
+; Assumptions:
+; 1) class has already been declared
 (define eval-class-body
-  (lambda (class-name parent body state conts)
-    (class-func-decl  class-name
-                      body 
-                      state 
-                      (conts-of conts 
-                        #:next (lambda (s) 
-                        (class-static-field-decl  class-name
-                                                  body 
-                                                  s 
-                                                  conts))))
-    ((next conts) state)))
+  ; todo:
+  ; run through methods
+  ; todo later:
+  ; static fields
+  ; instance fields
+  ; multiple phases
+  ; do method decls. instance (function) | static (static-function) | abstract (abstract-function)
+  ; collect instance field decls into init method (fun body)
+  ; defer static field decls
+  (lambda (class-name parent body state next)
+    (chain-TR state
+              next
+              ;(lambda (s nxt) (methods (filter is-method? body) class-name parent s nxt))
+              (curry methods (filter is-method? body) class-name parent)
+              
+              )))
+
+               ;(class-static-field-decl
+
+
+;; takes initial state and last continuation
+;; joins a sequence of tail-recursive functions via next continuations
+;; each function must take two args: state and next(s)
+; for the sake of avoiding absurd indentation and making the intended order clear
+; also makes it trivial to rearrange the execution order
+(define chain-TR
+  (lambda (state last-next f . fs)
+    (if (null? fs)
+        (f state last-next)
+        (f state (lambda (s)
+                   (apply chain-TR s last-next fs))))))
+
+;;;;;;;; METHOD DECLARATIONS
+
+;; returns the function:scope if stmt is a method declaration, and #f if not a method declaration
+; Assumptions:
+; 1) stmt is a list with >1 element
+; 2) this is only called on statements within a class body
+(define method-type-table
+  (map:of
+   'abstract-function  function:scope:abstract
+   'static-function    function:scope:static
+   'function           function:scope:instance))
+; Assumptions:
+; 1) map:get returns #F on absence
+; 2) action returns the function KW of the statement
+(define is-method?
+  (lambda (stmt)
+    (if (or (not (list? stmt))
+            (null? stmt))
+        #F
+        (map:get (action stmt) method-type-table))))
+
+;; evaluate a list of method declarations in a class body
+(define methods
+  (lambda (method-decl-list class-name parent state next)
+    (if (null? method-decl-list)
+        (next state)
+        (declare-method (first method-decl-list)
+                        class-name
+                        state
+                        (lambda (s)
+                          (methods (rest method-decl-list)
+                                   class-name
+                                   parent
+                                   s
+                                   next))))))
+; these assume a well-formed method declaration statement
+(define method-name second)
+(define method-params third)
+(define method-body-or-null
+  (lambda (stmt)
+    (if (null? (cdddr stmt))
+        null
+        (cadddr stmt))))
+
+(define declare-method
+  (lambda (stmt class-name state next)
+    (next (state:declare-method (method-name stmt)
+                          (method-params stmt)
+                          (method-body-or-null stmt)
+                          (is-method? stmt)
+                          class-name
+                          state))))
+
+;;;;;;;; STATIC FIELD DECLARATIONS
+
+;;;;;;;; INSTANCE FIELD DECLARATIONS
+
+;;;;;;;; CONSTRUCTOR DECLARATIONS
+
 
 (define class-func-decl 
   (lambda (class-name body state conts)
     (class-decl-with-filter class-name
-                            (lambda (stmt) (or  (is-static-fun-decl? stmt) 
-                                                (is-fun-decl? stmt)))
+                            (lambda (stmt) (or (is-static-fun-decl? stmt) 
+                                               (is-fun-decl? stmt)))
                             body
                             state
-                            conts))
-  )
+                            conts)))
 
 (define class-static-field-decl
   (lambda (class-name body state conts)
@@ -903,6 +988,7 @@
 (define is-fun-call? (checker-of 'funcall))
 (define is-class-decl? (checker-of 'class))
 
+(define is-inst-fun-decl? is-fun-decl?)
 (define is-static-fun-decl? (checker-of 'static-function))
 (define is-static-var-decl? (checker-of 'static-var))
 

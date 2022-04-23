@@ -17,10 +17,11 @@
                                   with-context
                                   push-top-level-context
                                   push-fun-call-context
-                                  push-class-def-context
                                   pop-context
                                   
                                   make-scoper
+
+                                  set-current-type
 
                                   declare-var-with-box
                                   declare-var-with-value
@@ -40,7 +41,8 @@
 
                                   has-class?
                                   get-class
-                                  declare-class))
+                                  declare-class
+                                  end-class-decl))
          function:params
          function:body
          function:scoper)
@@ -77,6 +79,11 @@
 ; 
 (define $context-stack 'context-stack)
 (define context-stack (map:getter $context-stack))
+
+;; current class. affects what bindings are in scope
+(define $current-type 'current-type)
+(define current-type (map:getter $current-type))
+
 ; map of class names to class closures
 (define $classes 'classes)
 (define classes (map:getter $classes))
@@ -90,8 +97,9 @@
 (define withv map:withv)
 (define withf map:withf)
 (define of map:of)
-(define update* map:update*) ; nested map updated
+(define update* map:update*) ; nested map accessors
 (define put* map:put*)
+(define get* map:get*)
 
 (define new-state (of $local-vars   null
                       $local-funs   null
@@ -132,6 +140,7 @@
   (lambda (state)
     (push-context context:top-level state)))
 
+; used internally by `declare-class`
 (define push-class-def-context
   (lambda (class-name state)
     (push-context (context:of-class-def) state)))
@@ -152,7 +161,6 @@
              state $context-stack)))
 
 ;; T/F whether the current context is of type `top-level`
-; assumption: non-empty context-stack
 (define top-level-context?
   (lambda (state)
     (eq? context:type:top-level (context:type (current-context state)))))
@@ -170,6 +178,11 @@
 (define fun-call-context?
   (lambda (state)
     (context:fun-call:fun (current-context state))))
+
+;; class-name/F whether the current context is of type `class-def`
+(define class-def-context?
+  (lambda (state)
+    (context:class-def:name (current-context state))))
 
 
 ;; Given a state, creates a function that takes a state
@@ -190,6 +203,13 @@
       (withv invoke-state
              $local-vars  (bottom-layers (local-vars invoke-state) (height (local-vars declare-state)))
              $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))))))
+
+;;;; current type
+(define set-current-type
+  (lambda (class-name state)
+    (withv state
+           $current-type  class-name)))
+
 
 ;;;; var mappings
 
@@ -276,23 +296,24 @@
 (define current-scope-has-fun?
   (lambda (name arg-list state)
     (cond
+      ; if in class body -> check class's function table
+      [(class-def-context? state) =>  (lambda (class-name)
+                                        (function-table:has-fun? name arg-list (get* state $classes class-name class:$methods)))]
       ; TODO has-fun && there exists a matching fun in the current scope
       ; if name is dotted
       ; if in top-level -> check global function table
-      [(eq? (current-context state)
-            context:top-level)        (function-table:has-fun? name arg-list (global-funs state))]
-      ; if in class body -> check class's function table
+      [(top-level-context? state)     (function-table:has-fun? name arg-list (global-funs state))]
       ; check local function table
       [else                           (function-table:has-fun? name arg-list (stack:peek (local-funs state)))])))
-; if in instance context -> check class instance function table
-; if in static context -> check class static function table
+
 
 ;; Is a function with this signature in scope (reachable)?
 (define has-fun?
   (lambda (name arg-list state)
-    (or (function-table:has-fun? name arg-list (global-funs state))
-        (ormap (curry function-table:has-fun? name arg-list)
-               (local-funs state)))))
+    (not (false? (get-function name arg-list state)))))
+    ;(or (function-table:has-fun? name arg-list (global-funs state))
+     ;   (ormap (curry function-table:has-fun? name arg-list)
+      ;         (local-funs state)))))
 
 ;; sweep through local, global, classes
 ; primarily used by interpreter to display suggestions when reporting errors
@@ -309,6 +330,8 @@
   (lambda (name arg-list state)
     (cond
       [(ormap (curry function-table:get name arg-list) (local-funs state))]
+      [(and (not (null? (current-type state)))
+            (function-table:get name arg-list (get* state $classes (current-type state) class:$methods)))]
       [(function-table:get name arg-list (global-funs state))]
       [else #f])))
 
@@ -373,6 +396,7 @@
                     name
                     params
                     body
+                    (make-scoper state)
                     scope
                     class)
              state $classes class class:$methods)))
@@ -404,6 +428,11 @@
     (map:put* (class:of #:name class-name
                         #:parent parent-name)
               state $classes class-name)))
+
+;; signal that the earlier class declaration has ended
+(define end-class-decl
+  (lambda (class-name state)
+    (pop-context state)))
 
 
 ;; extract portions of a closure
