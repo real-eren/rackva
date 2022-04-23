@@ -175,26 +175,69 @@
 
 (define eval-class-body
   (lambda (class-name parent body state conts)
-    (class-body-stage-1 body state)
-    ; first
-    ;   var : expr
-    ;   decl static and instance funs
-    ; second
-    ;   eval static vars
+    (class-func-decl  body 
+                      state (conts-of conts 
+                                      #:next (lambda (s) (class-static-field-decl body 
+                                                                                  s 
+                                                                                  conts))))
     ((next conts) state)))
 
-(define class-body-stage-1
-  (lambda (body state)
-    (if (null body)
-        state ; replace with cont call
-        (class-stmt (car body) state))))
+(define class-func-decl 
+  (lambda (body state conts)
+    (class-decl-with-filter (lambda (stmt) (or  (is-static-fun-decl? stmt) 
+                                                (is-fun-decl? stmt)))
+                            body
+                            state
+                            conts))
+  )
+
+(define class-static-field-decl
+  (lambda (body state conts)
+    (class-decl-with-filter is-static-var-decl?
+                            body
+                            state
+                            conts)))
+
+(define class-decl-with-filter
+  (lambda (f body state conts)
+    (class-decl (filter f body) state conts)))
+  
+(define class-decl
+  (lambda (body state conts)
+    (cond
+      [(null? body) ((next conts) conts)]
+      [else (class-decl (cdr body) (class-stmt (car body) state) conts)])))
 
 (define class-stmt
-  (lambda (stmt state)
+  (lambda (class-name stmt state)
     (cond
       ; static function
-      [(is-static-fun-decl? stmt) 1]
+      [(is-static-fun-decl? stmt) (state:declare-method (decl-fun-name stmt) 
+                                                        (decl-fun-params stmt)
+                                                        (decl-fun-body)
+                                                        'static
+                                                        class-name
+                                                        state)]
+      ; fun decl
+      [(is-fun-decl? stmt) (state:declare-method  (decl-fun-name stmt) 
+                                                  (decl-fun-params stmt)
+                                                  (decl-fun-body)
+                                                  'instance
+                                                  class-name
+                                                  state)]
+      ; abstract decl
+      [(is-abst-fun-decl? stmt) (state:declare-method (decl-fun-name stmt) 
+                                                      (decl-fun-params stmt)
+                                                      (decl-fun-body)
+                                                      'abstract
+                                                      class-name
+                                                      state)]
+      ; constructor
+      [(is-construct? stmt) 1]
       ; static var
+      [(is-static-var-decl? stmt) 1]
+      ; var decl
+      [(is-var-decl? stmt) 1]
       )))
 
 
@@ -843,6 +886,9 @@
 (define is-class-decl? (checker-of 'class))
 
 (define is-static-fun-decl? (checker-of 'static-function))
+(define is-static-var-decl? (checker-of 'static-var))
+
+(define is-abst-fun-decl? (checker-of 'abstract-function))
 
 ;; keys are symbols representative of a construct type
 ;; values are the corresponding constructs (type of statement)
