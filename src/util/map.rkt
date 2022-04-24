@@ -123,9 +123,10 @@
 ;;          (update* update-fun map key1 key2 key3)
 (define get*
   (lambda (map . keys)
-    (if (null? keys)
-        map
-        (apply get* (get-default (car keys) null map) (cdr keys)))))
+    (cond
+      [(false? map)      #F]
+      [(null? keys)      map]
+      [else              (apply get* (get (car keys) map) (cdr keys))])))
 
 ;; if path DNE, creates it
 (define put*
@@ -290,9 +291,9 @@
   (check-eq? 0 (get* c-map 'c1))
   (check-eq? '() (get* e-map 'e2 'd2))
   (check-eq? c-map (get* f-map 'f3 'e2 'd1))
-  (check-eq? null (get* f-map 'f3 'e2 'd1 'x)) ; last key invalid
-  (check-eq? null (get* f-map 'x 'e2 'd1)) ; first key invalid
-  (check-eq? null (get* f-map 'x 'x 'x)) ; multiple invalid keys
+  (check-eq? #F (get* f-map 'f3 'e2 'd1 'x)) ; last key invalid
+  (check-eq? #F (get* f-map 'x 'e2 'd1)) ; first key invalid
+  (check-eq? #F (get* f-map 'x 'x 'x)) ; multiple invalid keys
 
   (check-true (in*? f-map 'f1))
   (check-true (in*? f-map 'f3 'e3))
