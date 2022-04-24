@@ -43,12 +43,6 @@
      $scope    scope
      $class   class)))
 
-(define of-abstract
-  (lambda (name params)
-    (map:of $name  name
-            $params  params
-            $scope  scope:abstract)))
-
 ;; returns the number of formal parameters in a function
 (define num-formal-params
   (lambda (closure)
