@@ -196,8 +196,8 @@
               (curry declare-class-init class-name body)
               (lambda (s nxt) 
                 (if (findf is-const-decl? body)
-                    (constructors (filter is-const-decl? body) class-name parent s nxt)
-                    (constructors '((constructor () ())) class-name parent s nxt))))))
+                    (constructors class-name (filter is-const-decl? body) s nxt)
+                    (constructors class-name '((constructor () ())) s nxt))))))
 
                ;(class-static-field-decl
 
@@ -515,6 +515,7 @@
   (lambda (statement state conts)
     ((continue conts) state)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   DOT    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
