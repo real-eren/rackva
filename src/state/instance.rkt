@@ -3,8 +3,8 @@
 (require "../util/map.rkt")
 (provide is-instance?
          (prefix-out instance:
-                     (combine-out $class
-                                  $fields)))
+                     (except-out (all-defined-out)
+                                 is-instance?)))
 
 ;;;; Instance
 ;; class- name of class
@@ -19,7 +19,10 @@
 
 
 (define $class 'class)
+(define class (map:getter $class))
+
 (define $fields 'fields)
+(define fields (map:getter $fields))
 
 (define is-instance?
   (lambda (v)

@@ -3,6 +3,7 @@
 (require "../util/map.rkt"
          "../util/stack.rkt"
          "var-table.rkt"
+         "instance.rkt"
          "function.rkt"
          "function-table.rkt"
          "context.rkt"
@@ -38,6 +39,7 @@
                                   get-function
                                   get-init
                                   get-constructor
+                                  get-parents-abstract-methods
                                   declare-fun
                                   declare-method
                                   declare-init
@@ -104,7 +106,7 @@
 ;        $local-funs   new-local-funs-table)
 ;        $global-funs  new-global-funs-table)
 ; (withf old-state
-;        $global-vars  (curry function-table:declare function name params body scoper))
+;        $global-vars  (curry fun-table:declare function name params body scoper))
 (define withv map:withv)
 (define withf map:withf)
 (define of map:of)
@@ -282,16 +284,16 @@
 (define get-instance-field-box
   (lambda (name this type state)
     #F))
-    ; get layers from based on height of type
-    ; ormap
+; get layers from based on height of type
+; ormap
 ; assumes type is a valid class
 (define get-static-field-box
   (lambda (name type state)
     (cond
       [(var-table:var-box name (get* state $classes type class:$s-fields))]
-      [(get-parent type state)       (get-static-field-box name
-                                                           (class:parent (get-class type state))
-                                                           state)]
+      [(has-parent? type state)       (get-static-field-box name
+                                                            (class:parent (get-class type state))
+                                                            state)]
       [else #F]))) ; no parent, #F
 
 ;; get the current value of this var
@@ -335,7 +337,7 @@
 ; used by interpreter to decide whether a declaration collides with an existing function
 (define fun-already-declared?
   (lambda (name arg-list state)
-    (function-table:has-fun? name arg-list (get-current-fun-table name state))))
+    (fun-table:has-fun? name arg-list (get-current-fun-table name state))))
 ; current table where declarations would go
 (define get-current-fun-table
   (lambda (f-name state)
@@ -363,7 +365,7 @@
   (lambda (name state)
     (foldl append
            '()
-           (map (curry function-table:get-all name)
+           (map (curry fun-table:get-all name)
                 (append (global-funs state)
                         (if (current-type state)
                             (get* state $classes (current-type state) class:$methods)
@@ -374,21 +376,54 @@
 ; local -> instance -> static -> global
 (define get-function
   (lambda (name arg-list state)
-    (cond
-      [(ormap (curry function-table:get name arg-list) (local-funs state))]
-      [(and (current-type state)
-            (function-table:get name arg-list (get* state $classes (current-type state) class:$methods)))]
-      [(function-table:get name arg-list (global-funs state))]
-      [else #f])))
+    (or (ormap (curry fun-table:get name arg-list) (local-funs state))
+        ; instance method IF current-type defines it as an instance method
+        (get-instance-method name arg-list (this state) (current-type) state)
+        (get-static-method name arg-list (current-type) state)
+        (fun-table:get name arg-list (global-funs state)))))
+
+; #F on miss
+(define get-instance-method
+  (lambda (name arg-list this class-name state)
+    (and this
+         class-name
+         (class-declares-instance-method name arg-list class-name state)
+         (get-inst-method name arg-list this state))))
+(define class-declares-instance-method
+  (lambda (name arg-list class-name state)
+    (if class-name
+        (or (fun-table:has-fun?)
+            (class-declares-instance-method name arg-list (get-parent-name class-name state) state))
+        #F)))
+; assumes valid this and existent instance method
+(define get-inst-method
+  (lambda (name arg-list class-name state)
+    (or (fun-table:get name arg-list (filter function:instance?
+                                             (class:methods (get-class class-name state))))
+        (get-inst-method name arg-list (get-parent-name class-name state) state))))
+
+;; searches this class and its superclasses for a static method with this signature
+; assumes type is not #F
+; internal
+; #F on miss
+(define get-static-method
+  (lambda (name arg-list class-name state)
+    (if class-name
+        (or (fun-table:get name
+                           arg-list
+                           (filter function:static? (class:methods (get-class class-name state))))
+            (get-static-method name
+                               arg-list
+                               (get-parent-name class-name state)))
+        #F)))
 
 ;; returns a list of the abstract methods of the parent of this class
 ; assume class
 ; empty list if no parent
 (define get-parents-abstract-methods
   (lambda (class-name state)
-    (filter (lambda (f)
-              (eq? (function:scope f) function:scope:abstract))
-            (function-table:all (get* (get-parent class-name state) class:$methods)))))
+    (filter function:abstract?
+            (fun-table:all (class:methods (get-parent class-name state))))))
 
 ;; Get something - undetermined how init is implemented
 ; #F on miss
@@ -402,7 +437,7 @@
 ; assumes class exists and constructors have class as name
 (define get-constructor
   (lambda (class-name arg-list state)
-    (function-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
+    (fun-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
 
 ;; State with this fun declared in the current scope
 ; only called for top-level or nested functions
@@ -437,7 +472,7 @@
 (define declare-fun-global
   (lambda (name params body state)
     (withf state
-           $global-funs  (curry function-table:declare-fun
+           $global-funs  (curry fun-table:declare-fun
                                 name
                                 params
                                 body
@@ -450,7 +485,7 @@
   (lambda (name params body scope class state)
     (withf state
            $local-funs  (curry stack:update-front
-                               (curry function-table:declare-fun
+                               (curry fun-table:declare-fun
                                       name
                                       params
                                       body
@@ -461,7 +496,7 @@
 ;; called during class body
 (define declare-method
   (lambda (name params body scope class state)
-    (update* (curry function-table:declare-fun
+    (update* (curry fun-table:declare-fun
                     name
                     params
                     body
@@ -486,7 +521,7 @@
 ; assumption: interpreter checks that this constructor has a unique signature
 (define declare-constructor
   (lambda (params body class state)
-    (update* (curry function-table:declare-fun
+    (update* (curry fun-table:declare-fun
                     class
                     params
                     body
@@ -510,16 +545,23 @@
   (lambda (class-name state)
     (map:get* state $classes class-name)))
 
-;; returns closure of the parent of this class
+;; returns name and closure of the parent of this class
 ; assumes valid class-name. assumes get* returns false on miss. #F if no parent
+(define has-parent?
+  (lambda (class-name state)
+    (not (false? (get-parent class-name state)))))
+
+(define get-parent-name
+  (lambda (class-name state)
+    (map:get* state $classes class-name class:$parent)))
 (define get-parent
   (lambda (class-name state)
-    (get-class (class:parent (get-class class-name state)) state)))
+    (get-class (get-parent-name class-name state) state)))
 
 (define get-class-height
   (lambda (class-name state)
-    (if (get-parent class-name state)
-        (+ 1 (get-class-height (get-parent class-name state) state))
+    (if (has-parent? class-name state)
+        (+ 1 (get-class-height (get-parent-name class-name state) state))
         1)))
 
 ;; declares an empty class

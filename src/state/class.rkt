@@ -27,3 +27,4 @@
 (define $s-fields 's-fields)
 
 (define parent (map:getter $parent))
+(define methods (map:getter $methods))

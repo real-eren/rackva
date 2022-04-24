@@ -27,6 +27,16 @@
 (define scope:init     'init)
 (define scope:constructor 'constructor)
 
+(define scope-checker
+  (lambda (scp)
+    (lambda (f)
+      (equal? (scope f) scp))))
+
+(define static? (scope-checker scope:static))
+(define constructor? (scope-checker scope:constructor))
+(define instance? (scope-checker scope:instance))
+(define abstract? (scope-checker scope:abstract))
+
 
 (define of
   (lambda (#:name name
