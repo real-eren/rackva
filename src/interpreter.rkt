@@ -193,8 +193,11 @@
               next
               ;(lambda (s nxt) (methods (filter is-method? body) class-name parent s nxt))
               (curry methods (filter is-method? body) class-name parent)
-              
-              )))
+              (curry declare-class-init class-name body)
+              (lambda (s nxt) 
+                (if (findf is-const-decl? body)
+                    (constructors (filter is-const-decl? body) class-name parent s nxt)
+                    (constructors '(('constructor () ())) class-name parent s nxt))))))
 
                ;(class-static-field-decl
 
@@ -275,48 +278,24 @@
                               state))))
 
 ;;;;;;;; CONSTRUCTOR DECLARATIONS
+(define const-params cadr)
+(define const-body   caddr)
 
+(define constructors
+  (lambda (class-name body state next)
+    (if (null? body)
+        (next state)
+        (declare-constructor (car body)
+                          class-name 
+                          state
+                          (lambda (s) (constructors class-name (cdr body) s next))))))
 
-(define class-func-decl 
-  (lambda (class-name body state conts)
-    (class-decl-with-filter class-name
-                            (lambda (stmt) (or (is-static-fun-decl? stmt) 
-                                               (is-fun-decl? stmt)))
-                            body
-                            state
-                            conts)))
-
-(define class-static-field-decl
-  (lambda (class-name body state conts)
-    (class-decl-with-filter class-name
-                            is-static-var-decl?
-                            body
-                            state
-                            conts)))
-
-(define class-const-decl
-  (lambda (class-name body state conts)
-    (if (findf is-const-decl? body) 
-        (class-decl-with-filter class-name
-                                is-construct?
-                                body
-                                state
-                                conts)
-        (class-decl class-name
-                    '((constructor () ()))
-                    state
-                    conts))))
-
-(define class-decl-with-filter
-  (lambda (class-name f body state conts)
-    (class-decl class-name (filter f body) state conts)))
-  
-(define class-decl
-  (lambda (class-name body state conts)
-    (cond
-      [(null? body) ((next conts) state)]
-      [else (class-decl class-name (cdr body) (class-stmt (car body) state) conts)])))
-
+(define declare-constructor
+  (lambda (stmt class-name state next)
+    (next (state:declare-constructor  (const-params stmt)
+                                      (const-body   stmt)
+                                      class-name
+                                      state))))
 (define class-stmt
   (lambda (class-name stmt state)
     (cond
