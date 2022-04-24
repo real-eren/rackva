@@ -373,7 +373,7 @@
   (lambda (name arg-list state)
     (cond
       [(ormap (curry function-table:get name arg-list) (local-funs state))]
-      [(and (not (null? (current-type state)))
+      [(and (current-type state)
             (function-table:get name arg-list (get* state $classes (current-type state) class:$methods)))]
       [(function-table:get name arg-list (global-funs state))]
       [else #f])))
@@ -507,7 +507,7 @@
     (map:get* state $classes class-name)))
 
 ;; returns closure of the parent of this class
-; assumes valid class-name. #F if no parent
+; assumes valid class-name. assumes get* returns false on miss. #F if no parent
 (define get-parent
   (lambda (class-name state)
     (get-class (class:parent (get-class class-name state)) state)))
