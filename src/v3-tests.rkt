@@ -43,3 +43,16 @@ class TheClass {
     return x + 1;
   }
 }")
+
+(test-str #:id "local vars have priority over static fields"
+          5
+          #:args (list "MyClass") "
+class MyClass {
+  static var x = 10;
+
+  static function main() {
+    var x = 5;
+    return x;
+  }
+}")
+
