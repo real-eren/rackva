@@ -182,17 +182,15 @@
   (lambda (class-name parent body state next)
     (chain-TR state
               next
-              ;(lambda (s nxt) (methods (filter is-method? body) class-name parent s nxt))
               (curry methods (filter is-method? body) class-name parent)
               (curry declare-class-init class-name (filter is-var-decl? body))
+              (curry constructors class-name (filter is-const-decl? body))
               (lambda (s nxt) 
                 (if (findf is-const-decl? body)
-                    (constructors class-name (filter is-const-decl? body) s nxt)
+                    (nxt s)
                     (constructors class-name '((constructor () ())) s nxt)))
               (curry static-fields (filter is-static-var-decl? body))
     )))
-              
-               ;(class-static-field-decl
 
 
 ;; takes initial state and last continuation
@@ -958,11 +956,8 @@
 (define is-fun-call? (checker-of 'funcall))
 (define is-class-decl? (checker-of 'class))
 
-(define is-inst-fun-decl? is-fun-decl?)
-(define is-static-fun-decl? (checker-of 'static-function))
 (define is-static-var-decl? (checker-of 'static-var))
 
-(define is-abst-fun-decl? (checker-of 'abstract-function))
 (define is-const-decl? (checker-of 'constructor))
 
 ;; keys are symbols representative of a construct type
