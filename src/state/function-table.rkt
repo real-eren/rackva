@@ -1,7 +1,6 @@
 #lang racket
 
-(require "../util/map.rkt"
-         "function.rkt")
+(require "function.rkt")
 
 (provide new-function-table
          (prefix-out fun-table:
@@ -15,15 +14,19 @@
 ;; a function table a map of function bindings
 ;; bindings { name : function }
 
-(define new-function-table map:empty)
+(define new-function-table null)
 
 (define all
   (lambda (table)
-    (map cdr table)))
+    table))
 ; get all functions with this name in the table
-(define get-all map:get-all)
+(define get-all
+  (lambda (name table)
+    (filter (lambda (func)
+              (eq? name (function:name func)))
+            table)))
 ;; gets the function with a matching signature
-; false if absent
+; #F on miss
 (define get
   (lambda (name arg-list table)
     (findf (lambda (f)
@@ -34,19 +37,18 @@
 ; get returns false if absent
 (define has-fun?
   (lambda (name arg-list table)
-    (not (eq? #f (get name arg-list table)))))
+    (not (false? (get name arg-list table)))))
 
 
 (define declare-fun
   (lambda (name params body scoper scope class table)
-    (map:insert name
-                (function:of #:name name
-                             #:params params
-                             #:body body
-                             #:scoper scoper
-                             #:scope scope
-                             #:class class)
-                table)))
+    (cons (function:of #:name name
+                       #:params params
+                       #:body body
+                       #:scoper scoper
+                       #:scope scope
+                       #:class class)
+          table)))
 
 
 (module+ test

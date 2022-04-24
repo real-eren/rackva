@@ -377,9 +377,8 @@
 (define get-function
   (lambda (name arg-list state)
     (or (ormap (curry fun-table:get name arg-list) (local-funs state))
-        ; instance method IF current-type defines it as an instance method
-        (get-instance-method name arg-list (this state) (current-type) state)
-        (get-static-method name arg-list (current-type) state)
+        (get-instance-method name arg-list (this state) (current-type state) state)
+        (get-static-method name arg-list (current-type state) state)
         (fun-table:get name arg-list (global-funs state)))))
 
 ; #F on miss
@@ -388,19 +387,28 @@
     (and this
          class-name
          (class-declares-instance-method name arg-list class-name state)
-         (get-inst-method name arg-list this state))))
+         (get-inst-method name arg-list (instance:class this) state))))
 (define class-declares-instance-method
   (lambda (name arg-list class-name state)
     (if class-name
-        (or (fun-table:has-fun?)
+        (or (fun-table:has-fun? name arg-list (filter function:instance?
+                                                      (get-class-methods class-name state)))
             (class-declares-instance-method name arg-list (get-parent-name class-name state) state))
         #F)))
 ; assumes valid this and existent instance method
 (define get-inst-method
   (lambda (name arg-list class-name state)
-    (or (fun-table:get name arg-list (filter function:instance?
-                                             (class:methods (get-class class-name state))))
-        (get-inst-method name arg-list (get-parent-name class-name state) state))))
+    (or (fun-table:get name
+                       arg-list
+                       (filter function:instance? (get-class-methods class-name state)))
+        (get-inst-method name
+                         arg-list
+                         (get-parent-name class-name state)
+                         state))))
+
+(define get-class-methods
+  (lambda (class-name state)
+    (class:methods (get-class class-name state))))
 
 ;; searches this class and its superclasses for a static method with this signature
 ; assumes type is not #F
@@ -411,7 +419,7 @@
     (if class-name
         (or (fun-table:get name
                            arg-list
-                           (filter function:static? (class:methods (get-class class-name state))))
+                           (filter function:static? (get-class-methods class-name state)))
             (get-static-method name
                                arg-list
                                (get-parent-name class-name state)))

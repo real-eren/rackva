@@ -6,6 +6,7 @@
 
 ;;;; function property keys
 (define $name   'fun-name)
+(define name (map:getter $name))
 ;; list of formal parameters
 (define $params 'formal-params)
 ;; statement list that forms the body of the function
