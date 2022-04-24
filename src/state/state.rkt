@@ -282,8 +282,9 @@
 
 ;; Assumes `this` is an instance of `type`
 (define get-instance-field-box
-  (lambda (name this type state)
-    #F))
+  (lambda (name this class-name state)
+    (ormap (curry var-table:var-box name)
+           (bottom-layers (instance:fields this) (get-class-height class-name state)))))
 ; get layers from based on height of type
 ; ormap
 ; assumes type is a valid class

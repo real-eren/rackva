@@ -28,6 +28,9 @@ Stack Trace for user errors
   - instance members
   - user-defined constructors
   - polymorphism
+  - abstract methods
+- dot operator
+  - Java (8) semantics
 
 ## Notable files
 
