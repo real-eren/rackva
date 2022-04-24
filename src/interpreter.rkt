@@ -179,21 +179,12 @@
 ; Assumptions:
 ; 1) class has already been declared
 (define eval-class-body
-  ; todo:
-  ; run through methods
-  ; todo later:
-  ; static fields
-  ; instance fields
-  ; multiple phases
-  ; do method decls. instance (function) | static (static-function) | abstract (abstract-function)
-  ; collect instance field decls into init method (fun body)
-  ; defer static field decls
   (lambda (class-name parent body state next)
     (chain-TR state
               next
               ;(lambda (s nxt) (methods (filter is-method? body) class-name parent s nxt))
               (curry methods (filter is-method? body) class-name parent)
-              (curry declare-class-init class-name body)
+              (curry declare-class-init class-name (filter is-var-decl? body))
               (lambda (s nxt) 
                 (if (findf is-const-decl? body)
                     (constructors class-name (filter is-const-decl? body) s nxt)
@@ -277,7 +268,7 @@
         (declare-static-field (car body)
                               state
                               (lambda (s)
-                                (static-fields body s next))))))
+                                (static-fields (cdr body) s next))))))
 (define declare-static-field
   (lambda (stmt state next)
     (Mstate-var-decl-impl (decl-var stmt)
@@ -294,63 +285,32 @@
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
 (define declare-class-init 
-  (lambda (class-name body state next)
-    (next (state:declare-init (filter is-var-decl? body)
+  (lambda (class-name instance-field-decls state next)
+    (next (state:declare-init instance-field-decls
                               class-name
                               state))))
 
 ;;;;;;;; CONSTRUCTOR DECLARATIONS
-(define const-params cadr)
-(define const-body   caddr)
+(define const-params second)
+(define const-body third)
 
 (define constructors
   (lambda (class-name body state next)
     (if (null? body)
         (next state)
         (declare-constructor (car body)
-                          class-name 
-                          state
-                          (lambda (s) (constructors class-name (cdr body) s next))))))
+                             class-name 
+                             state
+                             (lambda (s)
+                               (constructors class-name (cdr body) s next))))))
 
 (define declare-constructor
   (lambda (stmt class-name state next)
-    (next (state:declare-constructor  (const-params stmt)
-                                      (const-body   stmt)
-                                      class-name
-                                      state))))
-(define class-stmt
-  (lambda (class-name stmt state)
-    (cond
-      ; static function
-      [(is-static-fun-decl? stmt) (state:declare-method (decl-fun-name stmt) 
-                                                        (decl-fun-params stmt)
-                                                        (decl-fun-body)
-                                                        'static
-                                                        class-name
-                                                        state)]
-      ; fun decl
-      [(is-fun-decl? stmt) (state:declare-method  (decl-fun-name stmt) 
-                                                  (decl-fun-params stmt)
-                                                  (decl-fun-body)
-                                                  'instance
-                                                  class-name
-                                                  state)]
-      ; abstract decl
-      [(is-abst-fun-decl? stmt) (state:declare-method (decl-fun-name stmt) 
-                                                      (decl-fun-params stmt)
-                                                      (decl-fun-body)
-                                                      'abstract
-                                                      class-name
-                                                      state)]
-      ; constructor
-      [(is-construct? stmt) 1]
-      ; static var
-      [(is-static-var-decl? stmt) 1]
-      ; var decl
-      [(is-var-decl? stmt) 1]
-      ; else error
-      [else (myerror "stuff")]
-      )))
+    (next (state:declare-constructor (const-params stmt)
+                                     (const-body stmt)
+                                     class-name
+                                     state))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -494,7 +454,7 @@
 (define Mstate-fun-decl-impl
   (lambda (fun-name fun-params fun-body state conts)
     ; fun w/ same signature can't be in same scope
-    (if (state:current-scope-has-fun? fun-name fun-params state)
+    (if (state:fun-already-declared? fun-name fun-params state)
         (myerror (format "function `~s` is already declared in the current scope."
                          fun-name)
                  state)
@@ -561,17 +521,17 @@
 (define Mstate-var-decl-impl
   (lambda (var-name maybe-expr state conts)
     (cond
-      [(state:var-declared-current-scope? var-name state)   (myerror (format "`~a` is already declared in the current scope."
-                                                                             var-name)
-                                                                     state)]
-      [(null? maybe-expr)                               ((next conts) (state:declare-var var-name state))]
-      [else                                             (Mvalue (get maybe-expr)
-                                                                state
-                                                                (conts-of conts
-                                                                          #:return (lambda (v s)
-                                                                                     ((next conts) (state:declare-var-with-value var-name 
-                                                                                                                                 v
-                                                                                                                                 s)))))])))
+      [(state:var-already-declared? var-name state)   (myerror (format "`~a` is already declared in the current scope."
+                                                                       var-name)
+                                                               state)]
+      [(null? maybe-expr)                             ((next conts) (state:declare-var var-name state))]
+      [else                                           (Mvalue (get maybe-expr)
+                                                              state
+                                                              (conts-of conts
+                                                                        #:return (lambda (v s)
+                                                                                   ((next conts) (state:declare-var-with-value var-name 
+                                                                                                                               v
+                                                                                                                               s)))))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; ASSIGN ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

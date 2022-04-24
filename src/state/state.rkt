@@ -28,12 +28,12 @@
                                   declare-var
                                   assign-var
                                   var-declared?
-                                  var-declared-current-scope?
+                                  var-already-declared?
                                   var-initialized?
                                   get-var-box
                                   get-var-value
 
-                                  current-scope-has-fun?
+                                  fun-already-declared?
                                   has-fun?
                                   get-function
                                   get-init
@@ -80,13 +80,20 @@
 ; (top-level) ; global var and fun defs
 ; (class-body 'A) ; class A declaration
 ; (fun static (foo closure)) -> (fun instance (bar closure)) ; during A::foo called B::bar
-; 
 (define $context-stack 'context-stack)
 (define context-stack (map:getter $context-stack))
 
-;; current class. affects what bindings are in scope
+;; current class. Name / #F. affects what bindings are in scope
 (define $current-type 'current-type)
 (define current-type (map:getter $current-type))
+
+;; current instance. instance / #F
+(define $this 'this)
+(define this (map:getter $this))
+
+;; flag that affects lookup. if true, limited to bindings available to instance and type
+(define $dotted 'dotted)
+(define dotted? (map:getter $dotted))
 
 ; map of class names to class closures
 (define $classes 'classes)
@@ -110,7 +117,9 @@
                       $global-vars  new-var-table
                       $global-funs  new-function-table
                       $classes      map:empty
-                      $current-type   null
+                      $current-type   #F
+                      $this           #F
+                      $dotted         #F
                       $context-stack  null))
 
 
@@ -131,7 +140,6 @@
 
 
 ;;;; stack of contexts - top-level, fun-call, constructors, class-defs
-
 (define with-context
   (lambda (context-stack state)
     (withv state
@@ -198,11 +206,12 @@
 ; 3) all of invoke state's classes and global tables belong in scope
 ; why height and not copy? to capture bindings declared later in the same layer
 (define make-scoper
-  (lambda (declare-state)
+  (lambda (declare-state class)
     (lambda (invoke-state)
       (withv invoke-state
              $local-vars  (bottom-layers (local-vars invoke-state) (height (local-vars declare-state)))
-             $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))))))
+             $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))
+             $current-type  class))))
 
 ;;;; current type
 (define set-current-type
@@ -211,7 +220,10 @@
            $current-type  class-name)))
 
 
-;;;; var mappings
+
+
+
+;;;;;;;;;;;;;;;; VARIABLES
 
 ;; State with this varname declared in the current scope and initialized to this box
 ; top-level -> in global
@@ -250,34 +262,50 @@
 
 ;; Get the box that backs the in-scope var with this name
 ; check if initialized first
+; local -> instance -> static -> global
+; if dotted, only middle two
 (define get-var-box
   (lambda (name state)
     (cond
-      [(ormap (curry var-table:var-box name) (local-vars state))]
-      [(var-table:var-box name (global-vars state))]
-      [else  (error "failed to check if var initialized before getting" name)])))
-    ; check local,
-    ; if instance context, check this' fields
-    ; if class context, check class' fields
-    ; if dotted
-    ; check global,
+      [(and (not (dotted? state))
+            (ormap (curry var-table:var-box name)
+                   (local-vars state)))]
+      [(and (this state)
+            (get-instance-field-box name (this state) (current-type state) state))]
+      [(and (current-type state)
+            (get-static-field-box name (current-type state) state))]
+      [(and (not (dotted? state))
+            (var-table:var-box name (global-vars state)))]
+      [else #F])))
+
+;; Assumes `this` is an instance of `type`
+(define get-instance-field-box
+  (lambda (name this type state)
+    #F))
+    ; get layers from based on height of type
+    ; ormap
+(define get-static-field-box
+  (lambda (name type state)
+    (cond
+      [(var-table:var-box name (get* state $classes type class:$s-fields))]
+      [(get-parent type state)       (get-static-field-box name (get-parent type state) state)]
+      [else #F]))) ; no parent, #F
 
 ;; get the current value of this var
-; assumption: get-var-box works correctly
+; assumption: var is declared, get-var-box works correctly
 (define get-var-value
   (lambda (name state)
     (unbox (get-var-box name state))))
 
-
 ;; Is a variable with this name in scope?
+; assumption: get-var-box returns #F on miss
 (define var-declared?
   (lambda (name state)
-    (or (stack:ormap (curry var-table:var-declared? name) (local-vars state))
-        (var-table:var-declared? name (global-vars state)))))
+    (not (false? (get-var-box name state)))))
 
 ;; Is a variable with this name already declared in the current scope?
 ; used by interpreter to detect duplicate declarations
-(define var-declared-current-scope?
+(define var-already-declared?
   (lambda (name state)
     (cond
       [(class-def-context? state) (var-table:var-declared? name (get* state $classes (current-type state) class:$s-fields))]
@@ -285,32 +313,37 @@
       [(top-level-context? state) (var-table:var-declared? name (global-vars state))])))
 
 ;; Is the in-scope variable with this name and initialized?
-; check if declared first
 ; assumptions:
 ; 1) uninitialized variables store `boxed null`
-; 2) get-var-value returns the appropriate variable
+; 2) this is only called on variables known to be declared
+; 3) get-var-value returns the appropriate variable
 (define var-initialized?
   (lambda (name state)
     (not (null? (get-var-value name state)))))
 
 
-;;;; fun mappings
 
-;; Is a function with this signature in the current scope (according to stack trace)
+
+
+;;;;;;;;;;;;;;;; FUNCTIONS
+
+
+;; Is a function with this signature in the current scope
 ; used by interpreter to decide whether a declaration collides with an existing function
-(define current-scope-has-fun?
+(define fun-already-declared?
   (lambda (name arg-list state)
+    (function-table:has-fun? name arg-list (get-current-fun-table name state))))
+; current table where declarations would go
+(define get-current-fun-table
+  (lambda (f-name state)
     (cond
-      ; if in class body -> check class's function table
-      [(class-def-context? state) =>  (lambda (class-name)
-                                        (function-table:has-fun? name arg-list (get* state $classes class-name class:$methods)))]
-      ; TODO has-fun && there exists a matching fun in the current scope
-      ; if name is dotted
-      ; if in top-level -> check global function table
-      [(top-level-context? state)     (function-table:has-fun? name arg-list (global-funs state))]
-      ; check local function table
-      [else                           (function-table:has-fun? name arg-list (stack:peek (local-funs state)))])))
-
+      [(class-def-context? state) => (lambda (class-name)
+                                       (get* state $classes class-name (if (eq? f-name class-name)
+                                                                           class:$constructors
+                                                                           class:$methods)))]
+      [(local-context? state)         (stack:peek (local-funs state))]
+      [(top-level-context? state)     (global-funs state)]
+      [else                           (error "exhausted cases in fun lookup. logical error?")])))
 
 ;; Is a function with this signature in scope (reachable)?
 ; Assumptions:
@@ -327,7 +360,12 @@
   (lambda (name state)
     (foldl append
            '()
-           (map (curry function-table:get-all name) (local-funs state)))))
+           (map (curry function-table:get-all name)
+                (append (global-funs state)
+                        (if (current-type state)
+                            (get* state $classes (current-type state) class:$methods)
+                            '())
+                        (local-funs state))))))
 ;; Get closure for the first function with this signature
 ; traverses scopes in this order:
 ; local -> instance -> static -> global
@@ -382,7 +420,7 @@
                                                           params
                                                           body
                                                           function:scope:free
-                                                          null
+                                                          #F
                                                           state)]
       ; not in funcall or class body, not in block etc
       [(top-level-context? state)      (declare-fun-global name
@@ -400,9 +438,9 @@
                                 name
                                 params
                                 body
-                                (make-scoper state)
+                                (make-scoper state #F)
                                 function:scope:free
-                                null))))
+                                #F))))
 
 ; local case of declare-fun
 (define declare-fun-local
@@ -413,7 +451,7 @@
                                       name
                                       params
                                       body
-                                      (make-scoper state)
+                                      (make-scoper state class)
                                       scope
                                       class)))))
 
@@ -424,7 +462,7 @@
                     name
                     params
                     body
-                    (make-scoper state)
+                    (make-scoper state class)
                     scope
                     class)
              state $classes class class:$methods)))
@@ -436,7 +474,7 @@
     (put* (function:of #:name 'init
                        #:params '()
                        #:body body
-                       #:scoper (make-scoper state)
+                       #:scoper (make-scoper state class)
                        #:scope function:scope:init
                        #:class class)
           state $classes class class:$init)))
@@ -449,12 +487,16 @@
                     class
                     params
                     body
-                    (make-scoper state)
+                    (make-scoper state class)
                     function:scope:constructor
                     class)
              state $classes class class:$constructors)))
 
-;;;; class
+
+
+
+
+;;;;;;;;;;;; CLASS
 
 (define has-class?
   (lambda (class-name state)
@@ -465,10 +507,16 @@
     (map:get* state $classes class-name)))
 
 ;; returns closure of the parent of this class
-; assumes valid class-name and existant parent
+; assumes valid class-name. #F if no parent
 (define get-parent
   (lambda (class-name state)
     (get-class (class:parent (get-class class-name state)) state)))
+
+(define get-class-height
+  (lambda (class-name state)
+    (if (get-parent class-name state)
+        (+ 1 (get-class-height (get-parent class-name state) state))
+        1)))
 
 ;; declares an empty class
 (define declare-class
@@ -505,7 +553,7 @@
   (check-eq? (get-var-value 'a s3) 3)
   
   (define s4 (push-new-layer s3))
-  (check-false (var-declared-current-scope? 'a s4))
+  (check-false (var-already-declared? 'a s4))
   (check-eq? (get-var-value 'a s4) 3)
   (define s5 (declare-var-with-value 'a 7 s4))
   (check-eq? (get-var-value 'a s5) 7)
