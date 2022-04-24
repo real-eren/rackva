@@ -197,8 +197,10 @@
               (lambda (s nxt) 
                 (if (findf is-const-decl? body)
                     (constructors class-name (filter is-const-decl? body) s nxt)
-                    (constructors class-name '((constructor () ())) s nxt))))))
-
+                    (constructors class-name '((constructor () ())) s nxt)))
+              (curry static-fields (filter is-static-var-decl? body))
+    )))
+              
                ;(class-static-field-decl
 
 
@@ -268,6 +270,26 @@
                           state))))
 
 ;;;;;;;; STATIC FIELD DECLARATIONS
+(define static-fields
+  (lambda (body state next)
+    (if (null? body) 
+        (next state)
+        (declare-static-field (car body)
+                              state
+                              (lambda (s)
+                                (static-fields body s next))))))
+(define declare-static-field
+  (lambda (stmt state next)
+    (Mstate-var-decl-impl (decl-var stmt)
+                          (decl-maybe-expr stmt)
+                          state
+                          (conts-of 
+                            #:next        next
+                            #:break       default-break
+                            #:continue    default-continue
+                            #:throw       default-throw
+                            #:return      (lambda (v s) (myerror "Illegal return in static declarations"))
+                            ))))
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
