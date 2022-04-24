@@ -25,6 +25,7 @@
 (define scope:free     'free)
 (define scope:abstract 'abstract)
 (define scope:init     'init)
+(define scope:constructor 'constructor)
 
 
 (define of
