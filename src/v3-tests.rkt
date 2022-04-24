@@ -11,6 +11,8 @@
 (define test-str (make-tester interpret-v3-str))
 
 
+; ; STATIC METHODS
+
 (test-str #:id "single class, no fields, only main method"
           10
           #:args (list "A") "
@@ -32,6 +34,8 @@ class A {
     return foo(1);
   }
 }")
+
+; ; STATIC FIELDS
 
 (test-str #:id "static field and main method, same class"
           11
@@ -56,3 +60,68 @@ class MyClass {
   }
 }")
 
+(test-str #:id "params have priority over static fields"
+          6
+          #:args (list "MyClass") "
+class MyClass {
+  static var x = 10;
+
+  static function echo(x) { return x; }
+
+  static function main() { return echo(6); }
+}")
+
+(test-str #:id "writes to shadowing local vars don't affect shadowed static fields"
+          10
+          #:args (list "MyClass") "
+class MyClass {
+  static var x = 10;
+
+  static function foo() {
+    var x;
+    x = 6;
+  }
+
+  static function main() {
+    foo();
+    return x;
+  }
+}")
+
+(test-str #:id "accessing static field of super class w/out dot"
+          1
+          #:args (list "Child") "
+class Parent {
+  static var x = 1;
+}
+class Child extends Parent {
+  static function main() {
+    return x;
+  }
+}")
+
+(test-str #:id "accessing static field of super super class w/out dot"
+          1
+          #:args (list "Child") "
+class GrandParent { static var x = 1; }
+
+class Parent extends GrandParent { }
+
+class Child extends Parent {
+  static function main() {
+    return x;
+  }
+}")
+
+(test-str #:id "more recent static field takes precedence"
+          2
+          #:args (list "Child") "
+class GrandParent { static var x = 1; }
+
+class Parent extends GrandParent { static var x = 2; }
+
+class Child extends Parent {
+  static function main() {
+    return x;
+  }
+}")

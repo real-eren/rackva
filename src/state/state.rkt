@@ -284,11 +284,14 @@
     #F))
     ; get layers from based on height of type
     ; ormap
+; assumes type is a valid class
 (define get-static-field-box
   (lambda (name type state)
     (cond
       [(var-table:var-box name (get* state $classes type class:$s-fields))]
-      [(get-parent type state)       (get-static-field-box name (get-parent type state) state)]
+      [(get-parent type state)       (get-static-field-box name
+                                                           (class:parent (get-class type state))
+                                                           state)]
       [else #F]))) ; no parent, #F
 
 ;; get the current value of this var
@@ -502,6 +505,7 @@
   (lambda (class-name state)
     (map:in*? state $classes class-name)))
 
+; given name of class, returns closure. #F if absent
 (define get-class
   (lambda (class-name state)
     (map:get* state $classes class-name)))

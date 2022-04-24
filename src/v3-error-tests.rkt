@@ -8,7 +8,7 @@
 
 (error-str #:id "static local vars don't persist"
            #:args (list "ClassName")
-           #:catch #T
+           #:catch #t
            "
 class ClassName {
   static function foo() {
