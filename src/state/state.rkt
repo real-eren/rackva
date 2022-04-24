@@ -38,6 +38,7 @@
                                   get-function
                                   declare-fun
                                   declare-method
+                                  declare-init
 
                                   has-class?
                                   get-class
