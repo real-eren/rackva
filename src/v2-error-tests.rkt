@@ -8,8 +8,6 @@
 (define error-str (make-error-tester interpret-v2-str))
 
 
-; ; Error Tests
-
 (error-str #:id "invoking undefined function in top level var declaration"
            #:catch #t
            "
