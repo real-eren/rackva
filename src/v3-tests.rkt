@@ -20,4 +20,17 @@ class A {
   }
 }")
 
+(test-str #:id "single class, no fields, only static methods"
+          11
+          #:args (list "A") "
+class A {
+  static function foo(x) {
+    return 10 + x;
+  }
+
+  static function main() {
+    return foo(1);
+  }
+}")
+
 

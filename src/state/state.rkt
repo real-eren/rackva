@@ -110,6 +110,7 @@
                       $global-vars  new-var-table
                       $global-funs  new-function-table
                       $classes      map:empty
+                      $current-type   null
                       $context-stack  null))
 
 
@@ -143,11 +144,6 @@
 (define push-top-level-context
   (lambda (state)
     (push-context context:top-level state)))
-
-; used internally by `declare-class`
-(define push-class-def-context
-  (lambda (class-name state)
-    (push-context (context:of-class-def) state)))
 
 (define push-fun-call-context
   (lambda (fun state)
@@ -219,12 +215,15 @@
 
 ;; State with this varname declared in the current scope and initialized to this box
 ; top-level -> in global
-; in function body -> local
+; in local (such as function body) -> local
 (define declare-var-with-box
   (lambda (name box state)
     (cond
-      [(local-context? state)    (withf state
-                                        $local-vars  (curry stack:update-front (curry var-table:declare-var-with-box name box)))]
+      [(local-context? state)     (withf state
+                                         $local-vars  (curry stack:update-front (curry var-table:declare-var-with-box name box)))]
+      [(class-def-context? state) (update* (curry var-table:declare-var-with-box name box)
+                                           state $classes (current-type state) class:$s-fields)]
+                                           
       [(top-level-context? state) (withf state
                                          $global-vars (curry var-table:declare-var-with-box name box))]
       )))
@@ -276,10 +275,12 @@
     (or (stack:ormap (curry var-table:var-declared? name) (local-vars state))
         (var-table:var-declared? name (global-vars state)))))
 
-;; Is a variable with this name in scope in the current scope?
+;; Is a variable with this name already declared in the current scope?
+; used by interpreter to detect duplicate declarations
 (define var-declared-current-scope?
   (lambda (name state)
     (cond
+      [(class-def-context? state) (var-table:var-declared? name (get* state $classes (current-type state) class:$s-fields))]
       [(local-context? state)     (var-table:var-declared? name (stack:peek (local-vars state)))]
       [(top-level-context? state) (var-table:var-declared? name (global-vars state))])))
 
@@ -472,9 +473,11 @@
 ;; declares an empty class
 (define declare-class
   (lambda (class-name parent-name state)
-    (map:put* (class:of #:name class-name
-                        #:parent parent-name)
-              state $classes class-name)))
+    (withf state
+           $classes  (curry map:put class-name (class:of #:name class-name #:parent parent-name))
+           $context-stack  (curry stack:push (context:of-class-def class-name))
+           $current-type  (lambda (v) class-name)
+           )))
 
 ;; signal that the earlier class declaration has ended
 (define end-class-decl
