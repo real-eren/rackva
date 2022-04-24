@@ -33,4 +33,13 @@ class A {
   }
 }")
 
+(test-str #:id "static field and main method, same class"
+          11
+          #:args (list "TheClass") "
+class TheClass {
+  static var x = 10;
 
+  static function main() {
+    return x + 1;
+  }
+}")
