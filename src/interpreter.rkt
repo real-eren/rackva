@@ -268,6 +268,12 @@
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
+(define declare-class-init 
+  (lambda (class-name body state next)
+    (next (state:declare-init (filter is-var-decl? body)
+                              class-name
+                              state))))
+
 ;;;;;;;; CONSTRUCTOR DECLARATIONS
 
 
@@ -290,7 +296,7 @@
 
 (define class-const-decl
   (lambda (class-name body state conts)
-    (if (findf is-construct? body) 
+    (if (findf is-const-decl? body) 
         (class-decl-with-filter class-name
                                 is-construct?
                                 body
@@ -308,7 +314,7 @@
 (define class-decl
   (lambda (class-name body state conts)
     (cond
-      [(null? body) ((next conts) conts)]
+      [(null? body) ((next conts) state)]
       [else (class-decl class-name (cdr body) (class-stmt (car body) state) conts)])))
 
 (define class-stmt
@@ -341,6 +347,8 @@
       [(is-static-var-decl? stmt) 1]
       ; var decl
       [(is-var-decl? stmt) 1]
+      ; else error
+      [else (myerror "stuff")]
       )))
 
 
@@ -993,6 +1001,7 @@
 (define is-static-var-decl? (checker-of 'static-var))
 
 (define is-abst-fun-decl? (checker-of 'abstract-function))
+(define is-const-decl? (checker-of 'constructor))
 
 ;; keys are symbols representative of a construct type
 ;; values are the corresponding constructs (type of statement)
