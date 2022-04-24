@@ -35,6 +35,34 @@ class A {
   }
 }")
 
+
+(test-str #:id "sub class can call static method of super class w/out dot"
+          6
+          #:args (list "A") "
+class Parent {
+  static function foo() { return 6; }
+}
+class A extends Parent {
+  static function main() {
+    return foo();
+  }
+}")
+
+(test-str #:id "sub class static method has precedence over static method of super class"
+          7
+          #:args (list "A") "
+class Parent {
+  static function foo() { return 6; }
+}
+class A extends Parent {
+  static function foo() { return 7; }
+  static function main() {
+    return foo();
+  }
+}")
+
+
+
 ; ; STATIC FIELDS
 
 (test-str #:id "static field and main method, same class"

@@ -422,7 +422,8 @@
                            (filter function:static? (get-class-methods class-name state)))
             (get-static-method name
                                arg-list
-                               (get-parent-name class-name state)))
+                               (get-parent-name class-name state)
+                               state))
         #F)))
 
 ;; returns a list of the abstract methods of the parent of this class
@@ -435,7 +436,6 @@
 
 ;; Get something - undetermined how init is implemented
 ; #F on miss
-; assumes class exists
 (define get-init
   (lambda (class-name state)
     (get* state $classes class-name class:$init)))
