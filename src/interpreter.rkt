@@ -275,7 +275,24 @@
                               state))))
 
 ;;;;;;;; CONSTRUCTOR DECLARATIONS
+(define const-params cadr)
+(define const-body   caddr)
 
+(define constructors
+  (lambda (class-name body state next)
+    (if (null? body)
+        (next state)
+        (declare-constructor (car body)
+                          class-name 
+                          state
+                          (lambda (s) (constructors class-name (cdr body) s next))))))
+
+(define declare-constructor
+  (lambda (stmt class-name state next)
+    (next (state:declare-constructor  (const-params stmt)
+                                      (const-body   stmt)
+                                      class-name
+                                      state))))
 
 (define class-func-decl 
   (lambda (class-name body state conts)
