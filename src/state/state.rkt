@@ -39,6 +39,7 @@
                                   declare-fun
                                   declare-method
                                   declare-init
+                                  declare-constructor
 
                                   has-class?
                                   get-class
@@ -413,6 +414,17 @@
                        class)
           state $classes class class:$init)))
 
+;; add a constructor to a class
+; assumption: interpreter checks that this constructor has a unique signature
+(define declare-constructor
+  (lambda (params body class state)
+    (put* (function:of class
+                       params
+                       body
+                       function:scope:constructor
+                       class)
+          state $classes class class:$constructors)))
+    
 ;;;; class
 
 (define has-class?
