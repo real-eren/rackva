@@ -4,7 +4,7 @@
          "function.rkt")
 
 (provide new-function-table
-         (prefix-out function-table:
+         (prefix-out fun-table:
                      (combine-out has-fun?
                                   all
                                   get-all
