@@ -6,6 +6,7 @@
 (provide new-function-table
          (prefix-out function-table:
                      (combine-out has-fun?
+                                  all
                                   get-all
                                   get
                                   declare-fun)))
@@ -16,6 +17,9 @@
 
 (define new-function-table map:empty)
 
+(define all
+  (lambda (table)
+    (map cdr table)))
 ; get all functions with this name in the table
 (define get-all map:get-all)
 ;; gets the function with a matching signature

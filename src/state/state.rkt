@@ -36,6 +36,8 @@
                                   current-scope-has-fun?
                                   has-fun?
                                   get-function
+                                  get-init
+                                  get-constructor
                                   declare-fun
                                   declare-method
                                   declare-init
@@ -310,12 +312,12 @@
 
 
 ;; Is a function with this signature in scope (reachable)?
+; Assumptions:
+; 1) get-function returns #F on miss
+; 2) get-function performs the lookup in the correct order
 (define has-fun?
   (lambda (name arg-list state)
     (not (false? (get-function name arg-list state)))))
-    ;(or (function-table:has-fun? name arg-list (global-funs state))
-     ;   (ormap (curry function-table:has-fun? name arg-list)
-      ;         (local-funs state)))))
 
 ;; sweep through local, global, classes
 ; primarily used by interpreter to display suggestions when reporting errors
@@ -336,6 +338,29 @@
             (function-table:get name arg-list (get* state $classes (current-type state) class:$methods)))]
       [(function-table:get name arg-list (global-funs state))]
       [else #f])))
+
+;; returns a list of the abstract methods of the parent of this class
+; assume class
+; empty list if no parent
+(define get-parents-abstract-methods
+  (lambda (class-name state)
+    (filter (lambda (f)
+              (eq? (function:scope f) function:scope:abstract))
+            (function-table:all (get* (get-parent class-name state) class:$methods)))))
+
+;; Get something - undetermined how init is implemented
+; #F on miss
+; assumes class exists
+(define get-init
+  (lambda (class-name state)
+    (get* state $classes class-name class:$init)))
+
+;; Get closure for the constructor with this signature
+; #F on miss
+; assumes class exists and constructors have class as name
+(define get-constructor
+  (lambda (class-name arg-list state)
+    (function-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
 
 ;; State with this fun declared in the current scope
 ; only called for top-level or nested functions
@@ -391,7 +416,7 @@
                                       scope
                                       class)))))
 
-;; method case of declare-fun
+;; called during class body
 (define declare-method
   (lambda (name params body scope class state)
     (update* (curry function-table:declare-fun
@@ -407,24 +432,27 @@
 ; assumption: called exactly once during class-body
 (define declare-init
   (lambda (body class state)
-    (put* (function:of 'init
-                       '()
-                       body
-                       function:scope:init
-                       class)
+    (put* (function:of #:name 'init
+                       #:params '()
+                       #:body body
+                       #:scoper (make-scoper state)
+                       #:scope function:scope:init
+                       #:class class)
           state $classes class class:$init)))
 
 ;; add a constructor to a class
 ; assumption: interpreter checks that this constructor has a unique signature
 (define declare-constructor
   (lambda (params body class state)
-    (put* (function:of class
-                       params
-                       body
-                       function:scope:constructor
-                       class)
-          state $classes class class:$constructors)))
-    
+    (update* (curry function-table:declare-fun
+                    class
+                    params
+                    body
+                    (make-scoper state)
+                    function:scope:constructor
+                    class)
+             state $classes class class:$constructors)))
+
 ;;;; class
 
 (define has-class?
@@ -434,6 +462,12 @@
 (define get-class
   (lambda (class-name state)
     (map:get* state $classes class-name)))
+
+;; returns closure of the parent of this class
+; assumes valid class-name and existant parent
+(define get-parent
+  (lambda (class-name state)
+    (get-class (class:parent (get-class class-name state)) state)))
 
 ;; declares an empty class
 (define declare-class
