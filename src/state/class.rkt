@@ -12,7 +12,9 @@
            #:parent parent-name)
     (map:of
      $name           name
-     $parent         parent-name
+     $parent         (if (null? parent-name)
+                         #F
+                         parent-name)
      $constructors   new-function-table
      $methods        new-function-table
      $s-fields       new-var-table)))
