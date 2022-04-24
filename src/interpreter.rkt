@@ -197,7 +197,7 @@
               (lambda (s nxt) 
                 (if (findf is-const-decl? body)
                     (constructors (filter is-const-decl? body) class-name parent s nxt)
-                    (constructors '(('constructor () ())) class-name parent s nxt))))))
+                    (constructors '((constructor () ())) class-name parent s nxt))))))
 
                ;(class-static-field-decl
 
