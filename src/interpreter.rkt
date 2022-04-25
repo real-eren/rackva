@@ -346,10 +346,13 @@
 
 (define inst-fields
   (lambda (class-name instance-field-decls state next)
-    ; add all to 
+    ; add each name 
     (next (state:declare-init instance-field-decls
                               class-name
                               state))))
+; if stmt has expr, add to init body
+; 
+
 
 ;;;;;;;; CONSTRUCTOR DECLARATIONS
 (define const-params second)
