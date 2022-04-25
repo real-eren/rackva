@@ -62,7 +62,6 @@ class A extends Parent {
 }")
 
 
-
 ; ; STATIC FIELDS
 
 (test-str #:id "static field and main method, same class"
@@ -153,3 +152,20 @@ class Child extends Parent {
     return x;
   }
 }")
+
+
+; ; ABSTRACT METHODS
+
+(test-str #:id "subclass can override parent's abstract method with another abstract method"
+          0
+          #:args (list "Child") "
+class Parent { function foo(x, y); }
+
+class Child extends Parent {
+  function foo(x, y);
+  static function main() {
+    return 0;
+  }
+}")
+
+
