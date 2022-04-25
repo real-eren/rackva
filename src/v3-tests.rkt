@@ -61,6 +61,30 @@ class A extends Parent {
   }
 }")
 
+(test-str #:id "sub class can call static method of super class with dot"
+          6
+          #:args (list "A") "
+class Parent {
+  static function foo() { return 6; }
+}
+class A extends Parent {
+  static function main() {
+    return Parent.foo();
+  }
+}")
+
+(test-str #:id "class can call static method of other class with dot"
+          6
+          #:args (list "A") "
+class B {
+  static function foo() { return 6; }
+}
+class A {
+  static function main() {
+    return B.foo();
+  }
+}")
+
 (test-str #:id "sub class static method has precedence over static method of super class"
           7
           #:args (list "A") "
