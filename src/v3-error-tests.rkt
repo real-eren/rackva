@@ -66,7 +66,7 @@ class Child extends Parent { static function overrideMe(x, y, z) { } }")
 
 (error-str #:id "static methods collide with instance methods"
            #:args (list "A")
-           #:catch #f
+           #:catch #t
            "
 class A {
   function foo(x, y, z) { }

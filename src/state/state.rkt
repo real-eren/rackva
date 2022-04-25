@@ -26,6 +26,9 @@
 
                                   set-static-scope
                                   set-instance-scope
+                                  set-this-scope
+                                  set-super-scope
+                                  restore-scope
 
                                   declare-var-with-box
                                   declare-var-with-value
@@ -45,6 +48,7 @@
                                   declare-class
                                   has-class?
                                   get-class
+                                  has-parent?
                                   get-parents-abstract-methods
                                   class-declares-inst-or-abst-method?
                                   class-get-inst-method
@@ -235,18 +239,38 @@
 
 ;;;; Used by `Mstate-dot` to make state perform the correct lookups
 (define set-static-scope
-  (lambda (class-name dotted? state)
+  (lambda (class-name state)
     (withv state
            $current-type  class-name
            $this          #F
-           $dotted        dotted?)))
+           $dotted        #T)))
 
 (define set-instance-scope
-  (lambda (this dotted? state)
+  (lambda (this state)
     (withv state
            $current-type  (instance:class this)
            $this          this
-           $dotted        dotted?)))
+           $dotted        #T)))
+
+(define set-this-scope
+  (lambda (state)
+    (withv state
+           $dotted        #T)))
+
+(define set-super-scope
+  (lambda (state)
+    (withv state
+           $current-type  (get-parent-name (current-type state))
+           $dotted        #T)))
+
+;; copies scope related data from src onto dest
+(define restore-scope
+  (lambda (#:src old-state
+           #:dest new-state)
+    (withv new-state
+           $current-type  (current-type old-state)
+           $dotted        #F
+           $this          (this old-state))))
 
 
 
@@ -267,7 +291,7 @@
                                            
       [(top-level-context? state) (withf state
                                          $global-vars (curry var-table:declare-var-with-box name box))]
-      )))
+      [else                       (error "logical error, exhausted cases in declare-var")])))
 
 ;; State with this varname declared in the current scope and initialized to this values
 (define declare-var-with-value
@@ -292,37 +316,34 @@
 ;; Get the box that backs the in-scope var with this name
 ; check if initialized first
 ; local -> instance -> static -> global
-; if dotted, only middle two
+; if dotted, restrict to instance and static
 (define get-var-box
   (lambda (name state)
-    (cond
-      [(and (not (dotted? state))
-            (ormap (curry var-table:var-box name)
-                   (local-vars state)))]
-      [(and (this state)
-            (get-instance-field-box name (this state) (current-type state) state))]
-      [(and (current-type state)
-            (get-static-field-box name (current-type state) state))]
-      [(and (not (dotted? state))
-            (var-table:var-box name (global-vars state)))]
-      [else #F])))
+    (or
+     (and (not (dotted? state))
+          (ormap (curry var-table:var-box name)
+                 (local-vars state)))
+     (and (this state)
+          (get-instance-field-box name (this state) (current-type state) state))
+     (and (current-type state)
+          (get-static-field-box name (current-type state) state))
+     (and (not (dotted? state))
+          (var-table:var-box name (global-vars state))))))
 
-;; Assumes `this` is an instance of `type`
+;; Assumes `this` is an instance of `type` (same or sub-class)
 (define get-instance-field-box
   (lambda (name this class-name state)
     (ormap (curry var-table:var-box name)
            (bottom-layers (instance:fields this) (get-class-height class-name state)))))
-; get layers from based on height of type
-; ormap
-; assumes type is a valid class
+;; Searches this class and its parent for a static field with the name. #F on miss
 (define get-static-field-box
-  (lambda (name type state)
-    (cond
-      [(var-table:var-box name (get* state $classes type class:$s-fields))]
-      [(has-parent? type state)       (get-static-field-box name
-                                                            (class:parent (get-class type state))
-                                                            state)]
-      [else #F]))) ; no parent, #F
+  (lambda (name class-name state)
+    (if class-name
+        (or (var-table:var-box name (get* state $classes class-name class:$s-fields))
+            (get-static-field-box name
+                                  (class:parent (get-class class-name state))
+                                  state))
+        #F)))
 
 ;; get the current value of this var
 ; assumption: var is declared, get-var-box works correctly
@@ -596,6 +617,7 @@
 (define get-parent-name
   (lambda (class-name state)
     (map:get* state $classes class-name class:$parent)))
+
 (define get-parent
   (lambda (class-name state)
     (get-class (get-parent-name class-name state) state)))
