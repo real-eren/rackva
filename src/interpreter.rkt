@@ -100,7 +100,7 @@
   (lambda (state return throw #:class [class #f])
     (Mvalue-fun '(funcall main)
                 (if class
-                    (state:set-static-scope class #T state)
+                    (state:set-static-scope class state)
                     state)
                 (conts-of
                  #:throw throw
