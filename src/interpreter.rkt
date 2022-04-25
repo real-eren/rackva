@@ -114,18 +114,18 @@
 ; optionally takes a filter function (on statement) and throws an error if an
 ; encountered statement does not pass the filter
 (define Mstate-stmt-list
-  (lambda (statement-list state conts #:legal-construct? [legal? (λ (v) #T)])
+  (lambda (stmt-list state conts #:legal-construct? [legal? (λ (v) #T)])
     (cond
-      [(null? statement-list)         ((next conts) state)]
-      [(legal? (car statement-list))  (Mstate-statement (car statement-list)
+      [(null? stmt-list)             ((next conts) state)]
+      [(legal? (first stmt-list))    (Mstate-statement (first stmt-list)
                                                         state
                                                         (conts-of conts
                                                                   #:next (lambda (s)
-                                                                           (Mstate-stmt-list (cdr statement-list) 
+                                                                           (Mstate-stmt-list (rest stmt-list) 
                                                                                              s
                                                                                              conts))))]
       ; indicative of bug in program
-      [else                           (error "encountered illegal construct type" (car statement-list))])))
+      [else                          (error "encountered illegal construct type" (first stmt-list))])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -177,19 +177,22 @@
 
 ;; Run through the body of a class and apply the declarations to state
 ; Assumptions:
-; 1) class has already been declared
+; 1) runs after `state:declare-class` and before `state:end-class-decl`
 (define eval-class-body
   (lambda (class-name parent body state next)
     (chain-TR state
               next
+              ; declare methods and verify that parent's abstract methods are overridden
               (curry methods (filter is-method? body) class-name parent)
-              (curry declare-class-init class-name (filter is-var-decl? body))
+              (curry verify-abstracts-overridden class-name)
+              ; declare instanc
+              (curry inst-fields class-name (filter is-inst-field-decl? body))
               (curry constructors class-name (filter is-const-decl? body))
-              (lambda (s nxt) 
-                (if (findf is-const-decl? body)
-                    (nxt s)
-                    (constructors class-name '((constructor () ())) s nxt)))
-              (curry static-fields (filter is-static-var-decl? body))
+              (lambda (s nxt)
+                (if (no-constructors? body)
+                    (declare-constructor default-constructor-stmt class-name s nxt)
+                    (nxt s)))
+              (curry static-fields (filter is-static-field-decl? body))
     )))
 
 
@@ -227,6 +230,7 @@
         (map:get (action stmt) method-type-table))))
 
 ;; evaluate a list of method declarations in a class body
+; after all declared, check that parent's abstract methods were overridden
 (define methods
   (lambda (method-decl-list class-name parent state next)
     (if (null? method-decl-list)
@@ -247,26 +251,53 @@
   (lambda (stmt)
     (if (null? (cdddr stmt))
         null
-        (cadddr stmt))))
+        (fourth stmt))))
 
 (define declare-method
   (lambda (stmt class-name state next)
     (next (state:declare-method (method-name stmt)
-                          (method-params stmt)
-                          (method-body-or-null stmt)
-                          (is-method? stmt)
-                          class-name
-                          state))))
+                                (method-params stmt)
+                                (method-body-or-null stmt)
+                                (is-method? stmt)
+                                class-name
+                                state))))
+
+(define verify-abstracts-overridden
+  (lambda (class-name state next)
+    (verify-abstracts-impl class-name
+                           (state:get-parents-abstract-methods class-name state)
+                           state
+                           next)))
+(define verify-abstracts-impl
+  (lambda (class-name abstract-funs state next)
+    (cond
+      [(null? abstract-funs)                 (next state)]
+      [(fun-overridden? (first abstract-funs)
+                        class-name
+                        state)               (verify-abstracts-impl class-name
+                                                                    (rest abstract-funs)
+                                                                    state
+                                                                    next)]
+      [else                                  (myerror (format "class `~a` does not override abstract method `~a`"
+                                                              class-name
+                                                              (function->string (first abstract-funs)))
+                                                      state)])))
+(define fun-overridden?
+  (lambda (fun class-name state)
+    (state:class-has-inst-method? class-name
+                                  (function:name fun)
+                                  (function:params fun)
+                                  state)))
 
 ;;;;;;;; STATIC FIELD DECLARATIONS
 (define static-fields
   (lambda (body state next)
     (if (null? body) 
         (next state)
-        (declare-static-field (car body)
+        (declare-static-field (first body)
                               state
                               (lambda (s)
-                                (static-fields (cdr body) s next))))))
+                                (static-fields (rest body) s next))))))
 (define declare-static-field
   (lambda (stmt state next)
     (Mstate-var-decl-impl (decl-var stmt)
@@ -277,12 +308,12 @@
                             #:break       default-break
                             #:continue    default-continue
                             #:throw       default-throw
-                            #:return      (lambda (v s) (myerror "Illegal return in static declarations"))
+                            #:return      (lambda (v s) (myerror "Illegal return in static declarations" s))
                             ))))
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
-(define declare-class-init 
+(define inst-fields 
   (lambda (class-name instance-field-decls state next)
     (next (state:declare-init instance-field-decls
                               class-name
@@ -292,15 +323,20 @@
 (define const-params second)
 (define const-body third)
 
+(define default-constructor-stmt '(constructor () ()))
+(define no-constructors?
+  (lambda (body)
+    (false? (findf is-const-decl? body))))
+
 (define constructors
   (lambda (class-name body state next)
     (if (null? body)
         (next state)
-        (declare-constructor (car body)
+        (declare-constructor (first body)
                              class-name 
                              state
                              (lambda (s)
-                               (constructors class-name (cdr body) s next))))))
+                               (constructors class-name (rest body) s next))))))
 
 (define declare-constructor
   (lambda (stmt class-name state next)
@@ -809,27 +845,27 @@
       [(and (null? actual-params)
             (null? formal-params))      (evaluation '() '() state)]
       ;; by value
-      [(not (eq? (car formal-params)
-                 '&))                   (Mvalue (car actual-params)
+      [(not (eq? (first formal-params)
+                 '&))                   (Mvalue (first actual-params)
                                                 state
                                                 (conts-of conts
                                                           #:return (lambda (v1 s1)
-                                                                     (get-inputs-list-box-cps (cdr formal-params)
-                                                                                              (cdr actual-params)
+                                                                     (get-inputs-list-box-cps (rest formal-params)
+                                                                                              (rest actual-params)
                                                                                               s1
                                                                                               conts
                                                                                               (lambda (p1 l1 s2)
-                                                                                                (evaluation (cons (car formal-params) p1) 
+                                                                                                (evaluation (cons (first formal-params) p1) 
                                                                                                             (cons (box v1) l1) 
                                                                                                             s2))))))]
       ;; by reference
-      [(symbol? (car actual-params))    (get-inputs-list-box-cps (cddr formal-params)
+      [(symbol? (first actual-params))  (get-inputs-list-box-cps (cddr formal-params)
                                                                  (cdr actual-params)
                                                                  state
                                                                  conts
                                                                  (lambda (p b s)
                                                                    (evaluation (cons (second formal-params) p)
-                                                                               (cons (read-var-box (car actual-params) s) b)
+                                                                               (cons (read-var-box (first actual-params) s) b)
                                                                                s)))]
       [else                             (myerror (format "Function expects a reference for `~a`"
                                                          (second formal-params))
@@ -902,11 +938,11 @@
   (lambda (expr-list state conts)
     (if (null? expr-list)
         ((return conts) expr-list state)
-        (Mvalue (car expr-list)
+        (Mvalue (first expr-list)
                 state
                 (conts-of conts
                           #:return (lambda (v1 s1)
-                                     (map-expr-list-to-value-list (cdr expr-list)
+                                     (map-expr-list-to-value-list (rest expr-list)
                                                                   s1
                                                                   (conts-of conts
                                                                             #:return (lambda (v2 s2)
@@ -935,7 +971,7 @@
 ;;;; functions that may be useful in more than one context
 
 ;; takes a statement or nested expr (list), returns what should be an action symbol
-(define action car)
+(define action first)
 
 ;; takes an expression and returns whether it contains other expressions
 (define nested? list?)
@@ -956,7 +992,8 @@
 (define is-fun-call? (checker-of 'funcall))
 (define is-class-decl? (checker-of 'class))
 
-(define is-static-var-decl? (checker-of 'static-var))
+(define is-static-field-decl? (checker-of 'static-var))
+(define is-inst-field-decl? is-var-decl?)
 
 (define is-const-decl? (checker-of 'constructor))
 
@@ -1030,26 +1067,15 @@
 ;; assuming the atom is an op-symbol, returns the associated function
 (define op-of-symbol
   (lambda (op-symbol)
-    (cond
-      [(map:get op-symbol arithmetic-op-table)]
-      [(map:get op-symbol boolean-op-table)]
-      [#f])))
+    (or (map:get op-symbol arithmetic-op-table)
+        (map:get op-symbol boolean-op-table))))
 
 
 ;;;;;;; Custom error functions
-
-;; retrieves the context-stack from state and returns it in a form fit for output
-(define formatted-stack-trace
-  (lambda (state)
-    (if (empty? (state:context-stack state))
-        ""
-        (string-join (map (curry format "~a") (reverse (state:context-stack state)))
-                     " -> "
-                     #:before-first "stack trace: "))))
 ;; for user-facing errors
 (define myerror
   (lambda (msg state)
-    (raise-user-error (string-append msg "\n" (formatted-stack-trace state)))))
+    (raise-user-error (string-append msg "\n" (state:formatted-stack-trace state)))))
 
 ;;;;;;;; Common Continuations
 

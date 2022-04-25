@@ -93,6 +93,16 @@ function main() {
   return x;
 }")
 
+(error-str #:id "function defined twice, some params change to ref"
+           #:catch #t
+           "
+function foo(x, y) { return 1; }
+function foo(&x, &y) { return 2; }
+function main() {
+  var x = foo();
+  return x;
+}")
+
 (error-str #:id "absent main function"
            #:catch #t
            "var a = 2;")
