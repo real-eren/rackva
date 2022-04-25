@@ -1,5 +1,5 @@
 #lang racket
-(provide join||
+(provide join-or
          join&&)
 
 ;;;; collection of higher-order functions for composing predicates
@@ -8,7 +8,7 @@
 ;; that returns true iff any predicate would return true.
 ;; behaves as if the predicates were joined by short-circuit or
 ; ex: (filter (any 
-(define join||
+(define join-or
   (lambda preds
     (lambda (v)
       (ormap (lambda (p) (p v)) preds))))

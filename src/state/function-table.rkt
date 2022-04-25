@@ -4,8 +4,7 @@
 
 (provide new-function-table
          (prefix-out fun-table:
-                     (combine-out has-fun?
-                                  all
+                     (combine-out has?
                                   get-all
                                   get
                                   declare-fun)))
@@ -16,9 +15,6 @@
 
 (define new-function-table null)
 
-(define all
-  (lambda (table)
-    table))
 ; get all functions with this name in the table
 (define get-all
   (lambda (name table)
@@ -35,7 +31,7 @@
            (get-all name table))))
 
 ; get returns false if absent
-(define has-fun?
+(define has?
   (lambda (name arg-list table)
     (not (false? (get name arg-list table)))))
 
@@ -53,7 +49,7 @@
 
 (module+ test
   (require rackunit)
-  (check-false (has-fun? 'a '() new-function-table))
+  (check-false (has? 'a '() new-function-table))
   (check-eq? '() (get-all 'a new-function-table))
 
   
@@ -61,7 +57,7 @@
          [fparams  '(a b & c)]
          [fargs    '(1 2 var)]
          [table    (declare-fun fname fparams null null null null new-function-table)])
-    (check-true (has-fun? fname fargs table))
-    (check-false (has-fun? fname '() table))
+    (check-true (has? fname fargs table))
+    (check-false (has? fname '() table))
     (check-eq? (get fname fargs table) (first (get-all fname table)))))
 
