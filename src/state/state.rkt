@@ -2,6 +2,7 @@
 
 (require "../util/map.rkt"
          "../util/stack.rkt"
+         "../util/predicates.rkt"
          "var-table.rkt"
          "instance.rkt"
          "function.rkt"
@@ -39,19 +40,22 @@
                                   fun-already-declared?
                                   has-fun?
                                   get-function
-                                  get-init
-                                  get-constructor
-                                  get-parents-abstract-methods
-                                  class-has-inst-method?
                                   declare-fun
-                                  declare-method
-                                  method-already-declared?
-                                  declare-init
-                                  declare-constructor
 
+                                  declare-class
                                   has-class?
                                   get-class
-                                  declare-class
+                                  get-parents-abstract-methods
+                                  class-declares-inst-or-abst-method?
+                                  class-get-inst-method
+                                  declare-method
+                                  method-already-declared?
+                                  
+                                  get-init
+                                  get-constructor
+                                  declare-init
+                                  declare-constructor
+                                  
                                   end-class-decl)))
 
 
@@ -361,7 +365,7 @@
 ; used by interpreter to decide whether a declaration collides with an existing function
 (define fun-already-declared?
   (lambda (name arg-list state)
-    (fun-table:has-fun? name arg-list (get-current-fun-table name state))))
+    (fun-table:has? name arg-list (get-current-fun-table name state))))
 ; current table where declarations would go
 (define get-current-fun-table
   (lambda (f-name state)
@@ -385,7 +389,8 @@
 ;; sweep through local, global, classes
 ; primarily used by interpreter to display suggestions when reporting errors
 ; for calling an undefined function
-(define get-all-funs
+; WIP
+(define all-funs-with-sig
   (lambda (name state)
     (foldl append
            '()
@@ -397,42 +402,80 @@
                         (local-funs state))))))
 ;; Get closure for the first function with this signature
 ; traverses scopes in this order:
-; local -> instance -> static -> global
+; local (new->old) -> instance (sub->super) -> static (sub->super) -> global
 (define get-function
   (lambda (name arg-list state)
     (or (ormap (curry fun-table:get name arg-list) (local-funs state))
-        (get-instance-method name arg-list (this state) (current-type state) state)
+        (get-inst/abst-method name arg-list (this state) (current-type state) state)
         (get-static-method name arg-list (current-type state) state)
         (fun-table:get name arg-list (global-funs state)))))
 
-; #F on miss
-(define get-instance-method
-  (lambda (name arg-list this class-name state)
-    (and this
-         class-name
-         (class-declares-instance-method name arg-list class-name state)
-         (get-inst-method name arg-list (instance:class this) state))))
-(define class-declares-instance-method
-  (lambda (name arg-list class-name state)
-    (if class-name
-        (or (fun-table:has-fun? name arg-list (filter function:instance?
-                                                      (get-class-methods class-name state)))
-            (class-declares-instance-method name arg-list (get-parent-name class-name state) state))
-        #F)))
-; assumes valid this and existent instance method
-(define get-inst-method
-  (lambda (name arg-list class-name state)
-    (or (fun-table:get name
-                       arg-list
-                       (filter function:instance? (get-class-methods class-name state)))
-        (get-inst-method name
-                         arg-list
-                         (get-parent-name class-name state)
-                         state))))
-
+;; list of all the methods declared in this class
 (define get-class-methods
   (lambda (class-name state)
     (class:methods (get-class class-name state))))
+; w/ polymorphism, returns the appropriate instance or abstract method for this.
+; #F on miss or if the given `compile-time type` doesn't have access to such a method
+(define get-inst/abst-method
+  (lambda (name arg-list this class-name state)
+    (and this
+         class-name
+         (class-has-i-a-method? name arg-list class-name state)
+         (get-i-a-method-rec name arg-list (instance:class this) state))))
+; does this type declare or inherit an instance or abstract method w/ this signature
+(define class-has-i-a-method?
+  (lambda (name arg-list class-name state)
+    (if class-name
+        (or (class-declares-inst-or-abst-method? class-name name arg-list state)
+            (class-has-i-a-method? name arg-list (get-parent-name class-name state) state))
+        #F)))
+;; class's declared or inherited instance method w/ this signature
+; used when verifying that an abstract method will not override a concrete method
+; #f on miss
+(define class-get-inst-method
+  (lambda (class-name fun-name params state)
+    (if class-name
+        (or (fun-table:get fun-name params (get-class-i-methods class-name state))
+            (class-get-inst-method (get-parent-name class-name state) fun-name params state))
+        #f)))
+; this particular class's inst or abst method w/ given signature. #F on miss
+(define get-class-i-a-method
+  (lambda (class-name fun-name params state)
+    (fun-table:get fun-name
+                   params
+                   (get-class-i-a-methods class-name state))))
+;; whether this class declares an instance method with this signature
+; used when verifying that abstract methods were overridden
+; assumes get returns #f on miss
+(define class-declares-inst-or-abst-method? get-class-i-a-method)
+; returns the (most recent) instance method w/ this signature in this class's ancestry
+; assumes such a method exists.
+(define get-i-a-method-rec
+  (lambda (name arg-list class-name state)
+    (or (get-class-i-a-method class-name
+                              name
+                              arg-list
+                              state)
+        (get-i-a-method-rec name
+                            arg-list
+                            (get-parent-name class-name state)
+                            state))))
+;; list of all the instance or abstract methods declared in this class
+; assumes valid class
+(define get-class-i-a-methods
+  (lambda (class-name state)
+    (filter (join-or function:abstract? function:instance?)
+            (get-class-methods class-name state))))
+;; list of all the instance methods declared in this class
+; assumes valid class
+(define get-class-i-methods
+  (lambda (class-name state)
+    (filter function:instance? (get-class-methods class-name state))))
+;; list of all the static methods declared in this class
+; assumes valid class
+(define get-class-s-methods
+  (lambda (class-name state)
+    (filter function:static? (get-class-methods class-name state))))
 
 ;; searches this class and its superclasses for a static method with this signature
 ; assumes type is not #F
@@ -443,7 +486,7 @@
     (if class-name
         (or (fun-table:get name
                            arg-list
-                           (filter function:static? (get-class-methods class-name state)))
+                           (get-class-s-methods class-name state))
             (get-static-method name
                                arg-list
                                (get-parent-name class-name state)
@@ -457,17 +500,11 @@
   (lambda (class-name state)
     (if (has-parent? class-name state)
         (filter function:abstract?
-                (fun-table:all (class:methods (get-parent class-name state))))
+                (class:methods (get-parent class-name state)))
         null)))
-;; whether this class has an instance method with this signature
-; used when verifying that abstract methods were overridden
-(define class-has-inst-method?
-  (lambda (class-name fun-name params state)
-    (fun-table:get fun-name
-                   params
-                   (filter function:instance? (get-class-methods class-name state)))))
 
-;; Get something - undetermined how init is implemented
+
+;; Get the init function for this class
 ; #F on miss
 (define get-init
   (lambda (class-name state)

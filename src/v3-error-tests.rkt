@@ -30,12 +30,23 @@ class ClassName {
   static function main() { return x; }
 }")
 
+; ; Overriding and Abstracts
+
 (error-str #:id "subclass doesn't override parent's abstract methods"
            #:args (list "Child")
            #:catch #t
            "
 class Parent { function abstractMethod(); }
 class Child extends Parent { }")
+
+(error-str #:id "subclass overrides parent's concrete with abstract"
+           #:args (list "Child")
+           #:catch #t
+           "
+class Parent { function foo(x) { } }
+class Child extends Parent {
+  function foo(x);
+}")
 
 (error-str #:id "subclass declares method with similar signature to parent's abstract methods, but does not override"
            #:args (list "Child")
@@ -55,10 +66,10 @@ class Child extends Parent { static function overrideMe(x, y, z) { } }")
 
 (error-str #:id "static methods collide with instance methods"
            #:args (list "A")
-           #:catch #t
+           #:catch #f
            "
 class A {
   function foo(x, y, z) { }
-  static function foo(x, y, z) { }
+  static function foo(a, b, c) { }
 }")
 

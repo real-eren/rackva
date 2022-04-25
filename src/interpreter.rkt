@@ -60,7 +60,7 @@
                       (conts-of ; only next and throw are actually reachable
                        #:next (lambda (s) (Mstate-main s return throw))
                        #:throw throw)
-                      #:legal-construct? (join|| is-var-decl? is-assign? is-fun-decl?))))
+                      #:legal-construct? (join-or is-var-decl? is-assign? is-fun-decl?))))
 
 ;; legacy, for testing
 ;; interprets parse-trees produced by simpleParser.rkt
@@ -259,18 +259,38 @@
 
 (define declare-method
   (lambda (stmt class-name state next)
-    (if (state:method-already-declared? class-name (method-name stmt) (method-params stmt) state)
-        (myerror (format "A method with the signature `~a` is already declared in class `~a`."
-                         (function:formatted-signature (method-name stmt) (method-params stmt))
-                         class-name)
-                 state)
-        (next (state:declare-method (method-name stmt)
-                                    (method-params stmt)
-                                    (method-body-or-null stmt)
-                                    (method-type stmt)
-                                    class-name
-                                    state)))))
-;; Assumes all methods of this class have been 
+    (next (declare-method-impl (method-name stmt)
+                               (method-params stmt)
+                               (method-body-or-null stmt)
+                               (method-type stmt)
+                               class-name
+                               state))))
+(define declare-method-impl
+  (lambda (m-name m-params m-body m-type class-name state)
+    (cond
+      [(state:method-already-declared? class-name
+                                       m-name
+                                       m-params
+                                       state)               (myerror (format "A method with the signature `~a` is already declared in class `~a`."
+                                                                             (function:formatted-signature m-name m-params)
+                                                                             class-name)
+                                                                     state)]
+      [(and (eq? function:scope:abstract m-type)
+            (state:class-get-inst-method class-name
+                                          m-name
+                                          m-params
+                                          state))    =>     (lambda (fun)
+                                                              (myerror (format "Cannot override concrete `~a` with abstract method"
+                                                                               (function->string fun))
+                                                                       state))]
+      [else                                                 (state:declare-method m-name
+                                                                                  m-params
+                                                                                  m-body
+                                                                                  m-type
+                                                                                  class-name
+                                                                                  state)])))
+;; Assumes all instance&abstract methods of this class have been declared
+; verify that all of parent's abstract methods are redeclared in this class
 (define verify-abstracts-overridden
   (lambda (class-name state next)
     (verify-abstracts-impl class-name
@@ -291,12 +311,14 @@
                                                               class-name
                                                               (function->string (first abstract-funs)))
                                                       state)])))
+; whether a class declares an override for a method
+; to be called on abstract methods of parent
 (define fun-overridden?
   (lambda (fun class-name state)
-    (state:class-has-inst-method? class-name
-                                  (function:name fun)
-                                  (function:params fun)
-                                  state)))
+    (state:class-declares-inst-or-abst-method? class-name
+                                               (function:name fun)
+                                               (function:params fun)
+                                               state)))
 
 ;;;;;;;; STATIC FIELD DECLARATIONS
 (define static-fields
