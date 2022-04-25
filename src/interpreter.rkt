@@ -607,17 +607,6 @@
   (lambda (statement state conts)
     ((continue conts) state)))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   DOT    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define dot-LHS second)
-(define dot-RHS third)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   NEW   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define new-class second)
-(define new-params third)
-
-(define Mvalue-new 
-  (lambda (statement state conts) 1))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; takes a statement representing a declaration statement
@@ -963,6 +952,16 @@
            box-list)))
 
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   NEW   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define new-class second)
+(define new-params third)
+
+(define Mvalue-new 
+  (lambda (statement state conts) 1))
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; returns the value of the token given the state
@@ -1043,46 +1042,48 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Mname ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(define dot-LHS second)
+(define dot-RHS third)
 
 (define Mname
   (lambda (name state conts)
     (cond
-      
-      [(symbol? name)     (Mname-simple  name
-                                          state
-                                          conts)]
-      [(is-dotted? name)  (Mname-dot  (dot-LHS name)
-                                      (dot-RHS name)
-                                      state
-                                      conts)]
-      [else               (myerror (format "~a cannot be evaluate as name" name) state)])))
+      [(symbol? name)     (Mname-simple name state conts)]
+      [(is-dotted? name)  (Mname-dot (dot-LHS name)
+                                     (dot-RHS name)
+                                     state
+                                     conts)]
+      [else               (myerror (format "malformed identifier `~a`" name) state)])))
 
 (define Mname-simple
   (lambda (name state conts)
     (cond
       [(eq? 'this name)   (if (state:instance-context? state) 
                               ((return conts) name state)
-                              (myerror "this cannot be refered in instance context" state))]
-      ; [(eq? 'super name)  (myerror "super cannot be refered as a variable")]
-      [else ((return conts) name state)])))
+                              (myerror "`this` cannot be referenced in a free or static context" state))]
+      [else               ((return conts) name state)])))
 
 (define Mname-dot
   (lambda (LHS RHS state conts)
     (cond
-      [(or  (eq? 'this RHS)
-            (eq? 'super RHS))           (myerror (format "Cannot refer ~a from RHS of dot expression") state)]
-      [(not (symbol? LHS))              (Mvalue LHS state (conts-of conts 
-                                                              #:return  (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) #t s)))))]
-      [(eq? 'this LHS)                  (if (state:instance-context? state) 
-                                        ((return conts) RHS (state:set-this-scope state))
-                                        (myerror "this cannot be refered in instance context" state))]
+      [(or (eq? 'this RHS)
+           (eq? 'super RHS))            (myerror (format "Keyword `~a` cannot appear on the RHS of a dot expression" RHS) state)]
+      [(eq? 'this LHS)                  (if (state:instance-context? state)
+                                            ((return conts) RHS (state:set-this-scope state))
+                                            (myerror "`this` cannot be used in a free or static context" state))]
       [(eq? 'super LHS)                 (if (and (state:instance-context? state) (state:current-type-has-parent? state))
-                                        ((return conts) RHS (state:set-super-scope state))
-                                        (myerror "super cannot be refered in instance context" state))]
-      [(state:var-declared? LHS state)  (Mvalue LHS state (conts-of conts 
-                                                              #:return  (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) #t s)))))]
+                                            ((return conts) RHS (state:set-super-scope state))
+                                            (myerror "`super` cannot be refered in instance context" state))]
+      [(not (symbol? LHS))              (Mvalue LHS
+                                                state
+                                                (conts-of conts
+                                                          #:return (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
+      [(state:var-declared? LHS state)  (Mvalue LHS
+                                                state
+                                                (conts-of conts
+                                                          #:return (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
       [(state:has-class? LHS state)     ((return conts) RHS (state:set-static-scope LHS state))]
-      [else                             (myerror (format "cannot parsing ~a the left hand side of the dot expression" LHS) state)])))
+      [else                             (myerror (format "`~a` cannot appear on the left hand side of a dot expression" LHS) state)])))
 
 (define assert-instance 
   (lambda (v s) 
