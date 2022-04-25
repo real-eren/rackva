@@ -49,7 +49,7 @@
                                   declare-class
                                   has-class?
                                   get-class
-                                  has-parent?
+                                  current-type-has-parent?
                                   get-parents-abstract-methods
                                   class-declares-inst-or-abst-method?
                                   class-get-inst-method
@@ -614,6 +614,9 @@
   (lambda (class-name state)
     (map:get* state $classes class-name)))
 
+(define current-type-has-parent?
+  (lambda (state)
+    (has-parent? (current-type state))))
 ;; returns name and closure of the parent of this class
 ; assumes valid class-name. assumes get* returns false on miss. #F if no parent
 (define has-parent?
