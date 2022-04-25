@@ -165,7 +165,7 @@ class Child extends Parent {
 }")
 
 (test-str #:id "accessing static field of super class with dot"
-          2
+          4
           #:args (list "Child") "
 class Parent {
   static var x = 1;
