@@ -853,7 +853,7 @@
                                                     state
                                                     (conts-of conts
                                                               #:return (lambda (v s) 
-                                                                         (Mname (assign-var) 
+                                                                         (Mname (assign-var expr) 
                                                                                 state 
                                                                                 (conts-of conts
                                                                                           #:return    (lambda (n s2) 
