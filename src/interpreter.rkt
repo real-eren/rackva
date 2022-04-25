@@ -83,6 +83,7 @@
       [(eq? #t value)         'true]
       [(eq? #f value)         'false]
       [(number? value)        value]
+      [(is-instance? value)   value]
       [else                   (error "returned an unsupported type: " value)])))
 
 
@@ -186,7 +187,7 @@
               ; declare methods and verify that parent's abstract methods are overridden
               (curry methods (filter is-method? body) class-name parent)
               (curry verify-abstracts-overridden class-name)
-              ; declare instance fields (name only)
+              ; declare instance fields (name only), and initializers (init)
               (curry inst-fields class-name (filter is-inst-field-decl? body))
               ; declare user-defined constructors
               (curry constructors class-name (filter is-const-decl? body))
@@ -347,13 +348,52 @@
 
 (define inst-fields
   (lambda (class-name instance-field-decls state next)
-    ; add each name 
-    (next (state:declare-init instance-field-decls
-                              class-name
-                              state))))
-; if stmt has expr, add to init body
-; 
+    (declare-inst-fields instance-field-decls
+                         state
+                         (lambda (s)
+                           (declare-init class-name
+                                         instance-field-decls
+                                         s
+                                         next)))))
 
+(define declare-inst-fields
+  (lambda (i-field-decls state next)
+    (if (null? i-field-decls)
+        (next state)
+        (declare-inst-field (first i-field-decls)
+                            state
+                            (lambda (s)
+                              (declare-inst-fields (rest i-field-decls)
+                                                   s
+                                                   next))))))
+
+;(define decl-var second)
+;(define decl-maybe-expr cddr)
+(define declare-inst-field
+  (lambda (i-field-decl state next)
+    (declare-inst-field-impl (decl-var i-field-decl)
+                             (decl-maybe-expr i-field-decl)
+                             state
+                             next)))
+(define declare-inst-field-impl
+  (lambda (var-name maybe-expr state next)
+    (if (state:var-already-declared? var-name state)
+        (myerror (format "~a already declared" var-name)
+                 state)
+        (next (state:declare-inst-field var-name state)))))
+;; add the fields with initializers to the classes init method
+; map to an assignment
+(define declare-init
+  (lambda (class-name i-field-decls state next)
+    (next (state:declare-init class-name
+                              (map decl->assign
+                                   (filter (lambda (decl)
+                                             (not (null? (decl-maybe-expr decl))))
+                                           i-field-decls))
+                              state))))
+(define decl->assign
+  (lambda (decl-stmt)
+    (list '= (decl-var decl-stmt) (get (decl-maybe-expr decl-stmt)))))
 
 ;;;;;;;; CONSTRUCTOR DECLARATIONS
 (define const-params second)
