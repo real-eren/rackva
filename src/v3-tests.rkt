@@ -164,6 +164,32 @@ class Child extends Parent {
   }
 }")
 
+(test-str #:id "accessing static field of super class with dot"
+          2
+          #:args (list "Child") "
+class Parent {
+  static var x = 1;
+  static var y = 3;
+}
+class Child extends Parent {
+  static function main() {
+    Parent.y = Parent.x = 2;
+    return x + y;
+  }
+}")
+
+(test-str #:id "static fields assignment"
+          1
+          #:args (list "Child") "
+class Parent {
+  static var x = 1;
+}
+class Child extends Parent {
+  static function main() {
+    return Parent.x;
+  }
+}")
+
 (test-str #:id "accessing static field of super super class w/out dot"
           1
           #:args (list "Child") "
