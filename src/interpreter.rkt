@@ -100,7 +100,7 @@
   (lambda (state return throw #:class [class #f])
     (Mvalue-fun '(funcall main)
                 (if class
-                    (state:set-current-type class state)
+                    (state:set-static-scope class #T state)
                     state)
                 (conts-of
                  #:throw throw
@@ -803,8 +803,7 @@
 (define Mshared-fun-impl
   (lambda (name arg-list state conts)
     (if (state:has-fun? name arg-list state)
-        (Mvalue-fun-impl name
-                         (state:get-function name arg-list state)
+        (Mvalue-fun-impl (state:get-function name arg-list state)
                          arg-list
                          state
                          (conts-of conts
@@ -817,10 +816,9 @@
 
 
 (define Mvalue-fun-impl
-  (lambda (fun-name fun-closure fun-inputs state conts)
+  (lambda (fun-closure fun-inputs state conts)
     (Mstate-stmt-list (function:body fun-closure)
-                      (get-environment fun-name 
-                                       fun-closure
+                      (get-environment fun-closure
                                        fun-inputs
                                        (state:push-fun-call-context fun-closure state)
                                        conts)
@@ -830,22 +828,15 @@
 ;; Takes in the function name, the function closure, the input expression list
 ;; the state, the conts
 (define get-environment
-  (lambda (fun-name fun-closure inputs state conts)
-    (if (eq? (function:num-formal-params fun-closure)
-             (length inputs))
-        (get-inputs-list-box-cps (function:params fun-closure)
-                                 inputs
-                                 state
-                                 conts
-                                 (lambda (p l s)
-                                   (bind-boxed-params p
-                                                      l
-                                                      (state:push-new-layer ((function:scoper fun-closure) s)))))
-        (myerror (format "`~a` expected ~a argument(s), got ~a."
-                         fun-name
-                         (function:num-formal-params fun-closure)
-                         (length inputs))
-                 state))))
+  (lambda (fun-closure inputs state conts)
+    (get-inputs-list-box-cps (function:params fun-closure)
+                             inputs
+                             state
+                             conts
+                             (lambda (p l s)
+                               (bind-boxed-params p
+                                                  l
+                                                  (state:push-new-layer ((function:scoper fun-closure) s)))))))
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
