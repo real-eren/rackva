@@ -35,6 +35,19 @@ class A {
   }
 }")
 
+(test-str #:id "single class, no fields, only static methods, call using dot"
+          11
+          #:args (list "A") "
+class A {
+  static function foo(x) {
+    return 10 + x;
+  }
+
+  static function main() {
+    return A.foo(1);
+  }
+}")
+
 
 (test-str #:id "sub class can call static method of super class w/out dot"
           6
