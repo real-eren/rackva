@@ -44,6 +44,7 @@
                                   class-has-inst-method?
                                   declare-fun
                                   declare-method
+                                  method-already-declared?
                                   declare-init
                                   declare-constructor
 
@@ -572,6 +573,7 @@
              state $classes class-name class:$i-field-names)))
 
 ;; called during class body
+; handles static | instance | abstract
 (define declare-method
   (lambda (name params body scope class state)
     (update* (curry fun-table:declare-fun
@@ -582,6 +584,10 @@
                     scope
                     class)
              state $classes class class:$methods)))
+(define method-already-declared?
+  (lambda (class-name fun-name arg-list state)
+    (fun-table:get fun-name arg-list (get-class-methods class-name state))))
+
     
 ;; add an init function to a class
 ; assumption: called exactly once during class-body

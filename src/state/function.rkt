@@ -68,12 +68,17 @@
 ;; Given a valid function, produces a nicely formatted string
 (define function->string
   (lambda (fun)
-    (format "~a~a(~a)"
+    (format "~a~a"
             (if (class fun)
                 (format "~a::" (class fun))
                 "")
-            (name fun)
-            (string-join (params->strs (params fun)) ", "))))
+            (formatted-signature (name fun) (params fun)))))
+
+(define formatted-signature
+  (lambda (fun-name params)
+    (format "~a(~a)"
+            fun-name
+            (string-join (params->strs params) ", "))))
 
 (define params->strs
   (lambda (params)

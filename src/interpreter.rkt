@@ -185,18 +185,21 @@
               ; declare methods and verify that parent's abstract methods are overridden
               (curry methods (filter is-method? body) class-name parent)
               (curry verify-abstracts-overridden class-name)
-              ; declare instanc
+              ; declare instance fields (name only)
               (curry inst-fields class-name (filter is-inst-field-decl? body))
+              ; declare user-defined constructors
               (curry constructors class-name (filter is-const-decl? body))
+              ; add default constructor if no user-defined constructors present
               (lambda (s nxt)
                 (if (no-constructors? body)
                     (declare-constructor default-constructor-stmt class-name s nxt)
                     (nxt s)))
+              ; declare static fields w/ values
               (curry static-fields (filter is-static-field-decl? body))
     )))
 
 
-;; takes initial state and last continuation
+;; takes initial state, last continuation and a sequence of 2-arg functions
 ;; joins a sequence of tail-recursive functions via next continuations
 ;; each function must take two args: state and next(s)
 ; for the sake of avoiding absurd indentation and making the intended order clear
@@ -222,12 +225,13 @@
 ; Assumptions:
 ; 1) map:get returns #F on absence
 ; 2) action returns the function KW of the statement
-(define is-method?
+(define method-type
   (lambda (stmt)
     (if (or (not (list? stmt))
             (null? stmt))
         #F
         (map:get (action stmt) method-type-table))))
+(define is-method? method-type)
 
 ;; evaluate a list of method declarations in a class body
 ; after all declared, check that parent's abstract methods were overridden
@@ -255,13 +259,18 @@
 
 (define declare-method
   (lambda (stmt class-name state next)
-    (next (state:declare-method (method-name stmt)
-                                (method-params stmt)
-                                (method-body-or-null stmt)
-                                (is-method? stmt)
-                                class-name
-                                state))))
-
+    (if (state:method-already-declared? class-name (method-name stmt) (method-params stmt) state)
+        (myerror (format "A method with the signature `~a` is already declared in class `~a`."
+                         (function:formatted-signature (method-name stmt) (method-params stmt))
+                         class-name)
+                 state)
+        (next (state:declare-method (method-name stmt)
+                                    (method-params stmt)
+                                    (method-body-or-null stmt)
+                                    (method-type stmt)
+                                    class-name
+                                    state)))))
+;; Assumes all methods of this class have been 
 (define verify-abstracts-overridden
   (lambda (class-name state next)
     (verify-abstracts-impl class-name
@@ -313,8 +322,9 @@
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
-(define inst-fields 
+(define inst-fields
   (lambda (class-name instance-field-decls state next)
+    ; add all to 
     (next (state:declare-init instance-field-decls
                               class-name
                               state))))
