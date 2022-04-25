@@ -20,6 +20,7 @@
                                   push-top-level-context
                                   push-fun-call-context
                                   pop-context
+                                  instance-context?
                                   formatted-stack-trace
                                   
                                   make-scoper
@@ -183,6 +184,11 @@
 (define top-level-context?
   (lambda (state)
     (eq? context:type:top-level (context:type (current-context state)))))
+
+;; instance / F 
+(define instance-context?
+  (lambda (state)
+    (this state)))
 
 ;; Whether declarations should go to the local tables
 ; blocks, fun-calls
