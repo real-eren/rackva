@@ -837,17 +837,23 @@
                       conts)))
 (define Mshared-fun-impl
   (lambda (name arg-list state conts)
-    (if (state:has-fun? name arg-list state)
-        (Mvalue-fun-impl (state:get-function name arg-list state)
-                         arg-list
-                         state
-                         (conts-of conts
-                                   #:continue default-continue
-                                   #:break    default-break
-                                   #:throw    (lambda (e s) ((throw conts) e (state:with-context (state:context-stack s) state)))))
-        (myerror (format "function `~a` not in scope" ; specify # args given
-                         name) ; print list of funs in scope w/ same name
-                 state))))
+    (Mname  name 
+            state 
+            (conts-of conts
+                      #:return  (lambda (n s)
+                                  (if (state:has-fun? n arg-list s)
+                                      (Mvalue-fun-impl (state:get-function n arg-list s)
+                                                      arg-list
+                                                      state
+                                                      (conts-of conts
+                                                                #:next     (lambda (s2) ((next conts) state)) 
+                                                                #:continue (lambda (s2) (default-continue state))
+                                                                #:break    (lambda (s2) (default-break state))
+                                                                #:throw    (lambda (e s2) ((throw conts) e (state:with-context (state:context-stack s2) state)))
+                                                                #:return   (lambda (v s2) ((return conts) v state))))
+                                      (myerror (format "function `~a` not in scope" ; specify # args given
+                                                      name) ; print list of funs in scope w/ same name
+                                              s)))))))
 
 
 (define Mvalue-fun-impl
