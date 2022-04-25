@@ -21,6 +21,7 @@
 
 (define $name 'name)
 (define $parent 'parent)
+(define $i-field-names 'i-field-names)
 (define $init 'init)
 (define $constructors 'constructors)
 (define $methods 'methods)
@@ -28,3 +29,6 @@
 
 (define parent (map:getter $parent))
 (define methods (map:getter $methods))
+
+; returns a list of the var names 
+(define i-field-names (map:getter $i-field-names))

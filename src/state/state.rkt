@@ -19,6 +19,7 @@
                                   push-top-level-context
                                   push-fun-call-context
                                   pop-context
+                                  formatted-stack-trace
                                   
                                   make-scoper
 
@@ -40,6 +41,7 @@
                                   get-init
                                   get-constructor
                                   get-parents-abstract-methods
+                                  class-has-inst-method?
                                   declare-fun
                                   declare-method
                                   declare-init
@@ -48,10 +50,7 @@
                                   has-class?
                                   get-class
                                   declare-class
-                                  end-class-decl))
-         function:params
-         function:body
-         function:scoper)
+                                  end-class-decl)))
 
 
 ;;;; State
@@ -195,13 +194,25 @@
     (context:class-def:name (current-context state))))
 
 
-;; Given a state, creates a function that takes a state
-; and returns the portion in-scope according to the original state
-; the vars present in declare state
-; the functions present in layers of invoke-state as high as declare-state
+
+;; retrieves the context-stack from state and returns it in a form fit for output
+(define formatted-stack-trace
+  (lambda (state)
+    (if (empty? (context-stack state))
+        ""
+        (string-join (map (curry format "~a") (reverse (context-stack state)))
+                     " -> "
+                     #:before-first "stack trace: "))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (define bottom-layers take-right) ; get the bottom/last layers of a function table
 (define height length) ; count the number of layers in a function table
 
+
+;; Given a state, creates a function that takes a state
+; and returns the portion in-scope according to the original state
 ; assumptions:
 ; 1) invoke-state has at least as many layers as declare-state
 ; 2) as many local layers as are in scope during declare-state belong in scope
@@ -428,12 +439,21 @@
         #F)))
 
 ;; returns a list of the abstract methods of the parent of this class
-; assume class
+; assume valid class-name
 ; empty list if no parent
 (define get-parents-abstract-methods
   (lambda (class-name state)
-    (filter function:abstract?
-            (fun-table:all (class:methods (get-parent class-name state))))))
+    (if (has-parent? class-name state)
+        (filter function:abstract?
+                (fun-table:all (class:methods (get-parent class-name state))))
+        null)))
+;; whether this class has an instance method with this signature
+; used when verifying that abstract methods were overridden
+(define class-has-inst-method?
+  (lambda (class-name fun-name params state)
+    (fun-table:get fun-name
+                   params
+                   (filter function:instance? (get-class-methods class-name state)))))
 
 ;; Get something - undetermined how init is implemented
 ; #F on miss
@@ -502,42 +522,6 @@
                                       scope
                                       class)))))
 
-;; called during class body
-(define declare-method
-  (lambda (name params body scope class state)
-    (update* (curry fun-table:declare-fun
-                    name
-                    params
-                    body
-                    (make-scoper state class)
-                    scope
-                    class)
-             state $classes class class:$methods)))
-
-;; add an init function to a class
-; assumption: called exactly once during class-body
-(define declare-init
-  (lambda (body class state)
-    (put* (function:of #:name 'init
-                       #:params '()
-                       #:body body
-                       #:scoper (make-scoper state class)
-                       #:scope function:scope:init
-                       #:class class)
-          state $classes class class:$init)))
-
-;; add a constructor to a class
-; assumption: interpreter checks that this constructor has a unique signature
-(define declare-constructor
-  (lambda (params body class state)
-    (update* (curry fun-table:declare-fun
-                    class
-                    params
-                    body
-                    (make-scoper state class)
-                    function:scope:constructor
-                    class)
-             state $classes class class:$constructors)))
 
 
 
@@ -579,19 +563,78 @@
     (withf state
            $classes  (curry map:put class-name (class:of #:name class-name #:parent parent-name))
            $context-stack  (curry stack:push (context:of-class-def class-name))
-           $current-type  (lambda (v) class-name)
-           )))
+           $current-type  (lambda (v) class-name))))
+
+; declare an instance field for a class (just name, no initializer)
+(define declare-instance-field
+  (lambda (name class-name state)
+    (update* (curry cons name)
+             state $classes class-name class:$i-field-names)))
+
+;; called during class body
+(define declare-method
+  (lambda (name params body scope class state)
+    (update* (curry fun-table:declare-fun
+                    name
+                    params
+                    body
+                    (make-scoper state class)
+                    scope
+                    class)
+             state $classes class class:$methods)))
+    
+;; add an init function to a class
+; assumption: called exactly once during class-body
+(define declare-init
+  (lambda (body class state)
+    (put* (function:of #:name 'init
+                       #:params '()
+                       #:body body
+                       #:scoper (make-scoper state class)
+                       #:scope function:scope:init
+                       #:class class)
+          state $classes class class:$init)))
+
+;; add a constructor to a class
+; assumption: interpreter checks that this constructor has a unique signature
+(define declare-constructor
+  (lambda (params body class state)
+    (update* (curry fun-table:declare-fun
+                    class
+                    params
+                    body
+                    (make-scoper state class)
+                    function:scope:constructor
+                    class)
+             state $classes class class:$constructors)))
 
 ;; signal that the earlier class declaration has ended
+; assumes the current context is a class-decl context
 (define end-class-decl
   (lambda (class-name state)
     (pop-context state)))
 
+;; returns a 0-initialized instance of the given class
+; all fields set to 0, before any initializers
+; assumes
+(define pre-init
+  (lambda (class-name state)
+    (instance:of #:class class-name
+                 #:fields (build-instance-fields class-name state))))
+; 0 is used as the default val for 
+(define default-val 0)
 
-;; extract portions of a closure
-(define function:params (map:getter function:$params))
-(define function:body (map:getter function:$body))
-(define function:scoper (map:getter function:$scoper))
+(define build-instance-fields
+  (lambda (class-name state)
+    (if class-name
+        (cons (foldl (lambda (k vt)
+                       (var-table:declare-var-with-box k (box default-val) vt))
+                     new-var-table
+                     (class:i-field-names (get-class class-name state)))
+              (build-instance-fields (get-parent-name class-name state) state))
+        null)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 ;;;;;;;; Unit Tests

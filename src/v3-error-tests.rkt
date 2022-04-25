@@ -19,3 +19,36 @@ class ClassName {
     return x;
   }
 }")
+
+(error-str #:id "static field declared twice"
+           #:args (list "ClassName")
+           #:catch #t
+           "
+class ClassName {
+  static var x;
+  static var x = 5;
+  static function main() { return x; }
+}")
+
+(error-str #:id "subclass doesn't override parent's abstract methods"
+           #:args (list "Child")
+           #:catch #t
+           "
+class Parent { function abstractMethod(); }
+class Child extends Parent { }")
+
+(error-str #:id "subclass declares method with similar signature to parent's abstract methods, but does not override"
+           #:args (list "Child")
+           #:catch #t
+           "
+class Parent { function overrideMe(x, y); }
+class Child extends Parent { function overrideMe(&x) { } }")
+
+
+(error-str #:id "static methods don't count as overriding"
+           #:args (list "Child")
+           #:catch #t
+           "
+class Parent { function overrideMe(x, y, z); }
+class Child extends Parent { static function overrideMe(x, y, z) { } }")
+

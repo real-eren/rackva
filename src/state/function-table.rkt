@@ -30,7 +30,7 @@
 (define get
   (lambda (name arg-list table)
     (findf (lambda (f)
-             (eq? (length arg-list)
+             (eq? (length (filter (lambda (a) (not (eq? '& a))) arg-list))
                   (function:num-formal-params f)))
            (get-all name table))))
 
