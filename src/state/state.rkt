@@ -58,6 +58,7 @@
                                   
                                   get-init
                                   get-constructor
+                                  declare-inst-field
                                   declare-init
                                   declare-constructor
                                   
@@ -341,7 +342,7 @@
   (lambda (name this class-name state)
     (ormap (curry var-table:var-box name)
            (bottom-layers (instance:fields this) (get-class-height class-name state)))))
-;; Searches this class and its parent for a static field with the name. #F on miss
+;; Searches this class and its parents for a static field with the name. #F on miss
 (define get-static-field-box
   (lambda (name class-name state)
     (if class-name
@@ -368,9 +369,10 @@
 (define var-already-declared?
   (lambda (name state)
     (cond
-      [(class-def-context? state) (var-table:var-declared? name (get* state $classes (current-type state) class:$s-fields))]
+      [(class-def-context? state) (class:has-field? name (get* state $classes (current-type state)))]
       [(local-context? state)     (var-table:var-declared? name (stack:peek (local-vars state)))]
       [(top-level-context? state) (var-table:var-declared? name (global-vars state))])))
+
 
 ;; Is the in-scope variable with this name and initialized?
 ; assumptions:
@@ -666,8 +668,11 @@
 (define method-already-declared?
   (lambda (class-name fun-name arg-list state)
     (fun-table:get fun-name arg-list (get-class-methods class-name state))))
-
-    
+; assumes it is called in class-def context
+(define declare-inst-field
+  (lambda (field-name state)
+    (update* (curry cons field-name)
+             state $classes (current-type state) class:$i-field-names)))
 ;; add an init function to a class
 ; assumption: called exactly once during class-body
 (define declare-init

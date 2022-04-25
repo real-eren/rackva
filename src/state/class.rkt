@@ -15,6 +15,7 @@
      $parent         (if (null? parent-name)
                          #F
                          parent-name)
+     $i-field-names  null
      $constructors   new-function-table
      $methods        new-function-table
      $s-fields       new-var-table)))
@@ -28,7 +29,16 @@
 (define $s-fields 's-fields)
 
 (define parent (map:getter $parent))
-(define methods (map:getter $methods))
-
 ; returns a list of the var names 
 (define i-field-names (map:getter $i-field-names))
+
+(define methods (map:getter $methods))
+(define s-fields (map:getter $s-fields))
+
+(define has-field?
+  (lambda (name class)
+    (or (member name (i-field-names class))
+        (var-table:var-declared? name (s-fields class)))))
+
+
+         

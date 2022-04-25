@@ -83,6 +83,7 @@
       [(eq? #t value)         'true]
       [(eq? #f value)         'false]
       [(number? value)        value]
+      [(is-instance? value)   value]
       [else                   (error "returned an unsupported type: " value)])))
 
 
@@ -186,7 +187,7 @@
               ; declare methods and verify that parent's abstract methods are overridden
               (curry methods (filter is-method? body) class-name parent)
               (curry verify-abstracts-overridden class-name)
-              ; declare instance fields (name only)
+              ; declare instance fields (name only), and initializers (init)
               (curry inst-fields class-name (filter is-inst-field-decl? body))
               ; declare user-defined constructors
               (curry constructors class-name (filter is-const-decl? body))
@@ -347,13 +348,52 @@
 
 (define inst-fields
   (lambda (class-name instance-field-decls state next)
-    ; add each name 
-    (next (state:declare-init instance-field-decls
-                              class-name
-                              state))))
-; if stmt has expr, add to init body
-; 
+    (declare-inst-fields instance-field-decls
+                         state
+                         (lambda (s)
+                           (declare-init class-name
+                                         instance-field-decls
+                                         s
+                                         next)))))
 
+(define declare-inst-fields
+  (lambda (i-field-decls state next)
+    (if (null? i-field-decls)
+        (next state)
+        (declare-inst-field (first i-field-decls)
+                            state
+                            (lambda (s)
+                              (declare-inst-fields (rest i-field-decls)
+                                                   s
+                                                   next))))))
+
+;(define decl-var second)
+;(define decl-maybe-expr cddr)
+(define declare-inst-field
+  (lambda (i-field-decl state next)
+    (declare-inst-field-impl (decl-var i-field-decl)
+                             (decl-maybe-expr i-field-decl)
+                             state
+                             next)))
+(define declare-inst-field-impl
+  (lambda (var-name maybe-expr state next)
+    (if (state:var-already-declared? var-name state)
+        (myerror (format "~a already declared" var-name)
+                 state)
+        (next (state:declare-inst-field var-name state)))))
+;; add the fields with initializers to the classes init method
+; map to an assignment
+(define declare-init
+  (lambda (class-name i-field-decls state next)
+    (next (state:declare-init class-name
+                              (map decl->assign
+                                   (filter (lambda (decl)
+                                             (not (null? (decl-maybe-expr decl))))
+                                           i-field-decls))
+                              state))))
+(define decl->assign
+  (lambda (decl-stmt)
+    (list '= (decl-var decl-stmt) (get (decl-maybe-expr decl-stmt)))))
 
 ;;;;;;;; CONSTRUCTOR DECLARATIONS
 (define const-params second)
@@ -566,17 +606,6 @@
 (define Mstate-continue
   (lambda (statement state conts)
     ((continue conts) state)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   DOT    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define dot-LHS second)
-(define dot-RHS third)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   NEW   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define new-class second)
-(define new-params third)
-
-(define Mvalue-new 
-  (lambda (statement state conts) 1))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -938,6 +967,16 @@
            box-list)))
 
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   NEW   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define new-class second)
+(define new-params third)
+
+(define Mvalue-new 
+  (lambda (statement state conts) 1))
+
+
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; returns the value of the token given the state
@@ -1018,46 +1057,48 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Mname ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(define dot-LHS second)
+(define dot-RHS third)
 
 (define Mname
   (lambda (name state conts)
     (cond
-      
-      [(symbol? name)     (Mname-simple  name
-                                          state
-                                          conts)]
-      [(is-dotted? name)  (Mname-dot  (dot-LHS name)
-                                      (dot-RHS name)
-                                      state
-                                      conts)]
-      [else               (myerror (format "~a cannot be evaluate as name" name) state)])))
+      [(symbol? name)     (Mname-simple name state conts)]
+      [(is-dotted? name)  (Mname-dot (dot-LHS name)
+                                     (dot-RHS name)
+                                     state
+                                     conts)]
+      [else               (myerror (format "malformed identifier `~a`" name) state)])))
 
 (define Mname-simple
   (lambda (name state conts)
     (cond
       [(eq? 'this name)   (if (state:instance-context? state) 
                               ((return conts) name state)
-                              (myerror "this cannot be refered in instance context" state))]
-      ; [(eq? 'super name)  (myerror "super cannot be refered as a variable")]
-      [else ((return conts) name state)])))
+                              (myerror "`this` cannot be referenced in a free or static context" state))]
+      [else               ((return conts) name state)])))
 
 (define Mname-dot
   (lambda (LHS RHS state conts)
     (cond
-      [(or  (eq? 'this RHS)
-            (eq? 'super RHS))           (myerror (format "Cannot refer ~a from RHS of dot expression") state)]
-      [(not (symbol? LHS))              (Mvalue LHS state (conts-of conts 
-                                                              #:return  (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) #t s)))))]
-      [(eq? 'this LHS)                  (if (state:instance-context? state) 
-                                        ((return conts) RHS (state:set-this-scope state))
-                                        (myerror "this cannot be refered in instance context" state))]
+      [(or (eq? 'this RHS)
+           (eq? 'super RHS))            (myerror (format "Keyword `~a` cannot appear on the RHS of a dot expression" RHS) state)]
+      [(eq? 'this LHS)                  (if (state:instance-context? state)
+                                            ((return conts) RHS (state:set-this-scope state))
+                                            (myerror "`this` cannot be used in a free or static context" state))]
       [(eq? 'super LHS)                 (if (and (state:instance-context? state) (state:current-type-has-parent? state))
-                                        ((return conts) RHS (state:set-super-scope state))
-                                        (myerror "super cannot be refered in instance context" state))]
-      [(state:var-declared? LHS state)  (Mvalue LHS state (conts-of conts 
-                                                              #:return  (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) #t s)))))]
+                                            ((return conts) RHS (state:set-super-scope state))
+                                            (myerror "`super` cannot be refered in instance context" state))]
+      [(not (symbol? LHS))              (Mvalue LHS
+                                                state
+                                                (conts-of conts
+                                                          #:return (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
+      [(state:var-declared? LHS state)  (Mvalue LHS
+                                                state
+                                                (conts-of conts
+                                                          #:return (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
       [(state:has-class? LHS state)     ((return conts) RHS (state:set-static-scope LHS state))]
-      [else                             (myerror (format "cannot parsing ~a the left hand side of the dot expression" LHS) state)])))
+      [else                             (myerror (format "`~a` cannot appear on the left hand side of a dot expression" LHS) state)])))
 
 (define assert-instance 
   (lambda (v s) 
