@@ -660,16 +660,20 @@
 
 (define Mstate-assign-impl
   (lambda (var-name val-expr state conts)
-    (if (state:var-declared? var-name state)
         (Mvalue val-expr
                 state
                 (conts-of conts
-                          #:return (lambda (v s)
-                                     ((next conts) (state:assign-var var-name v s)))))
-        ; else assigning to undeclared var
-        (myerror (format "tried to assign to `~a` before declaring it."
-                         var-name)
-                 state))))
+                          #:return (lambda (v s) 
+                                      (Mname var-name 
+                                            s 
+                                            (conts-of conts
+                                                      #:return  (lambda (n s2) 
+                                                                  (if (state:var-declared? n s2)
+                                                                      ((next conts) (state:restore-scope  #:dest (state:assign-var n v s2)
+                                                                                                          #:src s))
+                                                                      (myerror (format "tried to assign to `~a` before declaring it."
+                                                                                                                n)
+                                                                                s))))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TRY CATCH FINALLY ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -838,12 +842,23 @@
     (cond
       [(null? expr)                         (error "called Mvalue on a null expression")]
       [(not (nested? expr))                 (Mvalue-base expr state conts)]
+      [(is-dotted? expr)                    (Mname expr state (conts-of conts
+                                                                        #:return (lambda (n s)
+                                                                                    (Mvalue-base  n 
+                                                                                                  s 
+                                                                                                  (conts-of conts
+                                                                                                            #:return   (lambda (v s2) ((return conts) v state)))))))]
       [(is-fun-call? expr)                  (Mvalue-fun expr state conts)]
       [(is-assign? expr)                    (Mvalue (assign-expr expr)
                                                     state
                                                     (conts-of conts
                                                               #:return (lambda (v s) 
-                                                                         ((return conts) v (state:assign-var (assign-var expr) v s)))))]
+                                                                         (Mname (assign-var) 
+                                                                                state 
+                                                                                (conts-of conts
+                                                                                          #:return    (lambda (n s2) 
+                                                                                                            ((return conts) v (state:restore-scope  #:dest (state:assign-var n v s2)
+                                                                                                                                                    #:src state))))))))]
       [(is-nested-boolean-expr? expr)       (Mbool expr state conts)]
       [(has-op? expr)                       (Mvalue-op expr state conts)]
       [else                                 (error "unreachable in Mvalue")])))
