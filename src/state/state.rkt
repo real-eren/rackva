@@ -23,7 +23,8 @@
                                   
                                   make-scoper
 
-                                  set-current-type
+                                  set-static-scope
+                                  set-instance-scope
 
                                   declare-var-with-box
                                   declare-var-with-value
@@ -225,13 +226,23 @@
       (withv invoke-state
              $local-vars  (bottom-layers (local-vars invoke-state) (height (local-vars declare-state)))
              $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))
-             $current-type  class))))
+             $current-type  class
+             $dotted        #F))))
 
-;;;; current type
-(define set-current-type
-  (lambda (class-name state)
+;;;; Used by `Mstate-dot` to make state perform the correct lookups
+(define set-static-scope
+  (lambda (class-name dotted? state)
     (withv state
-           $current-type  class-name)))
+           $current-type  class-name
+           $this          #F
+           $dotted        dotted?)))
+
+(define set-instance-scope
+  (lambda (this dotted? state)
+    (withv state
+           $current-type  (instance:class this)
+           $this          this
+           $dotted        dotted?)))
 
 
 
