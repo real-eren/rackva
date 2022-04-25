@@ -73,3 +73,10 @@ class A {
   static function foo(a, b, c) { }
 }")
 
+(error-str #:id "calling class that does not exist"
+           #:args (list "A")
+           #:catch #t
+           "
+class A {
+  static function main() { return B.c(); }
+}")
