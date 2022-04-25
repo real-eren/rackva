@@ -9,6 +9,7 @@
 (require "conts.rkt"
          "state/state.rkt"
          "state/function.rkt"
+         "state/instance.rkt"
          "util/map.rkt"
          "util/predicates.rkt"
          "classParser.rkt"
@@ -567,6 +568,15 @@
     ((continue conts) state)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   DOT    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define dot-LHS second)
+(define dot-RHS third)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   NEW   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define new-class second)
+(define new-params third)
+
+(define Mvalue-new 
+  (lambda (statement state conts) 1))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -985,8 +995,54 @@
       [else                            (error op val-list)])))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Mname ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(define Mname
+  (lambda (name state conts)
+    (cond
+      
+      [(symbol? name)     (Mname-simple  name
+                                          state
+                                          conts)]
+      [(is-dotted? name)  (Mname-dot  (dot-LHS name)
+                                      (dot-RHS name)
+                                      state
+                                      conts)]
+      [else               (myerror (format "~a cannot be evaluate as name" name) state)])))
+
+(define Mname-simple
+  (lambda (name state conts)
+    (cond
+      [(eq? 'this name)   (if (state:instance-context? state) 
+                              ((return conts) name state)
+                              (myerror "this cannot be refered in instance context" state))]
+      ; [(eq? 'super name)  (myerror "super cannot be refered as a variable")]
+      [else ((return conts) name state)])))
+
+(define Mname-dot
+  (lambda (LHS RHS state conts)
+    (cond
+      [(or  (eq? 'this RHS)
+            (eq? 'super RHS))           (myerror (format "Cannot refer ~a from RHS of dot expression") state)]
+      [(not (symbol? LHS))              (Mvalue LHS state (conts-of conts 
+                                                              #:return  (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) #t s)))))]
+      [(eq? 'this LHS)                  (if (state:instance-context? state) 
+                                        ((return conts) RHS (state:set-this-scope state))
+                                        (myerror "this cannot be refered in instance context" state))]
+      [(eq? 'super LHS)                 (if (and (state:instance-context? state) (state:current-type-has-parent? state))
+                                        ((return conts) RHS (state:set-super-scope state))
+                                        (myerror "super cannot be refered in instance context" state))]
+      [(state:var-declared? LHS state)  (Mvalue LHS state (conts-of conts 
+                                                              #:return  (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) #t s)))))]
+      [(state:has-class? LHS state)     ((return conts) RHS (state:set-static-scope LHS state))]
+      [else                             (myerror (format "cannot parsing ~a the left hand side of the dot expression" LHS) state)])))
+
+(define assert-instance 
+  (lambda (v s) 
+    (if (is-instance? v) 
+        v 
+        (myerror (format "~a is not an instance, cannot apply dot operator" v) s))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1022,6 +1078,9 @@
 (define is-inst-field-decl? is-var-decl?)
 
 (define is-const-decl? (checker-of 'constructor))
+
+(define is-dotted? (checker-of 'dot))
+(define is-new? (checker-of 'new))
 
 ;; keys are symbols representative of a construct type
 ;; values are the corresponding constructs (type of statement)
