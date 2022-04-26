@@ -460,7 +460,7 @@
          (class-has-i-a-method? name arg-list class-name state)
          (get-i-a-method-rec name
                              arg-list
-                             (if super
+                             (if (super state)
                                  (get-parent-name class-name state)
                                  (instance:class this))
                              state))))
