@@ -11,6 +11,37 @@
 (define test-str (make-tester interpret-v3-str))
 
 
+; ; INSTANCE CREATION
+
+(test-str #:id "instance fields w/out initializer should be initialized to zero, no parent"
+          'true
+          #:args (list "A") "
+class A {
+  var x;
+  var y;
+  static function main() {
+    var a = new A();
+    return (a.x == 0) && (a.y == 0);
+  }
+}")
+
+(test-str #:id "instance fields w/out initializer should be initialized to zero, with super class"
+          'true
+          #:args (list "A") "
+class Parent { var w; }
+class A extends Parent {
+  var x;
+  var y;
+  static function main() {
+    var a = new A();
+    return (a.x == 0) && (a.y == 0) && (a.w == 0);
+  }
+}")
+
+; ; INSTANCE FIELDS
+
+
+
 ; ; STATIC METHODS
 
 (test-str #:id "single class, no fields, only main method"
@@ -152,19 +183,20 @@ class MyClass {
   }
 }")
 
-(test-str #:id "accessing static field of super class w/out dot"
-          1
+(test-str #:id "Assigning to and reading form static field of super class w/out dot"
+          4
           #:args (list "Child") "
 class Parent {
   static var x = 1;
 }
 class Child extends Parent {
   static function main() {
+    x = 2 + (x = x + 1);
     return x;
   }
 }")
 
-(test-str #:id "accessing static field of super class with dot"
+(test-str #:id "Assigning to and reading from static fields of super class with dot"
           4
           #:args (list "Child") "
 class Parent {
@@ -174,19 +206,7 @@ class Parent {
 class Child extends Parent {
   static function main() {
     Parent.y = Parent.x = 2;
-    return x + y;
-  }
-}")
-
-(test-str #:id "static fields assignment"
-          1
-          #:args (list "Child") "
-class Parent {
-  static var x = 1;
-}
-class Child extends Parent {
-  static function main() {
-    return Parent.x;
+    return Parent.x + Parent.y;
   }
 }")
 
