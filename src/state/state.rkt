@@ -107,6 +107,8 @@
 ;; flag that affects lookup. if true, limited to bindings available to instance and type
 (define $dotted 'dotted)
 (define dotted? (map:getter $dotted))
+(define $super 'super)
+(define super (map:getter $super))
 
 ; map of class names to class closures
 (define $classes 'classes)
@@ -133,6 +135,7 @@
                       $current-type   #F
                       $this           #F
                       $dotted         #F
+                      $super          #F
                       $context-stack  null))
 
 
@@ -251,6 +254,7 @@
     (withv state
            $current-type  class-name
            $this          #F
+           $super         #F
            $dotted        #T)))
 
 (define set-instance-scope
@@ -258,17 +262,20 @@
     (withv state
            $current-type  (instance:class this)
            $this          this
+           $super         #F
            $dotted        #T)))
 
 (define set-this-scope
   (lambda (state)
     (withv state
+           $super         #F
            $dotted        #T)))
 
 (define set-super-scope
   (lambda (state)
     (withv state
            $current-type  (get-parent-name (current-type state) state)
+           $super         #T
            $dotted        #T)))
 
 ;; copies scope related data from src onto dest
@@ -451,7 +458,12 @@
     (and this
          class-name
          (class-has-i-a-method? name arg-list class-name state)
-         (get-i-a-method-rec name arg-list (instance:class this) state))))
+         (get-i-a-method-rec name
+                             arg-list
+                             (if super
+                                 (get-parent-name class-name state)
+                                 (instance:class this))
+                             state))))
 ; does this type declare or inherit an instance or abstract method w/ this signature
 (define class-has-i-a-method?
   (lambda (name arg-list class-name state)
