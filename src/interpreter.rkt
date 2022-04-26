@@ -951,7 +951,7 @@
                                                                  conts
                                                                  (lambda (p b s)
                                                                    (evaluation (cons (second formal-params) p)
-                                                                               (cons (read-var-box (first actual-params) s) b)
+                                                                               (cons (read-var-box (first actual-params) s conts) b)
                                                                                s)))]
       [else                             (myerror (format "Function expects a reference for `~a`"
                                                          (second formal-params))
@@ -983,33 +983,38 @@
 ;; token = 1 | 'x | 'true 
 (define Mvalue-base
   (lambda (token state conts)
-    ((return conts) (Mvalue-base-impl token state) state)))
+    ((return conts) (Mvalue-base-impl token state conts) state)))
 
 (define Mvalue-base-impl
-  (lambda (token state)
+  (lambda (token state conts)
     (cond
       [(number? token)            token]
       [(eq? 'true token)          #t]
       [(eq? 'false token)         #f]
-      [(symbol? token)            (read-var-value token state)]
+      [(symbol? token)            (read-var-value token state conts)]
       [else                       (error "not a bool/int literal or symbol: " token)])))
 
 ;; retrieves box/value of a var from state
 ;; throws appropriate errors if undeclared or uninitialized
 (define read-var-box
-  (lambda (var-symbol state)
-    (cond
-      [(not (state:var-declared? var-symbol state))       (myerror (format "referenced `~a` before declaring it."
-                                                                           var-symbol)
-                                                                   state)]
-      [(not (state:var-initialized? var-symbol state))    (myerror (format "accessed `~a` before initializing it."
-                                                                           var-symbol)
-                                                                   state)]
-      [else                                               (state:get-var-box var-symbol state)])))
+  (lambda (var-symbol state conts)
+    (Mname  var-symbol
+            state
+            (conts-of conts
+                      #:return (lambda (n s)
+                                  (cond
+                                    [(not (state:var-declared? n s))        (myerror (format "referenced `~a` before declaring it."
+                                                                                                        n)
+                                                                                                s)]
+                                    [(not (state:var-initialized? n s))     (myerror (format "accessed `~a` before initializing it."
+                                                                                                        n)
+                                                                                                s)]
+                                    [else                                   (state:get-var-box n s)]))))))
+
 ; assumes read-var-box validates the lookups
 (define read-var-value
-  (lambda (var-symbol state)
-    (unbox (read-var-box var-symbol state))))
+  (lambda (var-symbol state conts)
+    (unbox (read-var-box var-symbol state conts))))
 
 
 ;; takes an expression representing one with an operator
