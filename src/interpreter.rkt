@@ -890,7 +890,7 @@
                                     (Mvalue-fun-impl (state:get-function n arg-list s)
                                                      arg-list
                                                      state
-                                                     s ; preserve instance scoping from Mname
+                                                     s
                                                      (conts-of conts
                                                                #:next     (lambda (s2) ((next conts) state)) 
                                                                #:continue (lambda (s2) (default-continue state))
@@ -904,6 +904,9 @@
 
 (define Mvalue-fun-impl
   (lambda (fun-closure fun-inputs eval-state state conts)
+    (println fun-closure)
+    (println "Mvalue-fun-impl")
+    ; (println (state:push-fun-call-context fun-closure state))
     (Mstate-stmt-list (function:body fun-closure) ; needs to run in scope before Mname
                       (get-environment fun-closure
                                        fun-inputs
@@ -917,14 +920,23 @@
 ;; the state, the conts
 (define get-environment
   (lambda (fun-closure inputs eval-state out-state conts)
+    ; (println (function:name fun-closure))
+    ; (println out-state)
+    ; (println "scoped")
+    ; (println ((function:scoper fun-closure) out-state))
+    ; (println "binded")
     (get-inputs-list-box-cps (function:params fun-closure)
                              inputs
                              eval-state
                              conts
                              (lambda (p l)
-                               (bind-boxed-params p
-                                                  l
-                                                  (state:push-new-layer ((function:scoper fun-closure) out-state)))))))
+                                ; (println (bind-boxed-params  p
+                                ;                     l
+                                ;                     (state:push-new-layer ((function:scoper fun-closure) out-state))))
+                                (bind-boxed-params  p
+                                                    l
+                                                    (state:push-new-layer ((function:scoper fun-closure) out-state)))
+                                ))))
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 

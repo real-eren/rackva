@@ -297,7 +297,7 @@ class Child extends Parent {
 
   ;Test 3 should return 125 when running A's main.
 
- (test-str #:id "Test 1"
+ (test-str #:id "Test 3"
            125
            #:args (list "A") "
  class A {
@@ -308,8 +308,13 @@ class Child extends Parent {
      return this.x + x;
    }
 
+   static function addd(x) {
+     return x + 10;
+   }
+
    static function main() {
      var a = new A();
+     A.addd(10);
      return a.add(25);
    }
  }")

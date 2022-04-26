@@ -662,7 +662,7 @@
                     name
                     params
                     body
-                    (make-scoper state class #F)
+                    (make-scoper state class (eq? function:scope:instance scope))
                     scope
                     class)
              state $classes class class:$methods)))
