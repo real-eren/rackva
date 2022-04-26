@@ -788,3 +788,184 @@ class Child extends Parent {
      return x - b.count * 100;
    }
  }")
+
+
+; Test 31 should return 20 when running A's main.
+
+(test-str #:id "Test 31"
+           20
+           #:args (list "A") "
+class A {
+  static var x = 10;
+  static function main() {
+    return A.x + x;
+  }
+}")
+
+; Test 32 should return 530 when running B's main.
+
+(test-str #:id "Test 32"
+           530
+           #:args (list "B") "
+class A {
+  static var x = 10;
+  static var y = 20;
+
+  static function add(a, b) {
+    return a + b;
+  }
+
+  static function main() {
+    return A.add(x, A.y);
+  }
+}
+
+class B extends A {
+  static var y = 200;
+  static var z = 300;
+
+  static function main() {
+    return add(B.x+A.y,B.z+y);
+  }
+}")
+
+
+; Test 33 should return 615 when running B's main.
+
+(test-str #:id "Test 33"
+           615
+           #:args (list "B") "
+class A {
+  static var a = 1;
+  static var b = 10;
+
+  static function getSum() {
+    return a + b;
+  }
+}
+
+class B {
+  static function main() {
+    A.a = 5;
+
+    return A.getSum() + C.x + C.timesX(A.a);
+  }
+}
+
+class C {
+  static var x = 100;
+  static function timesX(a) {
+    return a * x;
+  }
+")
+; Test 34 should return 16 when running Box's main.
+(test-str #:id "Test 34"
+           16
+           #:args (list "Box") "
+class Box {
+  static var countAccesses = 0;
+  var size = 1;
+
+  function setSize(s) {
+    this.size = s;
+    countAccesses = countAccesses + 1;
+  }
+
+  static function main() {
+    var x = 0;
+    var c;
+
+    while (x < 10) {
+      var a = new Box();
+      a.setSize(x + countAccesses);
+      if (a.size % 4 == 0)
+        c = a;
+      x = x + 1;
+    }
+
+    return c.size;
+  }
+}")
+
+; Test 35 should return 100 when running A's main.
+
+(test-str #:id "Test 35"
+           100
+           #:args (list "A") "
+class A {
+  static function divide(x, y) {
+    if (y == 0)
+      throw new Zero();
+    return x / y;
+  }
+
+  static function main() {
+    var x;
+
+    try {
+      x = divide(10, 5) * 10;
+      x = x + divide(5, 0);
+    }
+    catch(e) {
+      x = e.getValue();
+    }
+    finally {
+      x = x + 100;
+    }
+    return x;
+  }
+}
+
+class Zero {
+  var value = 0;
+
+  function getValue() {
+    return value;
+  }
+}")
+
+; Test 36 should return 420 when running A's main.
+
+(test-str #:id "Test 36"
+           420
+           #:args (list "A") "
+class A {
+  static function divide(x, y) {
+    if (y == 0)
+      throw new Zero();
+    return x / y;
+  }
+
+  static function main() {
+    var x = 0;
+    var j = 1;
+
+    try { 
+     while (j >= 0) {
+      var i = 10;
+      while (i >= 0) {
+        try {
+          x = x + divide(10*i, i);
+        }
+        catch(e) {
+          x = x + divide(e.getValue(), j);
+        }
+        i = i - 1;
+      }
+      j = j - 1;
+     }
+    }
+    catch (e2) {
+      x = x * 2;
+    }
+    return x;
+  }
+}
+
+class Zero {
+  var value = 10;
+
+  function getValue() {
+    return value;
+  }
+}")

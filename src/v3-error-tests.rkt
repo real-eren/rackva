@@ -141,3 +141,25 @@ class A {
 class A {
   static function main() { B.c = 2; return B.c; }
 }")
+
+; Test 37 should throw an error for "no this".
+
+(error-str #:id "non-existent class in LHS of dot during assignment"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x = 10;
+
+  static function nowork(x) {
+    return this.x;
+  }
+
+  function mightwork() {
+    return x + nowork(x);
+  }
+
+  static function main() {
+    var a = new A();
+    return a.mightwork();
+  }
+}")
