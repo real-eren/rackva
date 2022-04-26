@@ -31,6 +31,24 @@ class ClassName {
   static function main() { return x; }
 }")
 
+(error-str #:id "Can't access static field of unrelated class w/out dot"
+           #:args (list "ClassName")
+           #:catch #t
+           "
+class OtherClass { static var x = 5; }
+class ClassName {
+  static function main() { return x; }
+}")
+
+(error-str #:id "Can't access static method of unrelated class w/out dot"
+           #:args (list "ClassName")
+           #:catch #t
+           "
+class OtherClass { static function foo() { return 5; } }
+class ClassName {
+  static function main() { return foo(); }
+}")
+
 ; ; Overriding and Abstracts
 
 (error-str #:id "subclass doesn't override parent's abstract methods"
