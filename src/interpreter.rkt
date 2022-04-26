@@ -657,20 +657,20 @@
 
 (define Mstate-assign-impl
   (lambda (var-name val-expr state conts)
-        (Mvalue val-expr
-                state
-                (conts-of conts
-                          #:return (lambda (v s) 
-                                      (Mname var-name 
-                                            s 
-                                            (conts-of conts
-                                                      #:return  (lambda (n s2) 
-                                                                  (if (state:var-declared? n s2)
-                                                                      ((next conts) (state:restore-scope  #:dest (state:assign-var n v s2)
-                                                                                                          #:src s))
-                                                                      (myerror (format "tried to assign to `~a` before declaring it."
-                                                                                                                n)
-                                                                                s))))))))))
+    (Mvalue val-expr
+            state
+            (conts-of conts
+                      #:return (lambda (v s) 
+                                 (Mname var-name 
+                                        s 
+                                        (conts-of conts
+                                                  #:return  (lambda (n s2) 
+                                                              (if (state:var-declared? n s2)
+                                                                  ((next conts) (state:restore-scope  #:dest (state:assign-var n v s2)
+                                                                                                      #:src s))
+                                                                  (myerror (format "tried to assign to `~a` before declaring it."
+                                                                                   n)
+                                                                           s))))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; TRY CATCH FINALLY ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -852,7 +852,7 @@
                                                     (conts-of conts
                                                               #:return (lambda (v s) 
                                                                          (Mname (assign-var expr) 
-                                                                                state 
+                                                                                s 
                                                                                 (conts-of conts
                                                                                           #:return    (lambda (n s2) 
                                                                                                             ((return conts) v (state:restore-scope  #:dest (state:assign-var n v s2)
@@ -882,14 +882,14 @@
                       conts)))
 (define Mshared-fun-impl
   (lambda (name arg-list state conts)
-    (Mname name 
-           state 
+    (Mname name
+           state
            (conts-of conts
                      #:return (lambda (n s)
                                 (if (state:has-fun? n arg-list s)
                                     (Mvalue-fun-impl (state:get-function n arg-list s)
                                                      arg-list
-                                                     state
+                                                     s ; preserve instance scoping from Mname
                                                      (conts-of conts
                                                                #:next     (lambda (s2) ((next conts) state)) 
                                                                #:continue (lambda (s2) (default-continue state))
@@ -903,7 +903,7 @@
 
 (define Mvalue-fun-impl
   (lambda (fun-closure fun-inputs state conts)
-    (Mstate-stmt-list (function:body fun-closure)
+    (Mstate-stmt-list (function:body fun-closure) ; needs to run in scope before Mname
                       (get-environment fun-closure
                                        fun-inputs
                                        (state:push-fun-call-context fun-closure state)
@@ -1096,7 +1096,7 @@
                                                                   '()
                                                                   state
                                                                   (conts-of conts
-                                                                            #:next (lambda (s2)
+                                                                            #:next (lambda (s)
                                                                                      (Mstate-stmt-list body
                                                                                                        state
                                                                                                        conts
@@ -1236,7 +1236,8 @@
                                 state)) (Mvalue LHS
                                                 state
                                                 (conts-of conts
-                                                          #:return (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
+                                                          #:return (lambda (v s)
+                                                                     ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
       [(state:has-class? LHS state)     ((return conts) RHS (state:set-static-scope LHS state))]
       [else                             (myerror (format "`~a` cannot appear on the left hand side of a dot expression" LHS) state)])))
 

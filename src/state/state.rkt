@@ -22,8 +22,6 @@
                                   pop-context
                                   instance-context?
                                   formatted-stack-trace
-                                  
-                                  make-scoper
 
                                   set-static-scope
                                   set-instance-scope
@@ -270,7 +268,7 @@
 (define set-super-scope
   (lambda (state)
     (withv state
-           $current-type  (get-parent-name (current-type state))
+           $current-type  (get-parent-name (current-type state) state)
            $dotted        #T)))
 
 ;; copies scope related data from src onto dest
@@ -621,7 +619,7 @@
 
 (define current-type-has-parent?
   (lambda (state)
-    (has-parent? (current-type state))))
+    (has-parent? (current-type state) state)))
 ;; returns name and closure of the parent of this class
 ; assumes valid class-name. assumes get* returns false on miss. #F if no parent
 (define has-parent?
@@ -664,7 +662,7 @@
                     name
                     params
                     body
-                    (make-scoper state class (eq? function:scope:instance scope))
+                    (make-scoper state class #F)
                     scope
                     class)
              state $classes class class:$methods)))
