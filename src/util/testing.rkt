@@ -48,4 +48,4 @@
              )
       (if suppress
           (check-exn exn:fail:user? (lambda () (apply interpret program args)) (format-test-id test-id))
-          (check-eq? 'error (apply interpret program args) #:id test-id)))))
+          (check-eq? (apply interpret program args) 'expected-error (format-test-id test-id))))))
