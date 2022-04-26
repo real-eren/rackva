@@ -38,7 +38,8 @@ Stack Trace for user errors
  - interpret
  - `Mstate`s
  - `Mvalue`s
- - `Mboolean`
+ - `Mboolean`s
+ - `Mname`s
 
 `interpreter-extension.rkt` contains overloads for interpret
 
