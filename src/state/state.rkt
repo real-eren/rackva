@@ -462,7 +462,7 @@
          (get-i-a-method-rec name
                              arg-list
                              (if (super state)
-                                 (get-parent-name class-name state)
+                                 class-name
                                  (instance:class this))
                              state))))
 ; does this type declare or inherit an instance or abstract method w/ this signature
