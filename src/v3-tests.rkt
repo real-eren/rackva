@@ -771,7 +771,7 @@ class Child extends Parent {
  }
 
  class C {
-   function main() {
+   static function main() {
      var x;
      var b;
 
