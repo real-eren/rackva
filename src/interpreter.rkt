@@ -889,6 +889,7 @@
                                 (if (state:has-fun? n arg-list s)
                                     (Mvalue-fun-impl (state:get-function n arg-list s)
                                                      arg-list
+                                                     state
                                                      s ; preserve instance scoping from Mname
                                                      (conts-of conts
                                                                #:next     (lambda (s2) ((next conts) state)) 
@@ -902,10 +903,11 @@
 
 
 (define Mvalue-fun-impl
-  (lambda (fun-closure fun-inputs state conts)
+  (lambda (fun-closure fun-inputs eval-state state conts)
     (Mstate-stmt-list (function:body fun-closure) ; needs to run in scope before Mname
                       (get-environment fun-closure
                                        fun-inputs
+                                       eval-state
                                        (state:push-fun-call-context fun-closure state)
                                        conts)
                       conts)))
@@ -914,49 +916,47 @@
 ;; Takes in the function name, the function closure, the input expression list
 ;; the state, the conts
 (define get-environment
-  (lambda (fun-closure inputs state conts)
+  (lambda (fun-closure inputs eval-state out-state conts)
     (get-inputs-list-box-cps (function:params fun-closure)
                              inputs
-                             state
+                             eval-state
                              conts
-                             (lambda (p l s)
+                             (lambda (p l)
                                (bind-boxed-params p
                                                   l
-                                                  (state:push-new-layer ((function:scoper fun-closure) s)))))))
+                                                  (state:push-new-layer ((function:scoper fun-closure) out-state)))))))
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
 (define get-inputs-list-box-cps
-  (lambda (formal-params actual-params state conts evaluation) 
+  (lambda (formal-params actual-params eval-state conts evaluation) 
     (cond
       [(and (null? actual-params)
-            (null? formal-params))      (evaluation '() '() state)]
+            (null? formal-params))      (evaluation '() '())]
       ;; by value
       [(not (eq? (first formal-params)
                  '&))                   (Mvalue (first actual-params)
-                                                state
+                                                eval-state
                                                 (conts-of conts
                                                           #:return (lambda (v1 s1)
                                                                      (get-inputs-list-box-cps (rest formal-params)
                                                                                               (rest actual-params)
                                                                                               s1
                                                                                               conts
-                                                                                              (lambda (p1 l1 s2)
+                                                                                              (lambda (p1 l1)
                                                                                                 (evaluation (cons (first formal-params) p1) 
-                                                                                                            (cons (box v1) l1) 
-                                                                                                            s2))))))]
+                                                                                                            (cons (box v1) l1)))))))]
       ;; by reference
       [(symbol? (first actual-params))  (get-inputs-list-box-cps (cddr formal-params)
                                                                  (cdr actual-params)
-                                                                 state
+                                                                 eval-state
                                                                  conts
-                                                                 (lambda (p b s)
+                                                                 (lambda (p b)
                                                                    (evaluation (cons (second formal-params) p)
-                                                                               (cons (read-var-box (first actual-params) s conts) b)
-                                                                               s)))]
+                                                                               (cons (read-var-box (first actual-params) eval-state conts) b))))]
       [else                             (myerror (format "Function expects a reference for `~a`"
                                                          (second formal-params))
-                                                 state)])))
+                                                 eval-state)])))
 
 ;; Binds the names of the formal-params to boxes representing the actual parameters
 ; before calling this, push a layer to state
@@ -1019,6 +1019,7 @@
     (do-constructor-impl (function:body constructor)
                          (get-environment constructor
                                           args
+                                          state
                                           (state:push-fun-call-context constructor state)
                                           conts)
                          class-name
@@ -1036,9 +1037,11 @@
                                                                                    (Mvalue-fun-impl (state:get-init class-name state)
                                                                                                     '()
                                                                                                     state
+                                                                                                    state
                                                                                                     conts))))
                                             (Mvalue-fun-impl (state:get-init class-name state)
                                                              '()
+                                                             state
                                                              state
                                                              conts))]
       ; first line this
@@ -1066,6 +1069,7 @@
                                                                                        (Mvalue-fun-impl (state:get-init class-name state)
                                                                                                         '()
                                                                                                         state
+                                                                                                        state
                                                                                                         (conts-of conts
                                                                                                                   #:next (lambda (s2)
                                                                                                                            (Mstate-stmt-list (cdr body)
@@ -1084,6 +1088,7 @@
                                                                                        (Mvalue-fun-impl (state:get-init class-name state)
                                                                                                         '()
                                                                                                         state
+                                                                                                        state
                                                                                                         (conts-of conts
                                                                                                                   #:next (lambda (s2)
                                                                                                                            (Mstate-stmt-list body
@@ -1094,6 +1099,7 @@
                                                                                                                                                                       is-super-ctor?)))))))))]
       [else                                      (Mvalue-fun-impl (state:get-init class-name state)
                                                                   '()
+                                                                  state
                                                                   state
                                                                   (conts-of conts
                                                                             #:next (lambda (s)
