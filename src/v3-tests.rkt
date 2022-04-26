@@ -38,6 +38,17 @@ class A extends Parent {
   }
 }")
 
+(test-str #:id "instance fields w/out initializer should be initialized to zero, with super class"
+          10
+          #:args (list "A") "
+class A {
+  var x = 10;
+  static function main() {
+    var a = new A();
+    return a.x;
+  }
+}")
+
 ; ; INSTANCE FIELDS
 
 
@@ -78,7 +89,6 @@ class A {
     return A.foo(1);
   }
 }")
-
 
 (test-str #:id "sub class can call static method of super class w/out dot"
           6
