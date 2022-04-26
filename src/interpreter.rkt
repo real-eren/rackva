@@ -31,11 +31,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-;; takes a file name, interprets the program,
+;; takes a file name and a string class name, interprets the program,
 ;; and returns the result
 (define interpret
-  (lambda (file-name)
-    (interpret-parse-tree-v2 (parser file-name)
+  (lambda (file-name class-name)
+    (interpret-parse-tree-v3 (parser file-name)
+                             class-name
                              default-return
                              default-throw)))
 ;todo: consider refactoring interpret-parse-tree s.t. they share 

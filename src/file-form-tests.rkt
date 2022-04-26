@@ -11,5 +11,4 @@
 
 (test-file-v2 2000400 "file-tests/v2/1.txt")
 
-;(test-file-v3 - "file-tests/v3/1.txt")
-
+(test-file-v3 420 "file-tests/v3/1.txt" #:args (list "A"))
