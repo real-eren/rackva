@@ -50,12 +50,14 @@
                                   has-class?
                                   get-class
                                   current-type-has-parent?
+                                  get-parent-name
                                   get-parents-abstract-methods
                                   class-declares-inst-or-abst-method?
                                   class-get-inst-method
                                   declare-method
                                   method-already-declared?
-                                  
+
+                                  get-zero-init-instance
                                   get-init
                                   get-constructor
                                   declare-inst-field
@@ -706,8 +708,8 @@
 
 ;; returns a 0-initialized instance of the given class
 ; all fields set to 0, before any initializers
-; assumes
-(define pre-init
+; assumes valid class-name
+(define get-zero-init-instance
   (lambda (class-name state)
     (instance:of #:class class-name
                  #:fields (build-instance-fields class-name state))))
