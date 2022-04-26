@@ -917,11 +917,6 @@
 ;; the state, the conts
 (define get-environment
   (lambda (fun-closure inputs eval-state out-state conts)
-    ; (println (function:name fun-closure))
-    ; (println out-state)
-    ; (println "scoped")
-    ; (println ((function:scoper fun-closure) out-state))
-    ; (println "binded")
     (get-inputs-list-box-cps (function:params fun-closure)
                              inputs
                              eval-state

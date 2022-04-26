@@ -263,7 +263,7 @@ class Child extends Parent {
 
 
 
- ; Test 1 should return 15 when running A's main.
+;  ; Test 1 should return 15 when running A's main.
 
  (test-str #:id "Test 1"
            15
@@ -308,13 +308,8 @@ class Child extends Parent {
      return this.x + x;
    }
 
-   static function addd(x) {
-     return x + 10;
-   }
-
    static function main() {
      var a = new A();
-     A.addd(10);
      return a.add(25);
    }
  }")
@@ -438,7 +433,7 @@ class Child extends Parent {
    }
  }")
 
-  ;Test 8 should return 117 when running Square's main.
+  ; Test 8 should return 117 when running Square's main.
 
  (test-str #:id "Test 8"
            117
@@ -504,7 +499,7 @@ class Child extends Parent {
 
  (test-str #:id "Test 9"
            32
-           #:args (list "A") "
+           #:args (list "Square") "
  class Shape {
    function area() {
      return 0;
