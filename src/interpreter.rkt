@@ -385,11 +385,11 @@
 ; map to an assignment
 (define declare-init
   (lambda (class-name i-field-decls state next)
-    (next (state:declare-init class-name
-                              (map decl->assign
+    (next (state:declare-init (map decl->assign
                                    (filter (lambda (decl)
                                              (not (null? (decl-maybe-expr decl))))
                                            i-field-decls))
+                              class-name
                               state))))
 (define decl->assign
   (lambda (decl-stmt)
@@ -983,6 +983,7 @@
 
 (define Mvalue-new-impl
   (lambda (class-name arg-list state conts)
+    ;((return conts) (state:get-zero-init-instance class-name state) state)))
     (if (state:has-class? class-name state)
         ; changes to instance during constructors are handled by boxes
         (get-zero-init-instance-of-class class-name
@@ -991,7 +992,8 @@
                                            ((return conts) inst (construct-instance class-name
                                                                                     arg-list
                                                                                     (state:set-instance-scope inst state)
-                                                                                    conts))))
+                                                                                    (conts-of conts
+                                                                                              #:next (lambda (s) state))))))
         (myerror (format "`~a` is not a recognized class" class-name) state))))
 
 (define get-zero-init-instance-of-class
@@ -1074,7 +1076,33 @@
                                                                                                                                                                       is-super-ctor?)))))))))
                                                 (myerror "" state))]
       ; nonempty, no constructor calls -> recurse super() if parent, then init, then cdr body
-      )))
+      [parent                                   (construct-instance parent
+                                                                    '()
+                                                                    state
+                                                                    (conts-of conts
+                                                                              #:next (lambda (s)
+                                                                                       (Mvalue-fun-impl (state:get-init class-name state)
+                                                                                                        '()
+                                                                                                        state
+                                                                                                        (conts-of conts
+                                                                                                                  #:next (lambda (s2)
+                                                                                                                           (Mstate-stmt-list body
+                                                                                                                                             state
+                                                                                                                                             conts
+                                                                                                                                             #:legal (negate (join-or is-return?
+                                                                                                                                                                      is-this-ctor?
+                                                                                                                                                                      is-super-ctor?)))))))))]
+      [else                                      (Mvalue-fun-impl (state:get-init class-name state)
+                                                                  '()
+                                                                  state
+                                                                  (conts-of conts
+                                                                            #:next (lambda (s2)
+                                                                                     (Mstate-stmt-list body
+                                                                                                       state
+                                                                                                       conts
+                                                                                                       #:legal (negate (join-or is-return?
+                                                                                                                                is-this-ctor?
+                                                                                                                                is-super-ctor?))))))])))
 
 ; assumes every statement in a function body is nested and has at least 2 elems
 (define is-this-ctor?
@@ -1083,15 +1111,6 @@
 (define is-super-ctor?
   (lambda (expr)
     (eq? (second expr) 'super)))
-
-(define Mvalue-fun-impl2
-  (lambda (fun-closure fun-inputs state conts)
-    (Mstate-stmt-list (function:body fun-closure)
-                      (get-environment fun-closure
-                                       fun-inputs
-                                       (state:push-fun-call-context fun-closure state)
-                                       conts)
-                      conts)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; EXPRESSIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
