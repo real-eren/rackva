@@ -92,9 +92,9 @@ class A {
   static function main() { return A.super; }
 }")
 
-(error-str #:id "super on RHS of dot"
+(error-str #:id "this in static context"
            #:args (list "A")
-           #:catch #f
+           #:catch #t
            "
 class A {
   static function main() { return this; }
