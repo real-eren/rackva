@@ -904,9 +904,6 @@
 
 (define Mvalue-fun-impl
   (lambda (fun-closure fun-inputs eval-state state conts)
-    (println fun-closure)
-    (println "Mvalue-fun-impl")
-    ; (println (state:push-fun-call-context fun-closure state))
     (Mstate-stmt-list (function:body fun-closure) ; needs to run in scope before Mname
                       (get-environment fun-closure
                                        fun-inputs
