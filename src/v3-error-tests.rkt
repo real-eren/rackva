@@ -6,6 +6,7 @@
 (define error-file (make-error-tester interpret-v3-file))
 (define error-str (make-error-tester interpret-v3-str))
 
+
 (error-str #:id "static local vars don't persist"
            #:args (list "ClassName")
            #:catch #t
@@ -73,10 +74,52 @@ class A {
   static function foo(a, b, c) { }
 }")
 
-(error-str #:id "calling class that does not exist"
+; ; Dots
+
+(error-str #:id "this on RHS of dot"
+           #:args (list "A")
+           #:catch #t
+           "
+class A {
+  static function main() { return A.this; }
+}")
+
+(error-str #:id "super on RHS of dot"
+           #:args (list "A")
+           #:catch #t
+           "
+class A {
+  static function main() { return A.super; }
+}")
+
+(error-str #:id "super on RHS of dot"
+           #:args (list "A")
+           #:catch #f
+           "
+class A {
+  static function main() { return this; }
+}")
+
+(error-str #:id "non-existent class in LHS of dot during funcall"
            #:args (list "A")
            #:catch #t
            "
 class A {
   static function main() { return B.c(); }
+}")
+
+(error-str #:id "non-existent class in LHS of dot during field lookup"
+           #:args (list "A")
+           #:catch #t
+           "
+class A {
+  static function main() { return B.c; }
+}")
+
+(error-str #:id "non-existent class in LHS of dot during assignment"
+           #:args (list "A")
+           #:catch #t
+           "
+class A {
+  static function main() { B.c = 2; return B.c; }
 }")
