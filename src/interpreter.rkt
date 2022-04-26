@@ -120,12 +120,12 @@
     (cond
       [(null? stmt-list)             ((next conts) state)]
       [(legal? (first stmt-list))    (Mstate-statement (first stmt-list)
-                                                        state
-                                                        (conts-of conts
-                                                                  #:next (lambda (s)
-                                                                           (Mstate-stmt-list (rest stmt-list) 
-                                                                                             s
-                                                                                             conts))))]
+                                                       state
+                                                       (conts-of conts
+                                                                 #:next (lambda (s)
+                                                                          (Mstate-stmt-list (rest stmt-list) 
+                                                                                            s
+                                                                                            conts))))]
       ; indicative of bug in program
       [else                          (error "encountered illegal construct type" (first stmt-list))])))
 
@@ -198,7 +198,7 @@
                     (nxt s)))
               ; declare static fields w/ values
               (curry static-fields (filter is-static-field-decl? body))
-    )))
+              )))
 
 
 ;; takes initial state, last continuation and a sequence of 2-arg functions
@@ -279,12 +279,12 @@
                                                                      state)]
       [(and (eq? function:scope:abstract m-type)
             (state:class-get-inst-method class-name
-                                          m-name
-                                          m-params
-                                          state))    =>     (lambda (fun)
-                                                              (myerror (format "Cannot override concrete `~a` with abstract method"
-                                                                               (function->string fun))
-                                                                       state))]
+                                         m-name
+                                         m-params
+                                         state))    =>     (lambda (fun)
+                                                             (myerror (format "Cannot override concrete `~a` with abstract method"
+                                                                              (function->string fun))
+                                                                      state))]
       [else                                                 (state:declare-method m-name
                                                                                   m-params
                                                                                   m-body
@@ -337,12 +337,12 @@
                           (decl-maybe-expr stmt)
                           state
                           (conts-of 
-                            #:next        next
-                            #:break       default-break
-                            #:continue    default-continue
-                            #:throw       default-throw
-                            #:return      (lambda (v s) (myerror "Illegal return in static declarations" s))
-                            ))))
+                           #:next        next
+                           #:break       default-break
+                           #:continue    default-continue
+                           #:throw       default-throw
+                           #:return      (lambda (v s) (myerror "Illegal return in static declarations" s))
+                           ))))
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
@@ -1088,12 +1088,11 @@
                                             (myerror "`this` cannot be used in a free or static context" state))]
       [(eq? 'super LHS)                 (if (and (state:instance-context? state) (state:current-type-has-parent? state))
                                             ((return conts) RHS (state:set-super-scope state))
-                                            (myerror "`super` cannot be refered in instance context" state))]
-      [(not (symbol? LHS))              (Mvalue LHS
-                                                state
-                                                (conts-of conts
-                                                          #:return (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
-      [(state:var-declared? LHS state)  (Mvalue LHS
+                                            (myerror "`super` cannot be referenced in the current context" state))]
+      ; if not symbol, must be instance yielding expr. if symbol and reachable var, must also yield instance
+      [(or (not (symbol? LHS))
+           (state:var-declared? LHS
+                                state)) (Mvalue LHS
                                                 state
                                                 (conts-of conts
                                                           #:return (lambda (v s) ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
