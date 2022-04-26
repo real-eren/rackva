@@ -10,7 +10,6 @@
 
 (define test-str (make-tester interpret-v3-str))
 
-
 ; ; INSTANCE CREATION
 
 (test-str #:id "instance fields w/out initializer should be initialized to zero, no parent"
@@ -265,9 +264,9 @@ class Child extends Parent {
 
 ;  ; Test 1 should return 15 when running A's main.
 
- (test-str #:id "Test 1"
-           15
-           #:args (list "A") "
+(test-str #:id "Test 1"
+          15
+          #:args (list "A") "
  class A {
    var x = 5;
    var y = 10;
@@ -280,9 +279,9 @@ class Child extends Parent {
 
 ;  Test 2 should return 12 when running A's main.
 
- (test-str #:id "Test 2"
-           12
-           #:args (list "A") "
+(test-str #:id "Test 2"
+          12
+          #:args (list "A") "
  class A {
 
    function add(g, h) {
@@ -295,11 +294,11 @@ class Child extends Parent {
    }
  }")
 
-  ;Test 3 should return 125 when running A's main.
+;Test 3 should return 125 when running A's main.
 
- (test-str #:id "Test 3"
-           125
-           #:args (list "A") "
+(test-str #:id "Test 3"
+          125
+          #:args (list "A") "
  class A {
 
    var x = 100;
@@ -314,11 +313,11 @@ class Child extends Parent {
    }
  }")
 
-  ;Test 4 should return 36 when running A's main.
+;Test 4 should return 36 when running A's main.
 
- (test-str #:id "Test 4"
-           36
-           #:args (list "A") "
+(test-str #:id "Test 4"
+          36
+          #:args (list "A") "
  class A {
 
    var x = 100;
@@ -340,11 +339,11 @@ class Child extends Parent {
    }
  }")
 
-  ;Test 5 should return 54 when running A's main.
+;Test 5 should return 54 when running A's main.
 
- (test-str #:id "Test 5"
-           54
-           #:args (list "A") "
+(test-str #:id "Test 5"
+          54
+          #:args (list "A") "
  class A {
 
    var x = 100;
@@ -370,11 +369,11 @@ class Child extends Parent {
    }
  }")
 
-  ;Test 6 should return 110 when running A's main.
+;Test 6 should return 110 when running A's main.
 
- (test-str #:id "Test 6"
-           110
-           #:args (list "A") "
+(test-str #:id "Test 6"
+          110
+          #:args (list "A") "
  class A {
 
    var x = 100;
@@ -389,11 +388,11 @@ class Child extends Parent {
    }
  }")
 
-  ;Test 7 should return 26 when running C's main.
+;Test 7 should return 26 when running C's main.
 
- (test-str #:id "Test 6"
-           26
-           #:args (list "C") "
+(test-str #:id "Test 6"
+          26
+          #:args (list "C") "
  class A {
    var x = 1;
    var y = 2;
@@ -433,11 +432,11 @@ class Child extends Parent {
    }
  }")
 
-  ; Test 8 should return 117 when running Square's main.
+; Test 8 should return 117 when running Square's main.
 
- (test-str #:id "Test 8"
-           117
-           #:args (list "Square") "
+(test-str #:id "Test 8"
+          117
+          #:args (list "Square") "
  class Shape {
    function area() {
      return 0;
@@ -495,11 +494,11 @@ class Child extends Parent {
    }
  }")
     
-  ;Test 9 should return 32 when running Square's main.
+;Test 9 should return 32 when running Square's main.
 
- (test-str #:id "Test 9"
-           32
-           #:args (list "Square") "
+(test-str #:id "Test 9"
+          32
+          #:args (list "Square") "
  class Shape {
    function area() {
      return 0;
@@ -567,11 +566,11 @@ class Child extends Parent {
    }
  }")
    
-  ;Test 10 should return 15 when running List's main.
+;Test 10 should return 15 when running List's main.
 
- (test-str #:id "Test 10"
-           15
-           #:args (list "List") "
+(test-str #:id "Test 10"
+          15
+          #:args (list "List") "
  class List {
    var val;
    var next;
@@ -590,23 +589,23 @@ class Child extends Parent {
      }
    }
 
-   function setVal(x) {
+  function setVal(x) {
      val = x;
-   }
+  }
 
-   static function main() {
-     var l = new List();
-     l.setVal(10);
-     l.setNext(5);
-     return l.getNext().getNext().getNext().getNext().getNext().val;
-   }
- }")
+  static function main() {
+    var l = new List();
+    l.setVal(10);
+    l.setNext(5);
+    return l.getNext().getNext().getNext().getNext().getNext().val;
+  }
+}")
 
-  ;Test 11 should return 123456 when running List's main
+;Test 11 should return 123456 when running List's main
 
- (test-str #:id "Test 11"
-           123456
-           #:args (list "List") "
+(test-str #:id "Test 11"
+          123456
+          #:args (list "List") "
  class List {
    var val;
    var next;
@@ -667,11 +666,11 @@ class Child extends Parent {
    }
  }")
 
-  ;Test 12 should return 5285 when running List's main.
+;Test 12 should return 5285 when running List's main.
 
- (test-str #:id "Test 12"
-           5285
-           #:args (list "List") "
+(test-str #:id "Test 12"
+          5285
+          #:args (list "List") "
  class List {
    var val;
    var next;
@@ -722,11 +721,11 @@ class Child extends Parent {
    }
  }")
 
-  ;Test 13 should return -716 when run with C's main.
+;Test 13 should return -716 when run with C's main.
 
- (test-str #:id "Test 13"
-           -716
-           #:args (list "C") "
+(test-str #:id "Test 13"
+          -716
+          #:args (list "C") "
  class A {
    var count = 0;
 
@@ -793,8 +792,8 @@ class Child extends Parent {
 ; Test 31 should return 20 when running A's main.
 
 (test-str #:id "Test 31"
-           20
-           #:args (list "A") "
+          20
+          #:args (list "A") "
 class A {
   static var x = 10;
   static function main() {
@@ -805,8 +804,8 @@ class A {
 ; Test 32 should return 530 when running B's main.
 
 (test-str #:id "Test 32"
-           530
-           #:args (list "B") "
+          530
+          #:args (list "B") "
 class A {
   static var x = 10;
   static var y = 20;
@@ -833,8 +832,8 @@ class B extends A {
 ; Test 33 should return 615 when running B's main.
 
 (test-str #:id "Test 33"
-           615
-           #:args (list "B") "
+          615
+          #:args (list "B") "
 class A {
   static var a = 1;
   static var b = 10;
@@ -857,11 +856,11 @@ class C {
   static function timesX(a) {
     return a * x;
   }
-")
+}")
 ; Test 34 should return 16 when running Box's main.
 (test-str #:id "Test 34"
-           16
-           #:args (list "Box") "
+          16
+          #:args (list "Box") "
 class Box {
   static var countAccesses = 0;
   var size = 1;
@@ -890,8 +889,8 @@ class Box {
 ; Test 35 should return 100 when running A's main.
 
 (test-str #:id "Test 35"
-           100
-           #:args (list "A") "
+          100
+          #:args (list "A") "
 class A {
   static function divide(x, y) {
     if (y == 0)
@@ -927,8 +926,8 @@ class Zero {
 ; Test 36 should return 420 when running A's main.
 
 (test-str #:id "Test 36"
-           420
-           #:args (list "A") "
+          420
+          #:args (list "A") "
 class A {
   static function divide(x, y) {
     if (y == 0)
@@ -969,3 +968,25 @@ class Zero {
     return value;
   }
 }")
+
+
+(test-str #:id "Nested dot and side effect in inst field expr"
+          4
+          #:args (list "List") "
+class List {
+  static var counter = 0;
+  var x = (counter = counter + 1);
+  var next;
+
+  static function main() {
+    var l1 = new List();
+    var l2 = new List();
+    var l3 = new List();
+    var l4 = new List();
+    l1.next = l2;
+    l2.next = l3;
+    l3.next = l4;
+    return l1.next.next.next.x;
+  }
+}
+")
