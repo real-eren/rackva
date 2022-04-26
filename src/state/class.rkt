@@ -15,6 +15,7 @@
      $parent         (if (null? parent-name)
                          #F
                          parent-name)
+     $init           #F
      $i-field-names  null
      $constructors   new-function-table
      $methods        new-function-table

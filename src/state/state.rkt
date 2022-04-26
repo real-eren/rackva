@@ -238,12 +238,13 @@
 ; 3) all of invoke state's classes and global tables belong in scope
 ; why height and not copy? to capture bindings declared later in the same layer
 (define make-scoper
-  (lambda (declare-state class)
+  (lambda (declare-state class instance-context?)
     (lambda (invoke-state)
       (withv invoke-state
              $local-vars  (bottom-layers (local-vars invoke-state) (height (local-vars declare-state)))
              $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))
              $current-type  class
+             $this          (if instance-context? (this invoke-state) #F)
              $dotted        #F))))
 
 ;;;; Used by `Mstate-dot` to make state perform the correct lookups
@@ -585,7 +586,7 @@
                                 name
                                 params
                                 body
-                                (make-scoper state #F)
+                                (make-scoper state #F #F)
                                 function:scope:free
                                 #F))))
 
@@ -598,7 +599,7 @@
                                       name
                                       params
                                       body
-                                      (make-scoper state class)
+                                      (make-scoper state class (eq? function:scope:instance scope))
                                       scope
                                       class)))))
 
@@ -663,7 +664,7 @@
                     name
                     params
                     body
-                    (make-scoper state class)
+                    (make-scoper state class (eq? function:scope:instance scope))
                     scope
                     class)
              state $classes class class:$methods)))
@@ -682,7 +683,7 @@
     (put* (function:of #:name 'init
                        #:params '()
                        #:body body
-                       #:scoper (make-scoper state class)
+                       #:scoper (make-scoper state class #T)
                        #:scope function:scope:init
                        #:class class)
           state $classes class class:$init)))
@@ -695,7 +696,7 @@
                     class
                     params
                     body
-                    (make-scoper state class)
+                    (make-scoper state class #T)
                     function:scope:constructor
                     class)
              state $classes class class:$constructors)))
