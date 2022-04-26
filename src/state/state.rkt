@@ -338,6 +338,7 @@
      (and (not (dotted? state))
           (ormap (curry var-table:var-box name)
                  (local-vars state)))
+     (and (eq? 'this name) (box (this state)))
      (and (this state)
           (get-instance-field-box name (this state) (current-type state) state))
      (and (current-type state)
