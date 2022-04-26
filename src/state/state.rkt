@@ -220,7 +220,7 @@
   (lambda (state)
     (if (empty? (context-stack state))
         ""
-        (string-join (map (curry format "~a") (reverse (context-stack state)))
+        (string-join (map context:context->string (reverse (context-stack state)))
                      " -> "
                      #:before-first "stack trace: "))))
 

@@ -101,9 +101,10 @@
 (define Mstate-main
   (lambda (state return throw #:class [class #f])
     (Mvalue-fun '(funcall main)
-                (if class
-                    (state:set-static-scope class state)
-                    state)
+                (cond
+                  [(not class)                     state]
+                  [(state:has-class? class state)  (state:set-static-scope class state)]
+                  [else                            (myerror (format "~a is not a class." class) state)])
                 (conts-of
                  #:throw throw
                  #:return return))))
@@ -842,10 +843,10 @@
       [(is-new? expr)                       (Mvalue-new expr state conts)]
       [(is-dotted? expr)                    (Mname expr state (conts-of conts
                                                                         #:return (lambda (n s)
-                                                                                    (Mvalue-base n 
-                                                                                                 s 
-                                                                                                 (conts-of conts
-                                                                                                           #:return (lambda (v s2) ((return conts) v state)))))))]
+                                                                                   (Mvalue-base n 
+                                                                                                s 
+                                                                                                (conts-of conts
+                                                                                                          #:return (lambda (v s2) ((return conts) v state)))))))]
       [(is-fun-call? expr)                  (Mvalue-fun expr state conts)]
       [(is-assign? expr)                    (Mvalue (assign-expr expr)
                                                     state
@@ -855,8 +856,8 @@
                                                                                 s 
                                                                                 (conts-of conts
                                                                                           #:return    (lambda (n s2) 
-                                                                                                            ((return conts) v (state:restore-scope  #:dest (state:assign-var n v s2)
-                                                                                                                                                    #:src state))))))))]
+                                                                                                        ((return conts) v (state:restore-scope  #:dest (state:assign-var n v s2)
+                                                                                                                                                #:src state))))))))]
       [(is-nested-boolean-expr? expr)       (Mbool expr state conts)]
       [(has-op? expr)                       (Mvalue-op expr state conts)]
       [else                                 (error "unreachable in Mvalue")])))
@@ -922,13 +923,13 @@
                              eval-state
                              conts
                              (lambda (p l)
-                                ; (println (bind-boxed-params  p
-                                ;                     l
-                                ;                     (state:push-new-layer ((function:scoper fun-closure) out-state))))
-                                (bind-boxed-params  p
-                                                    l
-                                                    (state:push-new-layer ((function:scoper fun-closure) out-state)))
-                                ))))
+                               ; (println (bind-boxed-params  p
+                               ;                     l
+                               ;                     (state:push-new-layer ((function:scoper fun-closure) out-state))))
+                               (bind-boxed-params  p
+                                                   l
+                                                   (state:push-new-layer ((function:scoper fun-closure) out-state)))
+                               ))))
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
@@ -1049,7 +1050,7 @@
                                                              state
                                                              conts))]
       ; first line this
-         ; recurse to construct instance, then cdr body
+      ; recurse to construct instance, then cdr body
       [(is-this-ctor? (first body))         (construct-instance class-name
                                                                 (fun-inputs (first body))
                                                                 state
@@ -1058,12 +1059,12 @@
                                                                                    (Mstate-stmt-list (cdr body)
                                                                                                      state
                                                                                                      conts
-                                                                                                     #:legal (negate (join-or is-return?
-                                                                                                                              is-this-ctor?
-                                                                                                                              is-super-ctor?))))))]                                                                                               
+                                                                                                     #:legal-construct? (negate (join-or is-return?
+                                                                                                                                         is-this-ctor?
+                                                                                                                                         is-super-ctor?))))))]                                                                                               
       ; first line super
-         ; if no parent, error
-         ; if parent, recurse to construct-instance, then this init, then cdr body
+      ; if no parent, error
+      ; if parent, recurse to construct-instance, then this init, then cdr body
       [(is-super-ctor? (first body))        (if parent
                                                 (construct-instance parent
                                                                     (fun-inputs (first body))
@@ -1079,9 +1080,9 @@
                                                                                                                            (Mstate-stmt-list (cdr body)
                                                                                                                                              state
                                                                                                                                              conts
-                                                                                                                                             #:legal (negate (join-or is-return?
-                                                                                                                                                                      is-this-ctor?
-                                                                                                                                                                      is-super-ctor?)))))))))
+                                                                                                                                             #:legal-construct? (negate (join-or is-return?
+                                                                                                                                                                                 is-this-ctor?
+                                                                                                                                                                                 is-super-ctor?)))))))))
                                                 (myerror "" state))]
       ; nonempty, no constructor calls -> recurse super() if parent, then init, then cdr body
       [parent                                   (construct-instance parent
@@ -1098,9 +1099,9 @@
                                                                                                                            (Mstate-stmt-list body
                                                                                                                                              state
                                                                                                                                              conts
-                                                                                                                                             #:legal (negate (join-or is-return?
-                                                                                                                                                                      is-this-ctor?
-                                                                                                                                                                      is-super-ctor?)))))))))]
+                                                                                                                                             #:legal-construct? (negate (join-or is-return?
+                                                                                                                                                                                 is-this-ctor?
+                                                                                                                                                                                 is-super-ctor?)))))))))]
       [else                                      (Mvalue-fun-impl (state:get-init class-name state)
                                                                   '()
                                                                   state
@@ -1110,9 +1111,9 @@
                                                                                      (Mstate-stmt-list body
                                                                                                        state
                                                                                                        conts
-                                                                                                       #:legal (negate (join-or is-return?
-                                                                                                                                is-this-ctor?
-                                                                                                                                is-super-ctor?))))))])))
+                                                                                                       #:legal-construct? (negate (join-or is-return?
+                                                                                                                                           is-this-ctor?
+                                                                                                                                           is-super-ctor?))))))])))
 
 ; assumes every statement in a function body is nested and has at least 2 elems
 (define is-this-ctor?
