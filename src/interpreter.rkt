@@ -12,8 +12,7 @@
          "state/instance.rkt"
          "util/map.rkt"
          "util/predicates.rkt"
-         "classParser.rkt"
-         )
+         "classParser.rkt")
 
 (provide interpret
          interpret-parse-tree-v3
@@ -46,7 +45,6 @@
     (Mstate-stmt-list parse-tree
                       (state:push-top-level-context new-state)
                       (conts-of
-                       ; lookup entry-point class (name), do Mstate-main w/ popped stack-trace and forwarded return & throw
                        #:next (lambda (s)
                                 (Mstate-main s
                                              return
@@ -283,10 +281,10 @@
             (state:class-get-inst-method class-name
                                          m-name
                                          m-params
-                                         state))    =>     (lambda (fun)
-                                                             (myerror (format "Cannot override concrete `~a` with abstract method"
-                                                                              (function->string fun))
-                                                                      state))]
+                                         state))     =>     (lambda (fun)
+                                                              (myerror (format "Cannot override concrete `~a` with abstract method"
+                                                                               (function->string fun))
+                                                                       state))]
       [else                                                 (state:declare-method m-name
                                                                                   m-params
                                                                                   m-body
@@ -869,7 +867,7 @@
     (Mshared-fun expr
                  state
                  (conts-of conts
-                           #:next      (lambda (s) (myerror "The function did not return any values!" s))
+                           #:next      (lambda (s) (myerror "Function call was expected to produce a return value, but did not" s))
                            #:return    (lambda (v s) ((return conts) v state))))))
 
 (define fun-name second)
@@ -893,26 +891,43 @@
                                                      arg-list
                                                      state
                                                      s
+                                                     ; passing state in next, throw and return, because the s returned from fun call was scoped
+                                                     ; aka the continuations that leave the fun-body (return to call-site)
+                                                     ; boxes handle the side-effects from the function body
+                                                     ; however s2 has the context-stack during fun body, needed for error messages
+                                                     ; continue, break and throw need s2's context stack
                                                      (conts-of conts
                                                                #:next     (lambda (s2) ((next conts) state)) 
-                                                               #:continue (lambda (s2) (default-continue state))
-                                                               #:break    (lambda (s2) (default-break state))
+                                                               #:continue default-continue;(lambda (s2) (default-continue state))
+                                                               #:break    default-break;(lambda (s2) (default-break state))
                                                                #:throw    (lambda (e s2) ((throw conts) e (state:with-context (state:context-stack s2) state)))
                                                                #:return   (lambda (v s2) ((return conts) v state))))
-                                    (myerror (format "function `~a` not in scope" ; specify # args given
-                                                     name) ; print list of funs in scope w/ same name
+                                    (myerror (format "A function `~a` with ~a parameter(s) is not in scope.~a"
+                                                     name
+                                                     (length arg-list)
+                                                     (let ([similar-funs  (state:all-funs-with-name n state)])
+                                                       (if (null? similar-funs)
+                                                           ""
+                                                           (string-join (map function->string similar-funs)
+                                                                        "\n"
+                                                                        #:before-first "\nDid you mean one of the following?\n----------\n"
+                                                                        #:after-last "\n----------\n"))))
                                              s)))))))
 
 
 (define Mvalue-fun-impl
   (lambda (fun-closure fun-inputs eval-state state conts)
-    (Mstate-stmt-list (function:body fun-closure) ; needs to run in scope before Mname
-                      (get-environment fun-closure
-                                       fun-inputs
-                                       eval-state
-                                       (state:push-fun-call-context fun-closure state)
-                                       conts)
-                      conts)))
+    (if (function:abstract? fun-closure)
+        (myerror (format "~a is abstract and cannot be invoked."
+                         (function->string fun-closure))
+                 state)
+        (Mstate-stmt-list (function:body fun-closure) ; needs to run in scope before Mname
+                          (get-environment fun-closure
+                                           fun-inputs
+                                           eval-state
+                                           (state:push-fun-call-context fun-closure state)
+                                           conts)
+                          conts))))
 
 
 ;; Takes in the function name, the function closure, the input expression list
@@ -924,18 +939,14 @@
                              eval-state
                              conts
                              (lambda (p l)
-                               ; (println (bind-boxed-params  p
-                               ;                     l
-                               ;                     (state:push-new-layer ((function:scoper fun-closure) out-state))))
-                               (bind-boxed-params  p
-                                                   l
-                                                   (state:push-new-layer ((function:scoper fun-closure) out-state)))
-                               ))))
+                               (bind-boxed-params p
+                                                  l
+                                                  (state:push-new-layer ((function:scoper fun-closure) out-state)))))))
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
 (define get-inputs-list-box-cps
-  (lambda (formal-params actual-params eval-state conts evaluation) 
+  (lambda (formal-params actual-params eval-state conts evaluation)
     (cond
       [(and (null? actual-params)
             (null? formal-params))      (evaluation '() '())]
@@ -950,7 +961,7 @@
                                                                                               s1
                                                                                               conts
                                                                                               (lambda (p1 l1)
-                                                                                                (evaluation (cons (first formal-params) p1) 
+                                                                                                (evaluation (cons (first formal-params) p1)
                                                                                                             (cons (box v1) l1)))))))]
       ;; by reference
       [(symbol? (first actual-params))  (get-inputs-list-box-cps (cddr formal-params)
@@ -1062,7 +1073,7 @@
                                                                                                      conts
                                                                                                      #:legal-construct? (negate (join-or is-return?
                                                                                                                                          is-this-ctor?
-                                                                                                                                         is-super-ctor?))))))]                                                                                               
+                                                                                                                                         is-super-ctor?))))))]
       ; first line super
       ; if no parent, error
       ; if parent, recurse to construct-instance, then this init, then cdr body
@@ -1251,7 +1262,7 @@
                                                           #:return (lambda (v s)
                                                                      ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
       [(state:has-class? LHS state)     ((return conts) RHS (state:set-static-scope LHS state))]
-      [else                             (myerror (format "`~a` cannot appear on the left hand side of a dot expression" LHS) state)])))
+      [else                             (myerror (format "`~a` is not a reachable class name or variable" LHS) state)])))
 
 (define assert-instance 
   (lambda (v s) 
