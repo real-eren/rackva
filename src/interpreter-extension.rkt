@@ -67,4 +67,4 @@
 
 ;; str equivalent of the `interpret` function provided by `interpreter`
 ;; AKA latest version of interpret
-(define interpret-str interpret-v2-str)
+(define interpret-str interpret-v3-str)
