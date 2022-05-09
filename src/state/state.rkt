@@ -41,6 +41,7 @@
 
                                   fun-already-declared?
                                   has-fun?
+                                  all-funs-with-name
                                   get-function
                                   declare-fun
 
@@ -338,7 +339,9 @@
      (and (not (dotted? state))
           (ormap (curry var-table:var-box name)
                  (local-vars state)))
-     (and (eq? 'this name) (box (this state)))
+     (and (this state)
+          (eq? 'this name)
+          (box (this state)))
      (and (this state)
           (get-instance-field-box name (this state) (current-type state) state))
      (and (current-type state)
@@ -428,16 +431,15 @@
 ; primarily used by interpreter to display suggestions when reporting errors
 ; for calling an undefined function
 ; WIP
-(define all-funs-with-sig
+(define all-funs-with-name
   (lambda (name state)
-    (foldl append
-           '()
-           (map (curry fun-table:get-all name)
-                (append (global-funs state)
-                        (if (current-type state)
-                            (get* state $classes (current-type state) class:$methods)
-                            '())
-                        (local-funs state))))))
+    (fun-table:get-all name
+                       (foldl append
+                              (global-funs state)
+                              (append (map class:methods (map:values (classes state)))
+                                      (local-funs state))))))
+
+
 ;; Get closure for the first function with this signature
 ; traverses scopes in this order:
 ; local (new->old) -> instance (sub->super) -> static (sub->super) -> global
@@ -745,34 +747,37 @@
 ;; more thorough coverage is currently handled by the functional-tests (v1-v3)
 (module+ test
   (require rackunit)
-  (define s1 (push-new-layer (push-top-level-context new-state)))
-  (define s2 (declare-var 'a s1))
-  (check-true (var-declared? 'a s2))
-  (check-false (var-initialized? 'a s2))
-  
-  (define s3 (assign-var 'a 3 s2))
-  (check-true (var-initialized? 'a s3))
-  (check-eq? (get-var-value 'a s3) 3)
-  
-  (define s4 (push-new-layer s3))
-  (check-false (var-already-declared? 'a s4))
-  (check-eq? (get-var-value 'a s4) 3)
-  (define s5 (declare-var-with-value 'a 7 s4))
-  (check-eq? (get-var-value 'a s5) 7)
-  (define s6 (pop-layer s5))
-  (check-eq? (get-var-value 'a s6) 3)
 
-  (define s7 (declare-var-with-box 'd (box 5)
-                                   (declare-var 'c
-                                                (declare-var-with-value 'b #T
-                                                                        (push-new-layer s6)))))
-  (check-eq? (get-var-value 'd s7) 5)
-  (check-false (var-initialized? 'c s7))
-  (check-eq? (get-var-value 'd s7) 5)
+  ;; variables
+  (let* ([s1  (push-new-layer (push-top-level-context new-state))]
+         [s2  (declare-var 'a s1)])
+    (check-true (var-declared? 'a s2))
+    (check-false (var-initialized? 'a s2))
+    (let* ([s3 (assign-var 'a 3 s2)]
+           [s4 (push-new-layer s3)]
+           [s5 (declare-var-with-value 'a 7 s4)]
+           [s6 (pop-layer s5)]
+           [s7 (declare-var-with-box 'd (box 5)
+                                     (declare-var 'c
+                                                  (declare-var-with-value 'b #T
+                                                                          (push-new-layer s6))))])
+      (check-true (var-initialized? 'a s3))
+      (check-eq? (get-var-value 'a s3) 3)
+      
+      (check-false (var-already-declared? 'a s4))
+      (check-eq? (get-var-value 'a s4) 3)
+    
+      (check-eq? (get-var-value 'a s5) 7)
+    
+      (check-eq? (get-var-value 'a s6) 3)
+    
+      (check-eq? (get-var-value 'd s7) 5)
+      (check-false (var-initialized? 'c s7))
+      (check-eq? (get-var-value 'd s7) 5)
+      
+      (let ([s8 (assign-var 'd 10 (push-new-layer s7))])
+        (check-eq? (get-var-value 'd s8) 10))))
   
-  (define s8 (assign-var 'd 10 (push-new-layer s7)))
-  (check-eq? (get-var-value 'd s8) 10)
-
   ;; local fun lookup
   (let* ([s1      (push-top-level-context new-state)]
          [fmn     'main] [fma     '()]
@@ -794,4 +799,65 @@
     (check-true (has-fun? fmn fma s5))
     )
 
-  )
+  ;; get all funs
+  (let* ([s1  (push-top-level-context new-state)]
+         [fgn     'foo] [fga     '()]
+         [s2      (declare-fun fgn fga null s1)]
+         [fg      (get-function fgn fga s2)]
+         
+         [fan     'foo] [faa     '(a b c)]
+         [s3      (declare-fun fan faa null (push-context (context:of-fun-call fg) (push-new-layer s2)))]
+         [fa      (get-function fan faa s3)]
+         
+         [fbn     'bar] [fba     '()]
+         [s4      (declare-fun fbn fba null s3)]
+         [fb      (get-function fbn fba s4)]
+         
+         [c1n     'Class1] [c1p    #f]
+         [s5      (declare-class c1n c1p s4)]
+         [fcn     'foo] [fca     '(a b)]
+         [s6      (declare-method fcn
+                                  fca
+                                  '()
+                                  function:scope:instance
+                                  c1n
+                                  s5)]
+         [s7      (end-class-decl c1n s6)]
+         [fc      (get-i-a-method-rec fcn fca c1n s7)]
+
+         [c2n     'Class2] [c2p    #f]
+         [s8      (declare-class c2n c2p s7)]
+         [fdn     'foo] [fda     '(a b c d e)]
+         [s9      (declare-method fdn
+                                  fda
+                                  '()
+                                  function:scope:abstract
+                                  c2n
+                                  s8)]
+         [s10     (end-class-decl c2n s9)]
+         [fd      (get-i-a-method-rec fdn fda c2n s10)]
+         
+         [c3n     'Class3] [c3p    c2n]
+         [s11     (declare-class c3n c3p s10)]
+         [fen     'bar] [fea     '(a b c)]
+         [s12     (declare-method fen
+                                  fea
+                                  '()
+                                  function:scope:static
+                                  c3n
+                                  s11)]
+         [s13     (end-class-decl c3n s12)]
+         [fe      (get-static-method fen
+                                     fea
+                                     c3n
+                                     s13)])
+    (check-true (empty? (all-funs-with-name 'foo s1)))
+    (check-true (empty? (all-funs-with-name 'x s13)))
+    
+    
+    (check-not-false (andmap (lambda (f)
+                               (member f (all-funs-with-name 'foo s13)))
+                             (list fg fa fc fd)))
+    (check-not-false (andmap (lambda (f)
+                               (member f (all-funs-with-name 'bar s13)))
+                             (list fb fe)))))
