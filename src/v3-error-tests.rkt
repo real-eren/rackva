@@ -6,7 +6,6 @@
 (define error-file (make-error-tester interpret-v3-file))
 (define error-str (make-error-tester interpret-v3-str))
 
-
 (error-str #:id "static local vars don't persist"
            #:args (list "ClassName")
            #:catch #t
@@ -67,12 +66,42 @@ class Child extends Parent {
   function foo(x);
 }")
 
+
 (error-str #:id "subclass declares method with similar signature to parent's abstract methods, but does not override"
            #:args (list "Child")
            #:catch #t
            "
 class Parent { function overrideMe(x, y); }
 class Child extends Parent { function overrideMe(&x) { } }")
+
+
+(error-str #:id "Can't invoke abstract method"
+           #:args (list "A")
+           #:catch #t
+           "
+class A {
+  function overrideMe();
+  static function main() {
+    var a = new A();
+    a.overrideMe();
+    return 0;
+  }
+}")
+
+
+(error-str #:id "Can't invoke abstract method of parent"
+           #:args (list "Child")
+           #:catch #t
+           "
+class Parent { function overrideMe(x, y); }
+class Child extends Parent {
+  function overrideMe(x, y);
+  static function main() {
+    var b = new Child();
+    var a = b.overrideMe(0, 1);
+    return 0;
+  }
+}")
 
 
 (error-str #:id "static methods don't count as overriding"
@@ -142,9 +171,8 @@ class A {
   static function main() { B.c = 2; return B.c; }
 }")
 
-; Test 37 should throw an error for "no this".
 
-(error-str #:id "non-existent class in LHS of dot during assignment"
+(error-str #:id "this in static context"
            #:args (list "A")
            #:catch #t "
 class A {
@@ -163,3 +191,28 @@ class A {
     return a.mightwork();
   }
 }")
+
+(error-str #:id "Invoking non-existent function when many similar ones exist"
+           #:args (list "C")
+           #:catch #t "
+class A {
+  function foo() { return 3; }
+  static function foo(a) { return 4; }
+}
+class B extends A {
+  static function foo (a, b) { return 5; }
+  function foo(a, b, c) { return 6; }
+}
+class C extends B {
+  static function foo(a, &b, c, &d, e, f, g) { return 2; }
+
+  static function main() {
+    {
+      function foo(a, &b, c, &d) {
+        return 7;
+      }
+      return foo(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+  }
+}
+")

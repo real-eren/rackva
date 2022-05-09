@@ -10,7 +10,7 @@
 
 (define test-str (make-tester interpret-v3-str))
 
-; ; INSTANCE CREATION
+; ; INSTANCE CREATION AND INSTANCE FIELDS
 
 (test-str #:id "instance fields w/out initializer should be initialized to zero, no parent"
           'true
@@ -37,7 +37,7 @@ class A extends Parent {
   }
 }")
 
-(test-str #:id "instance fields w/out initializer should be initialized to zero, with super class"
+(test-str #:id "instance field w/ initializer"
           10
           #:args (list "A") "
 class A {
@@ -47,8 +47,6 @@ class A {
     return a.x;
   }
 }")
-
-; ; INSTANCE FIELDS
 
 
 
