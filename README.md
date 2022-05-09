@@ -1,17 +1,18 @@
 # interpreter
 
-Interpreter for a Java-like language, written in Scheme/Racket
+Interpreter for a Java-like language, written in Scheme/Racket.
+Apart from variables being boxed, within the intepreter values are immutable and functions are referentially-transparent.
 
 ## Language Features:
-Dynamic Typing
-Stack Trace for user errors
+- Dynamic typing
+- Stack trace for user errors
 
 ### V1
 - Int and Bool literals, expressions
 - Basic Arithmetic and Logical operators
 - Short-circuiting || and &&
 - Variables
-- If, While, Try, 
+- If, While, Try, block statements
 
 ### V2
 - V1 features
@@ -35,13 +36,13 @@ Stack Trace for user errors
 ## Notable files
 
 `interpreter.rkt` contains 
- - interpret
+ - `interpret`
  - `Mstate`s
  - `Mvalue`s
  - `Mboolean`s
  - `Mname`s
 
-`interpreter-extension.rkt` contains overloads for interpret
+`interpreter-extension.rkt` contains overloads for interpret, including legacy versions
 
 `conts.rkt` contains the continuation mapping
 
@@ -50,11 +51,11 @@ Stack Trace for user errors
 `var-table.rkt` - a `map` representing a table of var bindings
 `function-table.rkt` - a table of function bindings
 `class.rkt` - a `map` representing a class closure
-`instance.rkt` - a `map` representing a 
+`instance.rkt` - a `map` representing an instance
 
 
 ### utils
 `map.rkt` contains an implementation of a map (associative list)
-`testing.rkt` contains helpers for creating concise unit tests
+`testing.rkt` contains helpers for creating concise functional tests
 
 
