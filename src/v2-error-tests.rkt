@@ -8,7 +8,16 @@
 (define error-str (make-error-tester interpret-v2-str))
 
 
-(error-str #:id "invoking undefined function in top level var declaration"
+(error-str #:id "invoking nonexistent function in top level var declaration"
+           #:catch #t
+           "
+var x = f();
+
+function main() {
+  return x;
+}")
+
+(error-str #:id "invoking function before definition in top level var declaration"
            #:catch #t
            "
 var x = f();
@@ -167,7 +176,7 @@ function main() {
 function main() {
   function bar() { return nephew(); }
   function sibling() {
-    function newphew() { return 5; }
+    function nephew() { return 5; }
   }
   return bar();
 }")
