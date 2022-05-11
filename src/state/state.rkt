@@ -59,6 +59,7 @@
                                   get-zero-init-instance
                                   get-init
                                   get-constructor
+                                  num-ctors
                                   declare-inst-field
                                   declare-init
                                   declare-constructor
@@ -301,12 +302,13 @@
   (lambda (name box state)
     (cond
       [(local-context? state)     (withf state
-                                         $local-vars  (curry stack:update-front (curry var-table:declare-var-with-box name box)))]
-      [(class-def-context? state) (update* (curry var-table:declare-var-with-box name box)
+                                         $local-vars  (curry stack:update-front
+                                                             (curry var-table:declare-with-box name box)))]
+      [(class-def-context? state) (update* (curry var-table:declare-with-box name box)
                                            state $classes (current-type state) class:$s-fields)]
                                            
       [(top-level-context? state) (withf state
-                                         $global-vars (curry var-table:declare-var-with-box name box))]
+                                         $global-vars (curry var-table:declare-with-box name box))]
       [else                       (error "logical error, exhausted cases in declare-var")])))
 
 ;; State with this varname declared in the current scope and initialized to this values
@@ -337,7 +339,7 @@
   (lambda (name state)
     (or
      (and (not (dotted? state))
-          (ormap (curry var-table:var-box name)
+          (ormap (curry var-table:get-box name)
                  (local-vars state)))
      (and (this state)
           (eq? 'this name)
@@ -347,18 +349,18 @@
      (and (current-type state)
           (get-static-field-box name (current-type state) state))
      (and (not (dotted? state))
-          (var-table:var-box name (global-vars state))))))
+          (var-table:get-box name (global-vars state))))))
 
 ;; Assumes `this` is an instance of `type` (same or sub-class)
 (define get-instance-field-box
   (lambda (name this class-name state)
-    (ormap (curry var-table:var-box name)
+    (ormap (curry var-table:get-box name)
            (bottom-layers (instance:fields this) (get-class-height class-name state)))))
 ;; Searches this class and its parents for a static field with the name. #F on miss
 (define get-static-field-box
   (lambda (name class-name state)
     (if class-name
-        (or (var-table:var-box name (get* state $classes class-name class:$s-fields))
+        (or (var-table:get-box name (get* state $classes class-name class:$s-fields))
             (get-static-field-box name
                                   (class:parent (get-class class-name state))
                                   state))
@@ -382,8 +384,8 @@
   (lambda (name state)
     (cond
       [(class-def-context? state) (class:has-field? name (get* state $classes (current-type state)))]
-      [(local-context? state)     (var-table:var-declared? name (stack:peek (local-vars state)))]
-      [(top-level-context? state) (var-table:var-declared? name (global-vars state))])))
+      [(local-context? state)     (var-table:declared? name (stack:peek (local-vars state)))]
+      [(top-level-context? state) (var-table:declared? name (global-vars state))])))
 
 
 ;; Is the in-scope variable with this name and initialized?
@@ -561,6 +563,11 @@
 (define get-constructor
   (lambda (class-name arg-list state)
     (fun-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
+;; returns the number of constructors declared by the class
+; assumes valid class name
+(define num-ctors
+  (lambda (class-name state)
+    (length (get* state $classes class-name class:$constructors))))
 
 ;; State with this fun declared in the current scope
 ; only called for top-level or nested functions
@@ -734,7 +741,7 @@
   (lambda (class-name state)
     (if class-name
         (cons (foldl (lambda (k vt)
-                       (var-table:declare-var-with-box k (box default-val) vt))
+                       (var-table:declare-with-box k (box default-val) vt))
                      new-var-table
                      (class:i-field-names (get-class class-name state)))
               (build-instance-fields (get-parent-name class-name state) state))

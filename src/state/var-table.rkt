@@ -17,31 +17,31 @@
 
 ; check if initialized first
 ; #F if absent
-(define var-box map:get)
+(define get-box map:get)
 ; check if initialized first
 ; error if absent
-(define var-value (compose1 unbox var-box))
+(define get-value (compose1 unbox get-box))
 
-(define var-declared? map:contains?)
+(define declared? map:contains?)
 ; check if declared first
-(define var-initialized? (compose1 not null? var-value))
+(define initialized? (compose1 not null? get-value))
 
 (define assign-box map:put)
 ; mutates in place!
 (define assign-value
   (lambda (var-name value table)
     (begin
-      (set-box! (var-box var-name table) value)
+      (set-box! (get-box var-name table) value)
       table)))
 
 ; adds an uninitialized entry to the table
-(define declare-var
+(define declare
   (lambda (var-name table)
-    (declare-var-with-value var-name null table)))
+    (declare-with-value var-name null table)))
   
-(define declare-var-with-box assign-box)
+(define declare-with-box assign-box)
 
-(define declare-var-with-value
+(define declare-with-value
   (lambda (var-name value table)
-    (declare-var-with-box var-name (box value) table)))
+    (declare-with-box var-name (box value) table)))
 
