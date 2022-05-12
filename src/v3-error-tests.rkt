@@ -123,6 +123,31 @@ class A {
   static function foo(a, b, c) { }
 }")
 
+(error-str #:id "Invoking non-existent function when many similar ones exist"
+           #:args (list "C")
+           #:catch #t "
+class A {
+  function foo() { return 3; }
+  static function foo(a) { return 4; }
+}
+class B extends A {
+  static function foo (a, b) { return 5; }
+  function foo(a, b, c) { return 6; }
+}
+class C extends B {
+  static function foo(a, &b, c, &d, e, f, g) { return 2; }
+
+  static function main() {
+    {
+      function foo(a, &b, c, &d) {
+        return 7;
+      }
+      return foo(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+  }
+}
+")
+
 ; ; Dots, this, super
 
 (error-str #:id "this on RHS of dot"
@@ -320,30 +345,23 @@ class A {
   }
 }")
 
-(error-str #:id "Invoking non-existent function when many similar ones exist"
-           #:args (list "C")
+(error-str #:id "passing this in a reference parameter"
+           #:args (list "A")
            #:catch #t "
 class A {
-  function foo() { return 3; }
-  static function foo(a) { return 4; }
-}
-class B extends A {
-  static function foo (a, b) { return 5; }
-  function foo(a, b, c) { return 6; }
-}
-class C extends B {
-  static function foo(a, &b, c, &d, e, f, g) { return 2; }
+  function refFun(&inst) {
+    inst = new A();
+  }
+
+  function mightwork() {
+    refFun(this);
+  }
 
   static function main() {
-    {
-      function foo(a, &b, c, &d) {
-        return 7;
-      }
-      return foo(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-    }
+    var a = new A();
+    return a.mightwork();
   }
-}
-")
+}")
 
 ; ; Constructors
 

@@ -415,3 +415,34 @@ class A {
     return a.successor().n;
   }
 }")
+
+; ; SUPER FIELDS & METHODS
+(test-str #:id "todo"
+          5
+          #:args (list "A") "
+class A {
+  static function main() {
+    return 5;
+  }
+}
+")
+
+; ; PASSING INSTANCES
+(test-str #:id "storing inst in variable, then var to ref param"
+          3
+          #:args (list "A") "
+class A {
+  var x = 2;
+  function refFun(&inst) {
+    var a = new A();
+    a.x = 3;
+    inst = a;
+  }
+  static function main() {
+    var a = new A();
+    var b = new A();
+    a.refFun(b);
+    return b.x;
+  }
+}")
+

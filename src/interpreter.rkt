@@ -975,17 +975,18 @@
 ;; the state, the conts
 ;;
 (define get-environment
-  (lambda (fun-closure inputs eval-state out-state conts)
-    (boxed-arg-list-cps (function:params fun-closure)
+  (lambda (fun inputs eval-state out-state conts)
+    (boxed-arg-list-cps (function:params fun)
                         inputs
                         eval-state
                         conts
                         (lambda (p l)
                           (bind-boxed-params p
                                              l
-                                             (state:push-new-layer ((function:scoper fun-closure) out-state))))
+                                             (state:push-new-layer ((function:scoper fun) out-state))))
                         (lambda (p s)
-                          (myerror (format "Function expects a reference for `~a`" 
+                          (myerror (format "Function `~a` expects a reference for `~a`"
+                                           (function->string fun)
                                            p)
                                    s)))))
 
@@ -1011,6 +1012,7 @@
                                                                                                        (cons (box v1) bs)))
                                                                                          param-ref-error))))]
       ;; by reference
+      [(eq? 'this (first actual-params)) (myerror "`this` cannot be passed as a reference parameter" eval-state)]
       [(name? (first actual-params))    (boxed-arg-list-cps (cddr formal-params)
                                                             (cdr actual-params)
                                                             eval-state
