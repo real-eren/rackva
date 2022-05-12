@@ -34,11 +34,7 @@
       (set-box! (get-box var-name table) value)
       table)))
 
-; adds an uninitialized entry to the table
-(define declare
-  (lambda (var-name table)
-    (declare-with-value var-name null table)))
-  
+
 (define declare-with-box assign-box)
 
 (define declare-with-value
