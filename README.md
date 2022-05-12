@@ -27,6 +27,7 @@ Stack Trace for user errors
   - static members
   - instance members
   - user-defined constructors
+    - constructor chaining
   - polymorphism
   - abstract methods
 - dot operator
