@@ -13,12 +13,18 @@
            #:catch #t
            "return x;")
 
-(error-str #:id "assign w/out declaring"
+(error-str #:id "assign w/out declaring, statement"
            #:catch #t
            "
 var x = 1;
 y = 10 + x;
 return y;")
+
+(error-str #:id "assign w/out declaring, expression"
+           #:catch #t
+           "
+var x = 1;
+return (y = 10 + x);")
 
 (error-str #:id "reference w/out declare or initializing"
            #:catch #t

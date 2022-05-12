@@ -39,7 +39,7 @@
 (define has-field?
   (lambda (name class)
     (or (member name (i-field-names class))
-        (var-table:var-declared? name (s-fields class)))))
+        (var-table:declared? name (s-fields class)))))
 
 
          

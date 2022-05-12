@@ -28,6 +28,7 @@ Apart from variables being boxed, within the intepreter values are immutable and
   - static members
   - instance members
   - user-defined constructors
+    - constructor chaining
   - polymorphism
   - abstract methods
 - dot operator

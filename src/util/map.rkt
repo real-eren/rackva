@@ -10,6 +10,9 @@
                                   put-if-absent
                                   remove
 
+                                  keys
+                                  values
+
                                   get*
                                   put*
                                   in*?
@@ -114,6 +117,11 @@
     (if (contains? key map)
         map
         (put key value map))))
+
+;; List of all keys in this map
+(define keys (curry map entry-key))
+;; List of all values in this map
+(define values (curry map entry-value))
 
 ;;;; deep accessor functions
 ;; keys are applied left-to-right
