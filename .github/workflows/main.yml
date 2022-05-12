@@ -22,6 +22,10 @@ jobs:
           variant: 'CS'
           version: '8.2'
           
+      - name: Install Dependencies
+        run: raco pkg install --auto component cover
+        
       - name: Run Tests
         run: raco test -e --timeout 120 --table --jobs 10 src
         
+      - run: raco cover -v src
