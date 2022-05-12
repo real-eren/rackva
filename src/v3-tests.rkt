@@ -48,6 +48,79 @@ class A {
   }
 }")
 
+(test-str #:id "setting field in constructor"
+          109
+          #:args (list "A") "
+class A {
+  var x;
+  A() {
+    x = 109;
+  }
+  static function main() {
+    var a = new A();
+    return a.x;
+  }
+}")
+
+(test-str #:id "ctor body runs after init"
+          20
+          #:args (list "A") "
+class A {
+  static var counter = 0;
+
+  var x = (counter = counter + 10);
+
+  A() {
+    x = (counter = counter * 2);
+  }
+
+  static function main() {
+    var a = new A();
+    return a.x;
+  }
+}")
+
+(test-str #:id "init runs only once when ctor chaining"
+          20
+          #:args (list "A") "
+class A {
+  static var counter = 0;
+
+  var x = (counter = counter + 10);
+
+  A() {
+    this(2);
+  }
+  A(n) {
+    x = (counter = counter * n);
+  }
+
+  static function main() {
+    var a = new A();
+    return a.x;
+  }
+}")
+
+(test-str #:id "dot expr in arg"
+          124
+          #:args (list "A") "
+class A {
+  static var counter = 0;
+
+  var x = (counter = counter + 10);
+
+  A(n) {
+    counter = counter * n;
+    x = n;
+  }
+
+  static function main() {
+    var a1 = new A(2);
+    var a2 = new A(a1.x * 2);
+    return a2.x + counter;
+  }
+}")
+
 
 
 ; ; STATIC METHODS
@@ -258,9 +331,7 @@ class Child extends Parent {
   }
 }")
 
-
-
-;  ; Test 1 should return 15 when running A's main.
+; ; UNLABELED
 
 (test-str #:id "Test 1"
           15
@@ -274,8 +345,6 @@ class Child extends Parent {
      return a.x + a.y;
    }
  }")
-
-;  Test 2 should return 12 when running A's main.
 
 (test-str #:id "Test 2"
           12
@@ -291,8 +360,6 @@ class Child extends Parent {
      return a.add(10, 2);
    }
  }")
-
-;Test 3 should return 125 when running A's main.
 
 (test-str #:id "Test 3"
           125
@@ -310,8 +377,6 @@ class Child extends Parent {
      return a.add(25);
    }
  }")
-
-;Test 4 should return 36 when running A's main.
 
 (test-str #:id "Test 4"
           36
@@ -336,8 +401,6 @@ class Child extends Parent {
      return a1.add(a2);
    }
  }")
-
-;Test 5 should return 54 when running A's main.
 
 (test-str #:id "Test 5"
           54
@@ -367,8 +430,6 @@ class Child extends Parent {
    }
  }")
 
-;Test 6 should return 110 when running A's main.
-
 (test-str #:id "Test 6"
           110
           #:args (list "A") "
@@ -385,8 +446,6 @@ class Child extends Parent {
      return new A().add(new A().x, new A().y);
    }
  }")
-
-;Test 7 should return 26 when running C's main.
 
 (test-str #:id "Test 6"
           26
@@ -429,8 +488,6 @@ class Child extends Parent {
      return new C().m();
    }
  }")
-
-; Test 8 should return 117 when running Square's main.
 
 (test-str #:id "Test 8"
           117
@@ -492,8 +549,6 @@ class Child extends Parent {
    }
  }")
     
-;Test 9 should return 32 when running Square's main.
-
 (test-str #:id "Test 9"
           32
           #:args (list "Square") "
@@ -564,8 +619,6 @@ class Child extends Parent {
    }
  }")
    
-;Test 10 should return 15 when running List's main.
-
 (test-str #:id "Test 10"
           15
           #:args (list "List") "
@@ -598,8 +651,6 @@ class Child extends Parent {
     return l.getNext().getNext().getNext().getNext().getNext().val;
   }
 }")
-
-;Test 11 should return 123456 when running List's main
 
 (test-str #:id "Test 11"
           123456
@@ -664,8 +715,6 @@ class Child extends Parent {
    }
  }")
 
-;Test 12 should return 5285 when running List's main.
-
 (test-str #:id "Test 12"
           5285
           #:args (list "List") "
@@ -718,8 +767,6 @@ class Child extends Parent {
      return l.getVal();
    }
  }")
-
-;Test 13 should return -716 when run with C's main.
 
 (test-str #:id "Test 13"
           -716
@@ -786,9 +833,6 @@ class Child extends Parent {
    }
  }")
 
-
-; Test 31 should return 20 when running A's main.
-
 (test-str #:id "Test 31"
           20
           #:args (list "A") "
@@ -798,8 +842,6 @@ class A {
     return A.x + x;
   }
 }")
-
-; Test 32 should return 530 when running B's main.
 
 (test-str #:id "Test 32"
           530
@@ -825,9 +867,6 @@ class B extends A {
     return add(B.x+A.y,B.z+y);
   }
 }")
-
-
-; Test 33 should return 615 when running B's main.
 
 (test-str #:id "Test 33"
           615
@@ -855,7 +894,7 @@ class C {
     return a * x;
   }
 }")
-; Test 34 should return 16 when running Box's main.
+
 (test-str #:id "Test 34"
           16
           #:args (list "Box") "
@@ -883,8 +922,6 @@ class Box {
     return c.size;
   }
 }")
-
-; Test 35 should return 100 when running A's main.
 
 (test-str #:id "Test 35"
           100
@@ -920,8 +957,6 @@ class Zero {
     return value;
   }
 }")
-
-; Test 36 should return 420 when running A's main.
 
 (test-str #:id "Test 36"
           420
@@ -968,6 +1003,8 @@ class Zero {
 }")
 
 
+; ; DOT
+
 (test-str #:id "Nested dot and side effect in inst field expr"
           4
           #:args (list "List") "
@@ -988,3 +1025,46 @@ class List {
   }
 }
 ")
+
+(test-str #:id "dotted field passed by reference"
+          4321
+          #:args (list "A") "
+class A {
+
+  var x = 0;
+
+  static function inc(&intvar) {
+    intvar = intvar + 1;
+  }
+
+  static function main() {
+    var a = new A();
+    var acc = 0;
+    var i = 1;
+    while (i < 1001) {
+      inc(a.x);
+      acc = acc + i * a.x;
+      i = i * 10;
+    }
+    return acc;
+  }
+}
+")
+
+(test-str #:id "Instance yielding function call in LHS of dot"
+          4
+          #:args (list "A")
+          "
+class A {
+  var n;
+
+  A(v) { n = v; }
+
+  function successor() { return new A(n+1); }
+
+  static function main() {
+    var a = new A(3);
+    
+    return a.successor().n;
+  }
+}")
