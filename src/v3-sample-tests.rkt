@@ -508,6 +508,108 @@
    }
  }")
 
+; ; OVERLOADED FUNS, CALL-BY-REF, SIDE-EFFECTS IN EXPR
+
+(test-str #:id "Test 21"
+          530
+          #:args (list "A") "
+class A {
+
+  function add(a, b) {
+    return a + b;
+  }
+
+  function add(a,b,c) {
+    return a + b + c;
+  }
+
+  static function main() {
+    var x = 10;
+    var y = 20;
+    return new A().add(x, y) + new A().add(x, y, y) * 10;
+  }
+}")
+
+(test-str #:id "Test 22"
+          66
+          #:args (list "B") "
+class A {
+  var x = 10;
+  var y = 20;
+
+  function add(a, b) {
+    return a + b;
+  }
+
+  function add(a,b,c) {
+    return a + b + c;
+  }
+}
+
+class B extends A {
+  var x = 2;
+  var y = 30;
+
+  function add(a,b) {
+    return a*b;
+  }
+
+  static function main() {
+    var b = new B();
+    return b.add(b.x,b.y) + b.add(b.x,b.x,b.x);
+  }
+}")
+
+(test-str #:id "Test 23"
+          1026
+          #:args (list "A") "
+class A {
+  var x = 5;
+
+  function swap(& a, & b) {
+    var temp = a;
+    a = b;
+    b = temp;
+  }
+
+  static function main() {
+    var y = 10;
+    var sum = 0;
+    var a = new A();
+
+    a.swap(a.x, y);
+    sum = a.x * 100 + y;
+    a.x = 1;
+    y = 2;
+    a.swap(a.x, y);
+    sum = sum + a.x * 10 + y;
+    return sum;
+  }
+}")
+
+(test-str #:id "Test 24"
+          2045
+          #:args (list "A") "
+class A {
+  var x = 0;
+
+  function setSum(limit) {
+    var sum = 0;
+    while ((x = x + 1) < limit) {
+      sum = sum + x;
+    }
+    return sum;
+  }
+
+  static function main () {
+    var a = new A();
+    var j = a.setSum(10);
+    return (a.x * 200 + j);
+  }
+}")
+
+; ; STATIC MEMBERS
+
 (test-str #:id "Test 31"
           20
           #:args (list "A") "
@@ -676,3 +778,175 @@ class Zero {
     return value;
   }
 }")
+
+; ; ABSTRACT METHODS
+
+(test-str #:id "Test 41"
+          300
+          #:args (list "Circle") "
+class Shape {
+  function area();
+
+  function changeSize(factor);
+}
+
+class Circle extends Shape {
+  var radius;
+
+  function setRadius(radius) {
+    this.radius = radius;
+  }
+
+  function area() {
+    return radius * radius * 3;
+  }
+
+  function changeSize(factor) {
+    this.radius = this.radius * factor;
+  }
+
+  static function main() {
+    var s = new Circle();
+    s.setRadius(5);
+    s.changeSize(2);
+    return s.area();
+  }
+}")
+
+; ; USER-DEFINED CONSTRUCTORS
+
+(test-str #:id "Test 51"
+          417
+          #:args (list "Square") "
+class Shape {
+  function area() {
+    return 0;
+  }
+}
+
+class Rectangle extends Shape {
+  var height;
+  var width;
+
+  Rectangle(h, w) {
+    this.height = h;
+    this.width = w;
+  }
+
+  function setHeight(h) {
+    height = h;
+  }
+
+  function setWidth(w) {
+    width = w;
+  }
+
+  function getHeight() {
+    return height;
+  }
+
+  function getWidth() {
+    return width;
+  }
+
+  function area() {
+    return getWidth() * getHeight();
+  }
+}
+
+class Square extends Rectangle {
+  Square(size) {
+    super(size, size);
+  }
+
+  function setSize(size) {
+    super.setWidth(size);
+  }
+
+  function getHeight() {
+    return super.getWidth();
+  }
+
+  function setHeight(h) {
+    super.setWidth(h);
+  }
+
+  static function main() {
+    var s = new Square(20);
+    var sum = 0;
+    sum = sum + s.area();
+    s.setHeight(4);
+    sum = sum + s.area();
+    s.setWidth(1);
+    sum = sum + s.area();
+    return sum;
+  }
+}")
+
+(test-str #:id "Test 52"
+          10
+          #:args (list "A") "
+class A {
+  var x;
+
+  A(val) {
+    x = val;
+  }
+
+  static function main() {
+    var a = new A(10);
+    return a.x;
+  }
+}")
+
+(test-str #:id "Test 53"
+          48
+          #:args (list "B") "
+class A {
+  var x;
+  var y;
+
+  A() {
+    x = 10;
+    y = 2;
+  }
+}
+
+class B extends A {
+  var factor;
+
+  B(f) {
+    factor = f;
+  }
+
+  static function main() {
+    var b = new B(4);
+    return b.factor * (b.x + b.y);
+  }
+}")
+
+(test-str #:id "Test 54"
+          1629
+          #:args (list "A") "
+class A {
+  var x = 1;
+  var y = x + 1;
+  var z = x + y + 1;
+
+  A(a) {
+    x = a;
+  }
+
+  A(a, b) {
+    x = a;
+    y = b;
+  }
+
+  static function main() {
+    var a = new A(10);
+    var b = new A(20, 5);
+
+    return (a.x + a.y + a.z) * 100 + (b.x + b.y + b.z);
+  }
+}")
+

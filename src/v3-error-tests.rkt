@@ -57,7 +57,7 @@ class ClassName {
            #:catch #t
            "
 class Parent { function abstractMethod(); }
-class Child extends Parent { }")
+class Child extends Parent { static function main() { return 0; } }")
 
 (error-str #:id "subclass overrides parent's concrete with abstract"
            #:args (list "Child")
