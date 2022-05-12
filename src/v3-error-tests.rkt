@@ -6,6 +6,8 @@
 (define error-file (make-error-tester interpret-v3-file))
 (define error-str (make-error-tester interpret-v3-str))
 
+; ; Static Members
+
 (error-str #:id "static local vars don't persist"
            #:args (list "ClassName")
            #:catch #t
@@ -121,7 +123,7 @@ class A {
   static function foo(a, b, c) { }
 }")
 
-; ; Dots
+; ; Dots, this, super
 
 (error-str #:id "this on RHS of dot"
            #:args (list "A")
@@ -171,8 +173,40 @@ class A {
   static function main() { B.c = 2; return B.c; }
 }")
 
+(error-str #:id "Static non-instance var in LHS of dot"
+           #:args (list "A")
+           #:catch #t
+           "
+class A {
+  static var x = 2;
+  static function main() { return x.y; }
+}")
 
-(error-str #:id "this in static context"
+(error-str #:id "Instance Non-instance boolean field in LHS of dot"
+           #:args (list "A")
+           #:catch #t
+           "
+class A {
+  var x = true;
+  static function main() {
+    var a = new A();
+    return a.x.y;
+  }
+}")
+
+(error-str #:id "Function return value non-instance var in LHS of dot"
+           #:args (list "A")
+           #:catch #t
+           "
+class A {
+  function getX() { return 2; }
+  static function main() {
+    var a = new A();
+    return a.getX().y;
+  }
+}")
+
+(error-str #:id "this in static context called from instance context"
            #:args (list "A")
            #:catch #t "
 class A {
@@ -184,6 +218,100 @@ class A {
 
   function mightwork() {
     return x + nowork(x);
+  }
+
+  static function main() {
+    var a = new A();
+    return a.mightwork();
+  }
+}")
+
+(error-str #:id "declaring an instance field named this"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var this;
+  static function main() {
+    return 0;
+  }
+}
+")
+
+(error-str #:id "declaring an instance field named super"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var super;
+  static function main() {
+    return 0;
+  }
+}
+")
+
+(error-str #:id "declaring a static field named this"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  static var this;
+  static function main() {
+    return 0;
+  }
+}")
+
+(error-str #:id "declaring a static field named super"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  static var super;
+  static function main() {
+    return 0;
+  }
+}")
+
+(error-str #:id "declaring a local variable named this"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  static function main() {
+    var this;
+    return 0;
+  }
+}")
+
+(error-str #:id "declaring a local variable named super"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  static function main() {
+    var super;
+    return 0;
+  }
+}")
+
+(error-str #:id "assigning to this"
+           #:args (list "A")
+           #:catch #t "
+class A {
+
+  function nowork() {
+    this = 2;
+    return this;
+  }
+
+  static function main() {
+    var a = new A();
+    return a.nowork();
+  }
+}")
+
+(error-str #:id "assigning to super"
+           #:args (list "A")
+           #:catch #t "
+class A {
+
+  function mightwork() {
+    super = 2;
+    return this;
   }
 
   static function main() {
@@ -214,5 +342,152 @@ class C extends B {
       return foo(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
   }
+}
+")
+
+; ; Constructors
+
+(error-str #:id "Calling super() with no parent class"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  A() {
+    super();
+  }
+  static function main() {
+    return new A();
+  }
+}")
+
+(error-str #:id "Calling this(x) when no such constructor exists"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  A() {
+    this(2, 3, 4);
+  }
+  static function main() {
+    return new A();
+  }
+}")
+
+(error-str #:id "Calling super(x) when no such constructor exists in parent."
+           #:args (list "B")
+           #:catch #t "
+class A {
+  A() {
+    this(2, 3, 4);
+  }
+}
+class B extends A {
+  B() {
+    super(2, 3);
+  }
+  static function main() {
+    return new B();
+  }
+}")
+
+(error-str #:id "Calling this() after first line in constructor"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x;
+  A() {
+    var x = 2 + 3;
+    this(x);
+  }
+  A(v) {
+    this.x = v;
+  }
+  static function main() {
+    return new A();
+  }
+}")
+
+(error-str #:id "Calling super() after first line in constructor"
+           #:args (list "A")
+           #:catch #t "
+class Parent {
+  Parent() { }
+}
+class A extends Parent {
+  var x;
+  A() {
+    var x = 2 + 3;
+    super(x);
+  }
+  A(v) {
+    this.x = v;
+  }
+  static function main() {
+    return new A();
+  }
+}")
+
+(error-str #:id "Calling this() in same constructor"
+           #:args (list "A")
+           #:catch #f "
+class A {
+  var x;
+  A() {
+    this();
+  }
+  A(v) {
+    this.x = v;
+  }
+  static function main() {
+    return new A();
+  }
+}")
+
+(error-str #:id "Cycle of constructors when chaining, revisits initial constructor"
+           #:args (list "A")
+           #:catch #f "
+class A {
+  A() { this(1); }
+  A(x) { this(1, 2); }
+  A(x, y) { this(); }
+  static function main() { return new A(); }
+}")
+
+(error-str #:id "Cycle of constructors when chaining, does not revisit initial constructor"
+           #:args (list "A")
+           #:catch #f "
+class A {
+  A() { this(1); }
+  A(x) { this(1, 2); }
+  A(x, y) { this(); }
+  A(x, y, z) { this(); }
+  static function main() { return new A(1, 2, 3); }
+}")
+
+(error-str #:id "Declaring a function named `this`"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x;
+  function this() {
+    return 5;
+  }
+  A() {
+    x = this();
+  }
+  static function main() { return new A(); }
+}
+")
+
+(error-str #:id "Declaring a function named `super`"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x;
+  function super(x, y) {
+    return 5;
+  }
+  A() {
+    x = super();
+  }
+  static function main() { return new A(); }
 }
 ")
