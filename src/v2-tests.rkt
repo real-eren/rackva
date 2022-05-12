@@ -473,7 +473,21 @@ function divide(x, y) {
 }
 ")
 
-(test-str #:id "Call-by-reference"
+(test-str #:id "Simple call-by-reference"
+          1 "
+function swap(&first, &second) {
+  var temp = first;
+  first = second;
+  second = temp;
+}
+function main() {
+  var a = 1;
+  var b = 0;
+  swap(a, b);
+  return b - a;
+}")
+
+(test-str #:id "Call-by-value vs Call-by-reference"
           3421 "
 function swap1(x, y) {
   var temp = x;
