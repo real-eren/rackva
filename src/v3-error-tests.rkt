@@ -388,6 +388,31 @@ class B extends A {
   }
 }")
 
+(error-str #:id "Parent doesn't have default ctor, child only has default ctor"
+           #:args (list "B")
+           #:catch #t "
+class A {
+  A(x, y) { }
+}
+class B extends A {
+  static function main() {
+    return new B();
+  }
+}")
+
+(error-str #:id "Parent doesn't have default ctor, no explicit super in user-defined ctor."
+           #:args (list "B")
+           #:catch #t "
+class A {
+  A(x, y) { }
+}
+class B extends A {
+  B() { }
+  static function main() {
+    return new B();
+  }
+}")
+
 (error-str #:id "Calling this() after first line in constructor"
            #:args (list "A")
            #:catch #t "
@@ -405,6 +430,41 @@ class A {
   }
 }")
 
+(error-str #:id "Calling this(...) twice, same ctor"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x;
+  A() {
+    this(1);
+    this(2);
+  }
+  A(v) {
+    this.x = v;
+  }
+  static function main() {
+    return new A();
+  }
+}")
+
+(error-str #:id "Calling this(...) twice, different ctor"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x;
+  A() {
+    this(1);
+    this(1, 2);
+  }
+  A(v) {
+    this.x = v;
+  }
+  A(u, v) { }
+  static function main() {
+    return new A();
+  }
+}")
+
 (error-str #:id "Calling super() after first line in constructor"
            #:args (list "A")
            #:catch #t "
@@ -415,7 +475,7 @@ class A extends Parent {
   var x;
   A() {
     var x = 2 + 3;
-    super(x);
+    super();
   }
   A(v) {
     this.x = v;
@@ -425,7 +485,41 @@ class A extends Parent {
   }
 }")
 
-(error-str #:id "Calling this() in same constructor"
+(error-str #:id "Calling super() then this()"
+           #:args (list "A")
+           #:catch #t "
+class Parent {
+  Parent() { }
+  Parent(x) { }
+}
+class A extends Parent {
+  var x;
+  A() {
+    super(3);
+    this(3);
+  }
+  A(v) {
+    this.x = v;
+  }
+  static function main() {
+    return new A();
+  }
+}")
+
+(error-str #:id "Calling this() in same constructor, 1 total"
+           #:args (list "A")
+           #:catch #f "
+class A {
+  var x;
+  A() {
+    this();
+  }
+  static function main() {
+    return new A();
+  }
+}")
+
+(error-str #:id "Calling this() in same constructor, 2 total"
            #:args (list "A")
            #:catch #f "
 class A {
@@ -436,6 +530,24 @@ class A {
   A(v) {
     this.x = v;
   }
+  static function main() {
+    return new A();
+  }
+}")
+
+(error-str #:id "Calling this() in same constructor, many"
+           #:args (list "A")
+           #:catch #f "
+class A {
+  var x;
+  A() {
+    this();
+  }
+  A(v) {
+    this.x = v;
+  }
+  A(v, w) { }
+  A(a, b, c) { }
   static function main() {
     return new A();
   }
