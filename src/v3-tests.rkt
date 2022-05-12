@@ -80,6 +80,25 @@ class A {
   }
 }")
 
+(test-str #:id "ctor calls super()"
+          251
+          #:args (list "Child") "
+class Parent {
+  var x;
+  Parent(v) {
+    x = v;
+  }
+}
+class Child extends Parent {
+  Child(v) {
+    super(v);
+  }
+  static function main() {
+    var c = new Child(251);
+    return c.x;
+  }
+}")
+
 (test-str #:id "init runs only once when ctor chaining"
           20
           #:args (list "A") "

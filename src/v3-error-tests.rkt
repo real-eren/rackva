@@ -508,7 +508,7 @@ class A extends Parent {
 
 (error-str #:id "Calling this() in same constructor, 1 total"
            #:args (list "A")
-           #:catch #f "
+           #:catch #t "
 class A {
   var x;
   A() {
@@ -521,7 +521,7 @@ class A {
 
 (error-str #:id "Calling this() in same constructor, 2 total"
            #:args (list "A")
-           #:catch #f "
+           #:catch #t "
 class A {
   var x;
   A() {
@@ -537,7 +537,7 @@ class A {
 
 (error-str #:id "Calling this() in same constructor, many"
            #:args (list "A")
-           #:catch #f "
+           #:catch #t "
 class A {
   var x;
   A() {
@@ -555,7 +555,7 @@ class A {
 
 (error-str #:id "Cycle of constructors when chaining, revisits initial constructor"
            #:args (list "A")
-           #:catch #f "
+           #:catch #t "
 class A {
   A() { this(1); }
   A(x) { this(1, 2); }
@@ -565,7 +565,7 @@ class A {
 
 (error-str #:id "Cycle of constructors when chaining, does not revisit initial constructor"
            #:args (list "A")
-           #:catch #f "
+           #:catch #t "
 class A {
   A() { this(1); }
   A(x) { this(1, 2); }
