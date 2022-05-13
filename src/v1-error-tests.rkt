@@ -191,3 +191,7 @@ finally {
   return a;
 }
 ")
+
+(error-str #:id "program without return statement"
+           #:catch #t
+           "var x = 2;")

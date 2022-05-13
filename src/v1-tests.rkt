@@ -27,6 +27,9 @@
 (test-str #:id "return a nested expression"
           -4 "return 6 * (8 + (5 % 3)) / 11 - 9;")
 
+(test-str #:id "return a nested boolean expression"
+          'true "return (true && false) || (!(1 == 0) && !(2 + 2 == 5));")
+
 (test-str #:id "declare, assign a literal, return"
           10 "
 var z;
