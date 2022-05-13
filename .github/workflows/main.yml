@@ -22,6 +22,16 @@ jobs:
           variant: 'CS'
           version: '8.2'
           
+      - name: Install Dependencies
+        run: raco pkg install --auto component cover
+        
       - name: Run Tests
         run: raco test -e --timeout 120 --table --jobs 10 src
+        
+      - run: raco cover src
+      - name: Archive code coverage reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-coverage-report
+          path: coverage
         
