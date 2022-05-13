@@ -663,6 +663,21 @@ class A {
   static function main() { return new A(1, 2, 3); }
 }")
 
+(error-str #:id "Colliding constructor signatures"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x;
+  A() {
+    x = 5;
+  }
+  A() {
+    x = 6;
+  }
+  static function main() { return new A().x; }
+}
+")
+
 (error-str #:id "Declaring a function named `this`"
            #:args (list "A")
            #:catch #t "

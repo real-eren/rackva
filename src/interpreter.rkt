@@ -273,30 +273,29 @@
 (define declare-method-impl
   (lambda (m-name m-params m-body m-type class-name state)
     (cond
-      [(super-or-this? m-name)                              (myerror (format "Keyword `~a` cannot be used as a function or method name"
-                                                                             m-name)
-                                                                     state)]
-      [(state:method-already-declared? class-name
-                                       m-name
-                                       m-params
-                                       state)               (myerror (format "A method with the signature `~a` is already declared in class `~a`."
-                                                                             (function:formatted-signature m-name m-params)
-                                                                             class-name)
-                                                                     state)]
+      [(super-or-this? m-name)                           (myerror (format "Keyword `~a` cannot be used as a function or method name"
+                                                                          m-name)
+                                                                  state)]
+      [(state:fun-already-declared? m-name
+                                    m-params
+                                    state)               (myerror (format "A method with the signature `~a` is already declared in class `~a`."
+                                                                          (function:formatted-signature m-name m-params)
+                                                                          class-name)
+                                                                  state)]
       [(and (eq? function:scope:abstract m-type)
             (state:class-get-inst-method class-name
                                          m-name
                                          m-params
-                                         state))     =>     (lambda (fun)
-                                                              (myerror (format "Cannot override concrete `~a` with abstract method"
-                                                                               (function->string fun))
-                                                                       state))]
-      [else                                                 (state:declare-method m-name
-                                                                                  m-params
-                                                                                  m-body
-                                                                                  m-type
-                                                                                  class-name
-                                                                                  state)])))
+                                         state))   =>    (lambda (fun)
+                                                           (myerror (format "Cannot override concrete `~a` with abstract method"
+                                                                            (function->string fun))
+                                                                    state))]
+      [else                                              (state:declare-method m-name
+                                                                               m-params
+                                                                               m-body
+                                                                               m-type
+                                                                               class-name
+                                                                               state)])))
 ;; Assumes all instance&abstract methods of this class have been declared
 ; verify that all of parent's abstract methods are redeclared in this class
 (define verify-abstracts-overridden
@@ -422,10 +421,14 @@
 
 (define declare-constructor
   (lambda (stmt class-name state next)
-    (next (state:declare-constructor (ctor-params stmt)
-                                     (ctor-body stmt)
-                                     class-name
-                                     state))))
+    (if (state:fun-already-declared? class-name (ctor-params stmt) state)
+        (myerror (format "A constructor with signature `~a` has already been declared"
+                         (function:formatted-signature class-name (ctor-params stmt)))
+                 state)
+        (next (state:declare-constructor (ctor-params stmt)
+                                         (ctor-body stmt)
+                                         class-name
+                                         state)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -829,7 +832,7 @@
       [(or (number? expr)
            (eq? 'true expr)
            (eq? 'false expr))               (Mvalue-literal expr state conts)]
-      [(name? expr)                          (Mvalue-var expr state conts)]
+      [(name? expr)                         (Mvalue-var expr state conts)]
       [(is-new? expr)                       (Mvalue-new expr state conts)]
       [(is-fun-call? expr)                  (Mvalue-fun expr state conts)]
       [(is-assign? expr)                    (Mvalue-assign expr state conts)]
@@ -897,10 +900,7 @@
 ; string that should resemble the source code.
 (define funcall->string
   (lambda (expr)
-    (string-join (map (curry format "~a") (fun-inputs expr))
-                 ", "
-                 #:before-first (format "~a(" (fun-name expr))
-                 #:after-last ")")))
+    (function:formatted-signature (fun-name expr) (fun-inputs expr))))
 
 (define fun-name second)
 (define fun-inputs cddr)
@@ -966,9 +966,7 @@
                           conts))))
 
 
-;; Takes in the function name, the function closure, the input expression list
-;; the state, the conts
-;; The state in which the function body will be evaluated
+;; Evaluates parameters and produces the state in which the function body will be evaluated
 (define get-environment
   (lambda (fun inputs eval-state out-state conts)
     (boxed-arg-list-cps (function:params fun)
