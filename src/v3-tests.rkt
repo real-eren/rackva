@@ -140,6 +140,23 @@ class A {
   }
 }")
 
+(test-str #:id "return statement in constructor, still returns instance"
+          765
+          #:args (list "A") "
+class A {
+  var x = 765;
+
+  A(n) {
+    return 5;
+    var shouldNotRun = 1/0;
+  }
+
+  static function main() {
+    var a = new A(2);
+    return a.x;
+  }
+}")
+
 
 
 ; ; STATIC METHODS
