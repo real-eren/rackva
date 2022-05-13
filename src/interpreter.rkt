@@ -136,10 +136,9 @@
 ;; returns the state resulting from evaluating it
 (define Mstate-statement
   (lambda (statement state conts)
-    (cond
-      [(null? statement)                    (error "called Mstate on null statement")]
-      [(is-construct? statement)            ((get-Mstate statement) statement state conts)]
-      [else                                 (error (format "unrecognized stmt: ~a" statement))])))
+    (if (is-construct? statement)
+        ((get-Mstate statement) statement state conts)
+        (error (format "unrecognized stmt: ~a" statement)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CLASS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -160,20 +159,27 @@
                             (parent-or-null (maybe-extend statement))
                             (class-body statement)
                             state
-                            (next conts))))
+                            (next conts)
+                            (throw conts))))
 
 (define Mstate-class-decl-impl
-  (lambda (class-name parent body state next)
+  (lambda (class-name parent body state next throw)
     (cond
       [(state:has-class? class-name state)    (myerror (format "Attempted to re-declare class `~a`" class-name) state)]
+      [(eq? class-name parent)                (myerror (format "class `~a` cannot extend itself" class-name) state)]
       [(or (null? parent)
            (state:has-class? parent state))   (eval-class-body class-name
                                                                parent
                                                                body
                                                                (state:declare-class class-name parent state)
                                                                (lambda (s)
-                                                                 (next (state:end-class-decl class-name s))))]
-      [else                                   (myerror (format "parent class ~a has not been declared yet" parent) state)])))
+                                                                 (next (state:end-class-decl class-name s)))
+                                                               throw)]
+      [else                                   (myerror (format "class `~a` cannot extend class `~a`, `~a` has not been declared yet"
+                                                               class-name
+                                                               parent
+                                                               parent)
+                                                       state)])))
 
 
 
@@ -181,7 +187,7 @@
 ; Assumptions:
 ; 1) runs after `state:declare-class` and before `state:end-class-decl`
 (define eval-class-body
-  (lambda (class-name parent body state next)
+  (lambda (class-name parent body state next throw)
     (chain-TR state
               next
               ; declare methods and verify that parent's abstract methods are overridden
@@ -197,8 +203,7 @@
                     (declare-constructor default-constructor-stmt class-name s nxt)
                     (nxt s)))
               ; declare static fields w/ values
-              (curry static-fields (filter is-static-field-decl? body))
-              )))
+              (curry static-fields (filter is-static-field-decl? body) throw))))
 
 
 ;; takes initial state, last continuation and a sequence of 2-arg functions
@@ -225,14 +230,11 @@
    'static-function    function:scope:static
    'function           function:scope:instance))
 ; Assumptions:
-; 1) map:get returns #F on absence
-; 2) action returns the function KW of the statement
+; 1) input stmts were already validated
 (define method-type
   (lambda (stmt)
-    (if (or (not (list? stmt))
-            (null? stmt))
-        #F
-        (map:get (action stmt) method-type-table))))
+    (map:get (action stmt) method-type-table)))
+; 2) map:get return #F on miss
 (define is-method? method-type)
 
 ;; evaluate a list of method declarations in a class body
@@ -267,6 +269,7 @@
                                (method-type stmt)
                                class-name
                                state))))
+
 (define declare-method-impl
   (lambda (m-name m-params m-body m-type class-name state)
     (cond
@@ -302,6 +305,7 @@
                            (state:get-parents-abstract-methods class-name state)
                            state
                            next)))
+
 (define verify-abstracts-impl
   (lambda (class-name abstract-funs state next)
     (cond
@@ -327,31 +331,31 @@
 
 ;;;;;;;; STATIC FIELD DECLARATIONS
 (define static-fields
-  (lambda (body state next)
+  (lambda (body throw state next)
     (if (null? body) 
         (next state)
         (declare-static-field (first body)
+                              throw
                               state
                               (lambda (s)
-                                (static-fields (rest body) s next))))))
+                                (static-fields (rest body) throw s next))))))
+
 (define declare-static-field
-  (lambda (stmt state next)
+  (lambda (stmt throw state next)
     (Mstate-var-decl-impl (decl-var stmt)
                           (decl-maybe-expr stmt)
                           state
                           (conts-of 
-                           #:next        next
-                           #:break       default-break
-                           #:continue    default-continue
-                           #:throw       default-throw
-                           #:return      (lambda (v s) (myerror "Illegal return in static declarations" s))
+                           #:next     next
+                           #:throw    throw
                            ))))
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
 (define inst-fields
   (lambda (class-name instance-field-decls state next)
-    (declare-inst-fields instance-field-decls
+    (declare-inst-fields class-name
+                         instance-field-decls
                          state
                          (lambda (s)
                            (declare-init class-name
@@ -360,33 +364,29 @@
                                          next)))))
 
 (define declare-inst-fields
-  (lambda (i-field-decls state next)
+  (lambda (class-name i-field-decls state next)
     (if (null? i-field-decls)
         (next state)
-        (declare-inst-field (first i-field-decls)
+        (declare-inst-field class-name
+                            (decl-var (first i-field-decls))
                             state
                             (lambda (s)
-                              (declare-inst-fields (rest i-field-decls)
+                              (declare-inst-fields class-name
+                                                   (rest i-field-decls)
                                                    s
                                                    next))))))
 
-;(define decl-var second)
-;(define decl-maybe-expr cddr)
 (define declare-inst-field
-  (lambda (i-field-decl state next)
-    (declare-inst-field-impl (decl-var i-field-decl)
-                             (decl-maybe-expr i-field-decl)
-                             state
-                             next)))
-(define declare-inst-field-impl
-  (lambda (var-name maybe-expr state next)
+  (lambda (class-name var-name state next)
     (cond
       [(super-or-this? var-name)                      (myerror (format "Keyword `~a` cannot be used as an instance field name"
                                                                        var-name)
                                                                state)]
       [(state:var-already-declared? var-name state)   (myerror (format "field named `~a` is already declared in this class" var-name)
                                                                state)]
-      [else                                           (next (state:declare-inst-field var-name state))])))
+      [else                                           (next (state:declare-instance-field var-name
+                                                                                          class-name
+                                                                                          state))])))
 ;; add the fields with initializers to the classes init method
 ; map to an assignment
 (define declare-init
@@ -402,8 +402,8 @@
     (list '= (decl-var decl-stmt) (get (decl-maybe-expr decl-stmt)))))
 
 ;;;;;;;; CONSTRUCTOR DECLARATIONS
-(define const-params second)
-(define const-body third)
+(define ctor-params second)
+(define ctor-body third)
 
 (define default-constructor-stmt '(constructor () ()))
 (define no-constructors?
@@ -422,8 +422,8 @@
 
 (define declare-constructor
   (lambda (stmt class-name state next)
-    (next (state:declare-constructor (const-params stmt)
-                                     (const-body stmt)
+    (next (state:declare-constructor (ctor-params stmt)
+                                     (ctor-body stmt)
                                      class-name
                                      state))))
 
@@ -863,11 +863,6 @@
                                                               state)]
       [else                                          (state:get-var-box name state)])))
 
-; assumes read-var-box validates the lookups
-(define read-var-value
-  (lambda (var-symbol state)
-    (unbox (read-var-box var-symbol state))))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; LITERALS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -973,7 +968,7 @@
 
 ;; Takes in the function name, the function closure, the input expression list
 ;; the state, the conts
-;;
+;; The state in which the function body will be evaluated
 (define get-environment
   (lambda (fun inputs eval-state out-state conts)
     (boxed-arg-list-cps (function:params fun)
@@ -1013,18 +1008,18 @@
                                                                                          param-ref-error))))]
       ;; by reference
       [(eq? 'this (first actual-params)) (myerror "`this` cannot be passed as a reference parameter" eval-state)]
-      [(name? (first actual-params))    (boxed-arg-list-cps (cddr formal-params)
-                                                            (cdr actual-params)
-                                                            eval-state
-                                                            conts
-                                                            (lambda (ps bs)
-                                                              (Mbox-var (first actual-params)
-                                                                        eval-state
-                                                                        (conts-of conts
-                                                                                  #:return (lambda (b s)
-                                                                                             (evaluation (cons (second formal-params) ps)
-                                                                                                         (cons b bs))))))
-                                                            param-ref-error)]
+      [(name? (first actual-params))     (boxed-arg-list-cps (cddr formal-params)
+                                                             (cdr actual-params)
+                                                             eval-state
+                                                             conts
+                                                             (lambda (ps bs)
+                                                               (Mbox-var (first actual-params)
+                                                                         eval-state
+                                                                         (conts-of conts
+                                                                                   #:return (lambda (b s)
+                                                                                              (evaluation (cons (second formal-params) ps)
+                                                                                                          (cons b bs))))))
+                                                             param-ref-error)]
       [else                             (param-ref-error (second formal-params)
                                                          eval-state)])))
 
@@ -1090,7 +1085,8 @@
                                                                        state
                                                                        (state:set-instance-scope inst state)
                                                                        (conts-of conts
-                                                                                 #:next (lambda (s) state))))))
+                                                                                 #:next (lambda (s) state)
+                                                                                 #:return (lambda (v s) state))))))
         (myerror (format "`~a` is not a recognized class" class-name) state))))
 
 (define zero-init-instance
@@ -1123,24 +1119,24 @@
         (myerror "Cyclic constructor chaining. At least one constructor must call super(...)"
                  arg-eval-state)
         (ctor-rec-impl (function:body ctor)
+                       class-name
+                       (state:get-parent-name class-name arg-eval-state)
+                       (cons ctor ctor-chain)
                        (get-environment ctor
                                         args
                                         arg-eval-state
                                         (state:push-fun-call-context ctor run-state)
                                         conts)
-                       (cons ctor ctor-chain)
-                       class-name
-                       (state:get-parent-name class-name arg-eval-state)
                        conts))))
 
 (define ctor-rec-impl
-  (lambda (body state ctor-chain class-name parent conts)
+  (lambda (body class-name parent ctor-chain state conts)
     ; recursively do parent constructors + inits
     (ctor-pre-body body
-                   state
-                   ctor-chain
                    class-name
                    parent
+                   ctor-chain
+                   state
                    (conts-of conts
                              ; then do body of current constructor
                              #:next (lambda (s)
@@ -1153,7 +1149,7 @@
 ;; handles pre-body: super+init | this
 ; init function was generated, and will not contain a return statement
 (define ctor-pre-body
-  (lambda (body state ctor-chain class-name parent conts)
+  (lambda (body class-name parent ctor-chain state conts)
     (cond
       ; this -> run that ctor
       [(start-this? body)               (construct-instance class-name
@@ -1449,7 +1445,8 @@
 ;;;;;;;; Common Continuations
 
 (define default-return (lambda (v s) (prep-val-for-output v)))
-(define default-throw (lambda (v s) (myerror (format "uncaught exception: ~a" v) s)))
+; interpret-parse functions should use the throw cont parameter
+(define default-throw (lambda (e s) (myerror (format "uncaught exception: ~a" e) s)))
 (define default-break (lambda (s) (myerror "break statement outside of loop" s)))
 (define default-continue (lambda (s) (myerror "continue statement outside of loop" s)))
 

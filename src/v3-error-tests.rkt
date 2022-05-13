@@ -6,12 +6,73 @@
 (define error-file (make-error-tester interpret-v3-file))
 (define error-str (make-error-tester interpret-v3-str))
 
-; ; Static Members
+; ; CLASSES
+
+(error-str #:id "Non-existent class as entry-point"
+           #:args (list "NotAClass")
+           #:catch #t "
+class A {
+  static function main() {
+    return 5;
+  }
+}")
+
+(error-str #:id "declaring a class twice"
+           #:args (list "A")
+           #:catch #t "
+class A {
+}
+class A {
+  static function main() {
+    return 5;
+  }
+}")
+
+(error-str #:id "class extends itself"
+           #:args (list "A")
+           #:catch #t "
+class A extends A {
+  static function main() {
+    return 5;
+  }
+}")
+
+(error-str #:id "declaring a child before parent"
+           #:args (list "A")
+           #:catch #t "
+class A extends Parent {
+  static function main() {
+    return 5;
+  }
+}
+class Parent {
+}")
+
+(error-str #:id "declaring a class with a non-existent parent"
+           #:args (list "A")
+           #:catch #t "
+class A extends NotAClass {
+  static function main() {
+    return 5;
+  }
+}")
+
+; ; INSTANCE MEMBERS
+
+(error-str #:id "instance fields with colliding names"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x;
+  var y;
+  var x;
+}")
+
+; ; STATIC MEMBERS
 
 (error-str #:id "static local vars don't persist"
            #:args (list "ClassName")
-           #:catch #t
-           "
+           #:catch #t "
 class ClassName {
   static function foo() {
     var x = 5;
@@ -24,8 +85,7 @@ class ClassName {
 
 (error-str #:id "static field declared twice"
            #:args (list "ClassName")
-           #:catch #t
-           "
+           #:catch #t "
 class ClassName {
   static var x;
   static var x = 5;
@@ -34,8 +94,7 @@ class ClassName {
 
 (error-str #:id "Can't access static field of unrelated class w/out dot"
            #:args (list "ClassName")
-           #:catch #t
-           "
+           #:catch #t "
 class OtherClass { static var x = 5; }
 class ClassName {
   static function main() { return x; }
@@ -43,8 +102,7 @@ class ClassName {
 
 (error-str #:id "Can't access static method of unrelated class w/out dot"
            #:args (list "ClassName")
-           #:catch #t
-           "
+           #:catch #t "
 class OtherClass { static function foo() { return 5; } }
 class ClassName {
   static function main() { return foo(); }
@@ -54,15 +112,13 @@ class ClassName {
 
 (error-str #:id "subclass doesn't override parent's abstract methods"
            #:args (list "Child")
-           #:catch #t
-           "
+           #:catch #t "
 class Parent { function abstractMethod(); }
 class Child extends Parent { static function main() { return 0; } }")
 
 (error-str #:id "subclass overrides parent's concrete with abstract"
            #:args (list "Child")
-           #:catch #t
-           "
+           #:catch #t "
 class Parent { function foo(x) { } }
 class Child extends Parent {
   function foo(x);
@@ -71,16 +127,14 @@ class Child extends Parent {
 
 (error-str #:id "subclass declares method with similar signature to parent's abstract methods, but does not override"
            #:args (list "Child")
-           #:catch #t
-           "
+           #:catch #t "
 class Parent { function overrideMe(x, y); }
 class Child extends Parent { function overrideMe(&x) { } }")
 
 
 (error-str #:id "Can't invoke abstract method"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   function overrideMe();
   static function main() {
@@ -93,8 +147,7 @@ class A {
 
 (error-str #:id "Can't invoke abstract method of parent"
            #:args (list "Child")
-           #:catch #t
-           "
+           #:catch #t "
 class Parent { function overrideMe(x, y); }
 class Child extends Parent {
   function overrideMe(x, y);
@@ -108,16 +161,14 @@ class Child extends Parent {
 
 (error-str #:id "static methods don't count as overriding"
            #:args (list "Child")
-           #:catch #t
-           "
+           #:catch #t "
 class Parent { function overrideMe(x, y, z); }
 class Child extends Parent { static function overrideMe(x, y, z) { } }")
 
 
 (error-str #:id "static methods collide with instance methods"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   function foo(x, y, z) { }
   static function foo(a, b, c) { }
@@ -152,56 +203,49 @@ class C extends B {
 
 (error-str #:id "this on RHS of dot"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   static function main() { return A.this; }
 }")
 
 (error-str #:id "super on RHS of dot"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   static function main() { return A.super; }
 }")
 
 (error-str #:id "this in static context"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   static function main() { return this; }
 }")
 
 (error-str #:id "non-existent class in LHS of dot during funcall"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   static function main() { return B.c(); }
 }")
 
 (error-str #:id "non-existent class in LHS of dot during field lookup"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   static function main() { return B.c; }
 }")
 
 (error-str #:id "non-existent class in LHS of dot during assignment"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   static function main() { B.c = 2; return B.c; }
 }")
 
 (error-str #:id "Static non-instance var in LHS of dot"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   static var x = 2;
   static function main() { return x.y; }
@@ -209,8 +253,7 @@ class A {
 
 (error-str #:id "Instance Non-instance boolean field in LHS of dot"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   var x = true;
   static function main() {
@@ -221,8 +264,7 @@ class A {
 
 (error-str #:id "Function return value non-instance var in LHS of dot"
            #:args (list "A")
-           #:catch #t
-           "
+           #:catch #t "
 class A {
   function getX() { return 2; }
   static function main() {
@@ -239,6 +281,26 @@ class A {
 
   static function nowork(x) {
     return this.x;
+  }
+
+  function mightwork() {
+    return x + nowork(x);
+  }
+
+  static function main() {
+    var a = new A();
+    return a.mightwork();
+  }
+}")
+
+(error-str #:id "super in static context called from instance context"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x = 10;
+
+  static function nowork(x) {
+    return super.x;
   }
 
   function mightwork() {
@@ -364,6 +426,15 @@ class A {
 }")
 
 ; ; Constructors
+
+(error-str #:id "Cannot call constructor of undeclared class"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  static function main() {
+    return new B();
+  }
+}")
 
 (error-str #:id "Calling super() with no parent class"
            #:args (list "A")
@@ -621,3 +692,13 @@ class A {
   static function main() { return new A(); }
 }
 ")
+
+(error-str #:id "throw in ctor"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  A() {
+    throw 5;
+  }
+  static function main() { return new A(); }
+} ")

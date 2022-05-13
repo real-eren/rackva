@@ -146,6 +146,19 @@ function main() {
   return f();
 }")
 
+(error-str #:id "break in function in while"
+           #:catch #t
+           "
+function f() { break; }
+function main() {
+  var x = 5;
+  while (x != 0) {
+    f();
+    x = x - 1;
+  }
+  return 0;
+}")
+
 (error-str #:id "continue in main w/out while"
            #:catch #t
            "
@@ -159,6 +172,19 @@ function main() {
 function f() { continue; }
 function main() {
   return f();
+}")
+
+(error-str #:id "continue in function in while"
+           #:catch #t
+           "
+function f() { continue; }
+function main() {
+  var x = 5;
+  while (x != 0) {
+    f();
+    x = x - 1;
+  }
+  return 0;
 }")
 
 (error-str #:id "global var initializer invokes later global function"
