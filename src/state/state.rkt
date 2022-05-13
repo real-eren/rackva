@@ -59,8 +59,8 @@
                                   get-zero-init-instance
                                   get-init
                                   get-constructor
-                                  num-ctors
-                                  declare-inst-field
+                                  
+                                  declare-instance-field
                                   declare-init
                                   declare-constructor
                                   
@@ -563,11 +563,7 @@
 (define get-constructor
   (lambda (class-name arg-list state)
     (fun-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
-;; returns the number of constructors declared by the class
-; assumes valid class name
-(define num-ctors
-  (lambda (class-name state)
-    (length (get* state $classes class-name class:$constructors))))
+
 
 ;; State with this fun declared in the current scope
 ; only called for top-level or nested functions
@@ -688,14 +684,11 @@
                     scope
                     class)
              state $classes class class:$methods)))
+
 (define method-already-declared?
   (lambda (class-name fun-name arg-list state)
     (fun-table:get fun-name arg-list (get-class-methods class-name state))))
-; assumes it is called in class-def context
-(define declare-inst-field
-  (lambda (field-name state)
-    (update* (curry cons field-name)
-             state $classes (current-type state) class:$i-field-names)))
+
 ;; add an init function to a class
 ; assumption: called exactly once during class-body
 (define declare-init
