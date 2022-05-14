@@ -6,6 +6,7 @@ Apart from variables and fields being boxed, within the intepreter, values are i
 
 ## Authors
 v1.0.0 - v3.0.1: Duc Huy Nguyen, Eren Kahriman, Loc Nguyen
+
 v3.0.1+ : Eren Kahriman 
 
 ## Language Features:
@@ -38,30 +39,4 @@ v3.0.1+ : Eren Kahriman
   - abstract methods
 - dot operator
   - Java (8) semantics
-
-## Notable files
-
-`interpreter.rkt` contains 
- - `interpret`
- - `Mstate`s
- - `Mvalue`s
- - `Mboolean`s
- - `Mname`s
-
-`interpreter-extension.rkt` contains overloads for interpret, including legacy versions
-
-`conts.rkt` contains the continuation mapping
-
-### state
-`state.rkt` - the conglomerate representation of the program state
-`var-table.rkt` - a `map` representing a table of var bindings
-`function-table.rkt` - a table of function bindings
-`class.rkt` - a `map` representing a class closure
-`instance.rkt` - a `map` representing an instance
-
-
-### utils
-`map.rkt` contains an implementation of a map (associative list)
-`testing.rkt` contains helpers for creating concise functional tests
-
 
