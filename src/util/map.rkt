@@ -28,7 +28,9 @@
                                   withf
 
                                   getter
-                                  setter)))
+                                  setter
+
+                                  format-w/-keys)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;; A list-backed map ;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -210,6 +212,13 @@
       (put key value map))))
 
 
+;; Like format, but arguments are keys in the map
+(define format-w/-keys
+  (lambda (format-str arg-map . keys)
+    (apply format format-str (map (lambda (k) (get k arg-map))
+                                  keys))))
+
+
 ;;;; Unit Tests
 (module+ test
   (require rackunit)
@@ -379,4 +388,22 @@
                    (eq? 5 (get 'e g3-map))
                    (eq? 7 (get 'f g3-map))
                    (eq? 5 (get 'g g3-map))))
+
+  ;; format-w/-keys
+  (let ([argmap  empty]
+        [fmtstr  "()"])
+    (check-equal? (format-w/-keys fmtstr argmap)
+                  "()"))
+  
+  (let ([argmap  (of 'a 1 'b 2)]
+        [fmtstr  "(~a, ~a)"])
+    (check-equal? (format-w/-keys fmtstr argmap 'a 'b)
+                  "(1, 2)"))
+  
+  (let ([argmap  (of 'a 1
+                     'b 2
+                     'c 'word)]
+        [fmtstr  "(~a, ~a)"])
+    (check-equal? (format-w/-keys fmtstr argmap 'c 'a)
+                  "(word, 1)"))
   )
