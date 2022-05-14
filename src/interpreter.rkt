@@ -14,7 +14,8 @@
          interpret-parse-tree-v1
 
          default-return
-         default-throw)
+         default-throw
+         default-user-exn)
 
 ;;;; Interpreter
 ;; This module interprets programs parsed by the parsers
@@ -41,7 +42,7 @@
 
 ;; interprets parse-trees produced by classParser.rkt
 (define interpret-parse-tree-v3
-  (lambda (parse-tree entry-point return throw)
+  (lambda (parse-tree entry-point return throw user-exn)
     (Mstate-stmt-list parse-tree
                       (state:push-top-level-context new-state)
                       (conts-of
@@ -49,23 +50,25 @@
                                 (Mstate-main s
                                              return
                                              throw
+                                             user-exn
                                              #:class (string->symbol entry-point))))
                       #:legal-construct? is-class-decl?)))
 
 ;;interprets parse-trees produced by functionParser.rkt
 (define interpret-parse-tree-v2
-  (lambda (parse-tree return throw)
+  (lambda (parse-tree return throw user-exn)
     (Mstate-stmt-list parse-tree
                       (state:push-top-level-context new-state)
                       (conts-of ; only next and throw are actually reachable
-                       #:next (lambda (s) (Mstate-main s return throw))
-                       #:throw throw)
+                       #:next (lambda (s) (Mstate-main s return throw user-exn))
+                       #:throw throw
+                       #:user-exn user-exn)
                       #:legal-construct? (join-or is-var-decl? is-assign? is-fun-decl?))))
 
 ;; legacy, for testing
 ;; interprets parse-trees produced by simpleParser.rkt
 (define interpret-parse-tree-v1
-  (lambda (simple-parse-tree return throw)
+  (lambda (simple-parse-tree return throw user-exn)
     (Mstate-stmt-list simple-parse-tree
                       (state:push-top-level-context new-state)
                       (conts-of
@@ -73,7 +76,8 @@
                        #:next (lambda (s) (raise-user-error "reached end of program without return"))
                        #:throw throw
                        #:break default-break
-                       #:continue default-continue))))
+                       #:continue default-continue
+                       #:user-exn user-exn))))
 
 ;; takes a value and modifies it for output
 (define prep-val-for-output
@@ -98,7 +102,7 @@
 ;; Find and execute the main function with the initial state
 ; should be run after executing all other top-level statements
 (define Mstate-main
-  (lambda (state return throw #:class [class #f])
+  (lambda (state return throw user-exn #:class [class #f])
     (Mvalue-fun '(funcall main)
                 (cond
                   [(not class)                     state]
@@ -106,7 +110,8 @@
                   [else                            (myerror (format "~a is not a class." class) state)])
                 (conts-of
                  #:throw throw
-                 #:return return))))
+                 #:return return
+                 #:user-exn user-exn))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -159,11 +164,10 @@
                             (parent-or-null (maybe-extend statement))
                             (class-body statement)
                             state
-                            (next conts)
-                            (throw conts))))
+                            conts)))
 
 (define Mstate-class-decl-impl
-  (lambda (class-name parent body state next throw)
+  (lambda (class-name parent body state conts)
     (cond
       [(state:has-class? class-name state)    (myerror (format "Attempted to re-declare class `~a`" class-name) state)]
       [(eq? class-name parent)                (myerror (format "class `~a` cannot extend itself" class-name) state)]
@@ -173,8 +177,9 @@
                                                                body
                                                                (state:declare-class class-name parent state)
                                                                (lambda (s)
-                                                                 (next (state:end-class-decl class-name s)))
-                                                               throw)]
+                                                                 ((next conts) (state:end-class-decl class-name s)))
+                                                               (throw conts)
+                                                               (user-exn conts))]
       [else                                   (myerror (format "class `~a` cannot extend class `~a`, `~a` has not been declared yet"
                                                                class-name
                                                                parent
@@ -187,23 +192,23 @@
 ; Assumptions:
 ; 1) runs after `state:declare-class` and before `state:end-class-decl`
 (define eval-class-body
-  (lambda (class-name parent body state next throw)
+  (lambda (class-name parent body state next throw user-exn)
     (chain-TR state
               next
               ; declare methods and verify that parent's abstract methods are overridden
-              (curry methods (filter is-method? body) class-name parent)
-              (curry verify-abstracts-overridden class-name)
+              (λ (s nxt) (methods (filter is-method? body) class-name parent s nxt user-exn))
+              (λ (s nxt) (verify-abstracts-overridden class-name s nxt user-exn))
               ; declare instance fields (name only), and initializers (init)
-              (curry inst-fields class-name (filter is-inst-field-decl? body))
+              (λ (s nxt) (inst-fields class-name (filter is-inst-field-decl? body) s nxt user-exn))
               ; declare user-defined constructors
-              (curry constructors class-name (filter is-ctor-decl? body))
+              (λ (s nxt) (constructors class-name (filter is-ctor-decl? body) s nxt user-exn))
               ; add default constructor if no user-defined constructors present
               (lambda (s nxt)
                 (if (no-constructors? body)
-                    (declare-constructor default-constructor-stmt class-name s nxt)
+                    (declare-constructor default-constructor-stmt class-name s nxt user-exn)
                     (nxt s)))
               ; declare static fields w/ values
-              (curry static-fields (filter is-static-field-decl? body) throw))))
+              (λ (s nxt) (static-fields (filter is-static-field-decl? body) s nxt throw user-exn)))))
 
 
 ;; takes initial state, last continuation and a sequence of 2-arg functions
@@ -240,7 +245,7 @@
 ;; evaluate a list of method declarations in a class body
 ; after all declared, check that parent's abstract methods were overridden
 (define methods
-  (lambda (method-decl-list class-name parent state next)
+  (lambda (method-decl-list class-name parent state next user-exn)
     (if (null? method-decl-list)
         (next state)
         (declare-method (first method-decl-list)
@@ -251,7 +256,9 @@
                                    class-name
                                    parent
                                    s
-                                   next))))))
+                                   next
+                                   user-exn))
+                        user-exn))))
 ; these assume a well-formed method declaration statement
 (define method-name second)
 (define method-params third)
@@ -262,16 +269,17 @@
         (fourth stmt))))
 
 (define declare-method
-  (lambda (stmt class-name state next)
+  (lambda (stmt class-name state next user-exn)
     (next (declare-method-impl (method-name stmt)
                                (method-params stmt)
                                (method-body-or-null stmt)
                                (method-type stmt)
                                class-name
-                               state))))
+                               state
+                               user-exn))))
 
 (define declare-method-impl
-  (lambda (m-name m-params m-body m-type class-name state)
+  (lambda (m-name m-params m-body m-type class-name state user-exn)
     (cond
       [(super-or-this? m-name)                           (myerror (format "Keyword `~a` cannot be used as a function or method name"
                                                                           m-name)
@@ -299,14 +307,15 @@
 ;; Assumes all instance&abstract methods of this class have been declared
 ; verify that all of parent's abstract methods are redeclared in this class
 (define verify-abstracts-overridden
-  (lambda (class-name state next)
+  (lambda (class-name state next user-exn)
     (verify-abstracts-impl class-name
                            (state:get-parents-abstract-methods class-name state)
                            state
-                           next)))
+                           next
+                           user-exn)))
 
 (define verify-abstracts-impl
-  (lambda (class-name abstract-funs state next)
+  (lambda (class-name abstract-funs state next user-exn)
     (cond
       [(null? abstract-funs)                 (next state)]
       [(fun-overridden? (first abstract-funs)
@@ -314,7 +323,8 @@
                         state)               (verify-abstracts-impl class-name
                                                                     (rest abstract-funs)
                                                                     state
-                                                                    next)]
+                                                                    next
+                                                                    user-exn)]
       [else                                  (myerror (format "class `~a` does not override abstract method `~a`"
                                                               class-name
                                                               (function->string (first abstract-funs)))
@@ -330,29 +340,30 @@
 
 ;;;;;;;; STATIC FIELD DECLARATIONS
 (define static-fields
-  (lambda (body throw state next)
+  (lambda (body state next throw user-exn)
     (if (null? body) 
         (next state)
         (declare-static-field (first body)
-                              throw
                               state
                               (lambda (s)
-                                (static-fields (rest body) throw s next))))))
+                                (static-fields (rest body) s next throw user-exn))
+                              throw
+                              user-exn))))
 
 (define declare-static-field
-  (lambda (stmt throw state next)
+  (lambda (stmt state next throw user-exn)
     (Mstate-var-decl-impl (decl-var stmt)
                           (decl-maybe-expr stmt)
                           state
                           (conts-of 
                            #:next     next
                            #:throw    throw
-                           ))))
+                           #:user-exn exn))))
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
 (define inst-fields
-  (lambda (class-name instance-field-decls state next)
+  (lambda (class-name instance-field-decls state next user-exn)
     (declare-inst-fields class-name
                          instance-field-decls
                          state
@@ -360,10 +371,11 @@
                            (declare-init class-name
                                          instance-field-decls
                                          s
-                                         next)))))
+                                         next))
+                         user-exn)))
 
 (define declare-inst-fields
-  (lambda (class-name i-field-decls state next)
+  (lambda (class-name i-field-decls state next user-exn)
     (if (null? i-field-decls)
         (next state)
         (declare-inst-field class-name
@@ -373,10 +385,12 @@
                               (declare-inst-fields class-name
                                                    (rest i-field-decls)
                                                    s
-                                                   next))))))
+                                                   next
+                                                   user-exn))
+                            user-exn))))
 
 (define declare-inst-field
-  (lambda (class-name var-name state next)
+  (lambda (class-name var-name state next user-exn)
     (cond
       [(super-or-this? var-name)                      (myerror (format "Keyword `~a` cannot be used as an instance field name"
                                                                        var-name)
@@ -410,17 +424,18 @@
     (false? (findf is-ctor-decl? body))))
 
 (define constructors
-  (lambda (class-name body state next)
+  (lambda (class-name body state next user-exn)
     (if (null? body)
         (next state)
         (declare-constructor (first body)
                              class-name 
                              state
                              (lambda (s)
-                               (constructors class-name (rest body) s next))))))
+                               (constructors class-name (rest body) s next user-exn))
+                             user-exn))))
 
 (define declare-constructor
-  (lambda (stmt class-name state next)
+  (lambda (stmt class-name state next user-exn)
     (if (state:fun-already-declared? class-name (ctor-params stmt) state)
         (myerror (format "A constructor with signature `~a` has already been declared"
                          (function:formatted-signature class-name (ctor-params stmt)))
@@ -846,7 +861,8 @@
   (lambda (expr state conts)
     (Mname expr state (conts-of conts
                                 #:return (lambda (n s)
-                                           ((return conts) (read-var-box n s) state))))))
+                                           ((return conts) (read-var-box n s (user-exn conts))
+                                                           state))))))
 
 (define Mvalue-var
   (lambda (expr state conts)
@@ -856,7 +872,7 @@
 ;; Given a simple name, retrieves box/value of a var from state
 ;; throws appropriate errors if undeclared or uninitialized
 (define read-var-box
-  (lambda (name state)
+  (lambda (name state user-exn)
     (cond
       [(eq? 'super name)                             (myerror "keyword `super` cannot be used alone an expression" state)]
       [(not (state:var-declared? name state))        (myerror (format "referenced `~a` before declaring it."
@@ -1303,12 +1319,12 @@
                                                 state
                                                 (conts-of conts
                                                           #:return (lambda (v s)
-                                                                     ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
+                                                                     ((return conts) RHS (state:set-instance-scope (assert-instance v s (user-exn conts)) s)))))]
       [(state:has-class? LHS state)     ((return conts) RHS (state:set-static-scope LHS state))]
       [else                             (myerror (format "`~a` is not a reachable class name or variable" LHS) state)])))
 
 (define assert-instance 
-  (lambda (v s) 
+  (lambda (v s user-exn) 
     (if (is-instance? v) 
         v 
         (myerror (format "`~a` is not an instance of a class, cannot apply dot operator"
@@ -1446,6 +1462,7 @@
 ;;;;;;;; Common Continuations
 
 (define default-return (lambda (v s) (prep-val-for-output v)))
+(define default-user-exn (lambda (e s cs) (error "user-exn unimplemented")))
 ; interpret-parse functions should use the throw cont parameter
 (define default-throw (lambda (e s) (myerror (format "uncaught exception: ~a" e) s)))
 (define default-break (lambda (s) (myerror "break statement outside of loop" s)))

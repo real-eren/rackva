@@ -27,43 +27,49 @@
 ; line2")
 
 (define interpret-v1-str
-  (lambda (str [return default-return] [throw default-throw])
+  (lambda (str [return default-return] [throw default-throw] [user-exn default-user-exn])
     (interpret-parse-tree-v1 (simple:parser-str str)
                              return
-                             throw)))
+                             throw
+                             user-exn)))
 
 (define interpret-v1-file
-  (lambda (filename [return default-return] [throw default-throw])
+  (lambda (filename [return default-return] [throw default-throw] [user-exn default-user-exn])
     (interpret-parse-tree-v1 (simple:parser filename)
                              return
-                             throw)))
+                             throw
+                             user-exn)))
 
 
 (define interpret-v2-str
-  (lambda (str [return default-return] [throw default-throw])
+  (lambda (str [return default-return] [throw default-throw] [user-exn default-user-exn])
     (interpret-parse-tree-v2 (function:parser-str str)
                              return
-                             throw)))
+                             throw
+                             user-exn)))
 
 (define interpret-v2-file
-  (lambda (filename [return default-return] [throw default-throw])
+  (lambda (filename [return default-return] [throw default-throw] [user-exn default-user-exn])
     (interpret-parse-tree-v2 (function:parser filename)
                              return
-                             throw)))
+                             throw
+                             user-exn)))
 
 (define interpret-v3-str
-  (lambda (str entry-point [return default-return] [throw default-throw])
+  (lambda (str entry-point [return default-return] [throw default-throw] [user-exn default-user-exn])
     (interpret-parse-tree-v3 (class:parser-str str)
                              entry-point
                              return
-                             throw)))
+                             throw
+                             user-exn)))
 
 (define interpret-v3-file
-  (lambda (filename entry-point [return default-return] [throw default-throw])
+  (lambda (filename entry-point [return default-return] [throw default-throw] [user-exn default-user-exn])
     (interpret-parse-tree-v3 (class:parser filename)
                              entry-point
                              return
-                             throw)))
+                             throw
+                             user-exn)))
 
 ;; str equivalent of the `interpret` function provided by `interpreter`
 ;; AKA latest version of interpret
