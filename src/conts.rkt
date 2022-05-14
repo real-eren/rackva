@@ -45,18 +45,17 @@
            #:map-error [efun identity]
            #:map-value [vfun identity])
     (conts-of
-     #:return  (lambda (v s)
-                 ((return conts) (vfun v) (sfun s)))
-     #:break   (lambda (s)
-                 ((break conts) (sfun s)))
+     #:return   (lambda (v s)
+                  ((return conts) (vfun v) (sfun s)))
+     #:break    (lambda (s)
+                  ((break conts) (sfun s)))
      #:continue (lambda (s)
                   ((continue conts) (sfun s)))
      #:next     (lambda (s)
                   ((next conts) (sfun s)))
      #:throw    (lambda (e s)
                   ((throw conts) (efun e) (sfun s)))
-     #:user-exn (lambda (e s cs)
-                  ((user-exn conts) e (sfun s) cs)))))
+     #:user-exn (user-exn conts))))
 
 
 (define $return 'return)

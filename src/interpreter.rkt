@@ -1,9 +1,10 @@
 #lang racket
 
 (require "conts.rkt"
-         "state/state.rkt"
+         "user-errors.rkt"
          "state/function.rkt"
          "state/instance.rkt"
+         "state/state.rkt"
          "util/map.rkt"
          "util/predicates.rkt"
          "classParser.rkt")
@@ -51,7 +52,9 @@
                                              return
                                              throw
                                              user-exn
-                                             #:class (string->symbol entry-point))))
+                                             #:class (string->symbol entry-point)))
+                       #:throw throw
+                       #:user-exn user-exn)
                       #:legal-construct? is-class-decl?)))
 
 ;;interprets parse-trees produced by functionParser.rkt
@@ -75,8 +78,6 @@
                        #:return return
                        #:next (lambda (s) (raise-user-error "reached end of program without return"))
                        #:throw throw
-                       #:break default-break
-                       #:continue default-continue
                        #:user-exn user-exn))))
 
 ;; takes a value and modifies it for output
@@ -615,7 +616,9 @@
 ; invokes the break continuation
 (define Mstate-break
   (lambda (statement state conts)
-    ((break conts) state)))
+    (if (break conts)
+        ((break conts) state)
+        ((user-exn conts) ue:break-outside-loop (list 'break)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CONTINUE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -624,7 +627,9 @@
 ; invokes the continue continuation
 (define Mstate-continue
   (lambda (statement state conts)
-    ((continue conts) state)))
+    (if (continue conts)
+        ((continue conts) state)
+        ((user-exn conts) ue:continue-outside-loop (list 'continue)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -948,13 +953,12 @@
                                                                                    ; boxes handle the side-effects from the function body
                                                                                    ; however s2 has the context-stack during fun body, needed for error messages
                                                                                    ; continue, break and throw need s2's context stack
-                                                                                   (conts-of conts
-                                                                                             #:next     (lambda (s2) ((next conts) state)) 
-                                                                                             #:continue default-continue
-                                                                                             #:break    default-break
-                                                                                             #:throw    (lambda (e s2)
-                                                                                                          ((throw conts) e (state:with-context (state:context-stack s2) state)))
-                                                                                             #:return   (lambda (v s2) ((return conts) v state))))]
+                                                                                   (conts-of
+                                                                                    #:next     (lambda (s2) ((next conts) state))
+                                                                                    #:throw    (lambda (e s2)
+                                                                                                 ((throw conts) e (state:with-context (state:context-stack s2) state)))
+                                                                                    #:return   (lambda (v s2) ((return conts) v state))
+                                                                                    #:user-exn (user-exn conts)))]
                                   [else                           (myerror (format "A function `~a` with ~a parameter(s) is not in scope.~a"
                                                                                    name
                                                                                    (length arg-list)
@@ -1099,11 +1103,11 @@
                                                                        '()
                                                                        state
                                                                        (state:set-instance-scope inst state)
-                                                                       (conts-of conts
-                                                                                 #:next (lambda (s) state)
-                                                                                 #:return (lambda (v s) state)
-                                                                                 #:break default-break
-                                                                                 #:continue default-continue)))))
+                                                                       (conts-of
+                                                                        #:next (lambda (s) state)
+                                                                        #:return (lambda (v s) state)
+                                                                        #:throw (lambda (e s) ((throw conts) e state))
+                                                                        #:user-exn (user-exn conts))))))
         (myerror (format "`~a` is not a recognized class" class-name) state))))
 
 (define zero-init-instance
@@ -1462,9 +1466,7 @@
 ;;;;;;;; Common Continuations
 
 (define default-return (lambda (v s) (prep-val-for-output v)))
-(define default-user-exn (lambda (e s cs) (error "user-exn unimplemented")))
+(define default-user-exn ue:raise-exn)
 ; interpret-parse functions should use the throw cont parameter
 (define default-throw (lambda (e s) (myerror (format "uncaught exception: ~a" e) s)))
-(define default-break (lambda (s) (myerror "break statement outside of loop" s)))
-(define default-continue (lambda (s) (myerror "continue statement outside of loop" s)))
 
