@@ -1,7 +1,12 @@
-# interpreter
+# Rava interpreter
+name inspired by Jython
 
 Interpreter for a Java-like language, written in Scheme/Racket.
-Apart from variables being boxed, within the intepreter values are immutable and functions are referentially-transparent.
+Apart from variables and fields being boxed, within the intepreter, values are immutable and functions are referentially-transparent.
+
+## Authors
+v1.0.0 - v3.0.1: Duc Huy Nguyen, Eren Kahriman, Loc Nguyen
+v3.0.1+ : Eren Kahriman 
 
 ## Language Features:
 - Dynamic typing

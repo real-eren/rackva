@@ -1,11 +1,5 @@
 #lang racket
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; CSDS 345 Interpreter
-;; 2022 Spring
-;; Duc Huy Nguyen, Eren Kahriman, Loc Nguyen
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 (require "conts.rkt"
          "state/state.rkt"
          "state/function.rkt"
@@ -21,6 +15,12 @@
 
          default-return
          default-throw)
+
+;;;; Interpreter
+;; This module interprets programs parsed by the parsers
+;; `simpleParser.rkt`, `functionParser.rkt`, `classParser.rkt`
+;; Tests for this module are in the `v{n}-tests` and `v{n}-error-tests`
+;; files, where {n} corresponds to the version of the interpreter being tested
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
