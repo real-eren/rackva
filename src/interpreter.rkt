@@ -858,6 +858,7 @@
 (define read-var-box
   (lambda (name state)
     (cond
+      [(eq? 'super name)                             (myerror "keyword `super` cannot be used alone an expression" state)]
       [(not (state:var-declared? name state))        (myerror (format "referenced `~a` before declaring it."
                                                                       name)
                                                               state)]
@@ -1084,7 +1085,9 @@
                                                                        (state:set-instance-scope inst state)
                                                                        (conts-of conts
                                                                                  #:next (lambda (s) state)
-                                                                                 #:return (lambda (v s) state))))))
+                                                                                 #:return (lambda (v s) state)
+                                                                                 #:break default-break
+                                                                                 #:continue default-continue)))))
         (myerror (format "`~a` is not a recognized class" class-name) state))))
 
 (define zero-init-instance

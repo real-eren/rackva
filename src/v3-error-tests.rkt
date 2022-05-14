@@ -313,6 +313,22 @@ class A {
   }
 }")
 
+(error-str #:id "attempting to read from super as if var in instance function"
+           #:args (list "A")
+           #:catch #t "
+class Parent { }
+class A extends Parent {
+
+  function mightwork() {
+    return super;
+  }
+
+  static function main() {
+    var a = new A();
+    return a.mightwork();
+  }
+}")
+
 (error-str #:id "declaring an instance field named this"
            #:args (list "A")
            #:catch #t "
@@ -423,6 +439,34 @@ class A {
     var a = new A();
     return a.mightwork();
   }
+}")
+
+(error-str #:id "Declaring a function named `this`"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x;
+  function this() {
+    return 5;
+  }
+  A() {
+    x = this();
+  }
+  static function main() { return new A(); }
+}")
+
+(error-str #:id "Declaring a function named `super`"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  var x;
+  function super(x, y) {
+    return 5;
+  }
+  A() {
+    x = super();
+  }
+  static function main() { return new A(); }
 }")
 
 ; ; Constructors
@@ -675,38 +719,7 @@ class A {
     x = 6;
   }
   static function main() { return new A().x; }
-}
-")
-
-(error-str #:id "Declaring a function named `this`"
-           #:args (list "A")
-           #:catch #t "
-class A {
-  var x;
-  function this() {
-    return 5;
-  }
-  A() {
-    x = this();
-  }
-  static function main() { return new A(); }
-}
-")
-
-(error-str #:id "Declaring a function named `super`"
-           #:args (list "A")
-           #:catch #t "
-class A {
-  var x;
-  function super(x, y) {
-    return 5;
-  }
-  A() {
-    x = super();
-  }
-  static function main() { return new A(); }
-}
-")
+}")
 
 (error-str #:id "throw in ctor"
            #:args (list "A")
@@ -716,4 +729,38 @@ class A {
     throw 5;
   }
   static function main() { return new A(); }
-} ")
+}")
+
+(error-str #:id "break in ctor called in loop"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  A() {
+    break;
+  }
+  static function main() {
+    var x = 2;
+    while (x != 0) {
+      var a = new A();
+      x = x - 1;
+    }
+    return 5;
+  }
+}")
+
+(error-str #:id "continue in ctor called in loop"
+           #:args (list "A")
+           #:catch #t "
+class A {
+  A() {
+    continue;
+  }
+  static function main() {
+    var x = 2;
+    while (x != 0) {
+      var a = new A();
+      x = x - 1;
+    }
+    return 5;
+  }
+}")

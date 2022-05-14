@@ -12,7 +12,7 @@
                       throw))
 
 ;;;; Container of continuations used by the interpreter
-;; these include return, next, break, continue, throw, catch, finally
+;; these include return, next, break, continue, throw, catch, user-exn
 
 (define empty-conts map:empty)
 
