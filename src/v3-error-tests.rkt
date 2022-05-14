@@ -108,6 +108,15 @@ class ClassName {
   static function main() { return foo(); }
 }")
 
+(error-str #:id "Static field calls function that throws"
+           #:args (list "A")
+           #:catch #t "
+class ClassName {
+  static var x = foo();
+  static function foo() { throw 5; }
+  static function main() { return foo(); }
+}")
+
 ; ; Overriding and Abstracts
 
 (error-str #:id "subclass doesn't override parent's abstract methods"
