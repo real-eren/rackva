@@ -9,7 +9,8 @@
                       break
                       continue
                       next
-                      throw))
+                      throw
+                      user-exn))
 
 ;;;; Container of continuations used by the interpreter
 ;; these include return, next, break, continue, throw, catch, user-exn
@@ -25,13 +26,15 @@
            #:break    [brk (break conts)]
            #:continue [con (continue conts)]
            #:next     [nxt (next conts)]
-           #:throw    [thr (throw conts)])
+           #:throw    [thr (throw conts)]
+           #:user-exn [uex (user-exn conts)])
     (map:of
      $return   ret
      $break    brk
      $continue con
      $next     nxt
-     $throw    thr)))
+     $throw    thr
+     $user-exn uex)))
 
 ;;;; Helper function for applying a common mapping function to the state, error and value params
 (define identity (lambda (v) v))
@@ -51,7 +54,9 @@
      #:next     (lambda (s)
                   ((next conts) (sfun s)))
      #:throw    (lambda (e s)
-                  ((throw conts) (efun e) (sfun s))))))
+                  ((throw conts) (efun e) (sfun s)))
+     #:user-exn (lambda (e s cs)
+                  ((user-exn conts) e (sfun s) cs)))))
 
 
 (define $return 'return)
@@ -68,3 +73,6 @@
 
 (define $throw 'throw)
 (define throw (map:getter $throw))
+
+(define $user-exn 'user-exn)
+(define user-exn (map:getter $user-exn))
