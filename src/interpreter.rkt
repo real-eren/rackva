@@ -207,7 +207,7 @@
                     (declare-constructor default-constructor-stmt class-name s nxt user-exn)
                     (nxt s)))
               ; declare static fields w/ values
-              (λ (s nxt) (static-fields (filter is-static-field-decl? body) s nxt throw user-exn)))))
+              (λ (s nxt) (static-fields (filter is-static-field-decl? body) class-name s nxt throw user-exn)))))
 
 
 ;; takes initial state, last continuation and a sequence of 2-arg functions
@@ -282,9 +282,10 @@
   (lambda (m-name m-params m-body m-type class-name state next user-exn)
     (cond
       [(super-or-this? m-name)                           (user-exn (ue:keyword-as-identifier m-name 'method) state)]
-      [(state:fun-already-declared? m-name
-                                    m-params
-                                    state)               (user-exn (ue:duplicate-method (function:formatted-signature m-name m-params)
+      [(state:method-already-declared? class-name
+                                       m-name
+                                       m-params
+                                       state)            (user-exn (ue:duplicate-method (function:formatted-signature m-name m-params)
                                                                                         class-name)
                                                                    state)]
       [(and (eq? function:scope:abstract m-type)
@@ -334,25 +335,37 @@
 
 ;;;;;;;; STATIC FIELD DECLARATIONS
 (define static-fields
-  (lambda (body state next throw user-exn)
+  (lambda (body class-name state next throw user-exn)
     (if (null? body) 
         (next state)
         (declare-static-field (first body)
+                              class-name
                               state
                               (lambda (s)
-                                (static-fields (rest body) s next throw user-exn))
+                                (static-fields (rest body) class-name s next throw user-exn))
                               throw
                               user-exn))))
 
 (define declare-static-field
-  (lambda (stmt state next throw user-exn)
-    (Mstate-var-decl-impl (decl-var stmt)
-                          (decl-maybe-expr stmt)
-                          state
-                          (conts-of 
-                           #:next     next
-                           #:throw    throw
-                           #:user-exn user-exn))))
+  (lambda (stmt class-name state next throw user-exn)
+    (let* ([name        (decl-var stmt)]
+           [maybe-expr  (decl-maybe-expr stmt)]
+           [expr        (if (null? maybe-expr) 0 (get maybe-expr))])
+      (cond
+        [(super-or-this? name)                      (user-exn (ue:keyword-as-identifier name 'field) state)]
+        [(state:field-already-declared? name
+                                        class-name
+                                        state)      (user-exn (ue:duplicate-field name) state)]
+        [else                                       (Mvalue expr
+                                                            state
+                                                            (conts-of #:throw throw
+                                                                      #:user-exn user-exn
+                                                                      #:return (lambda (v s)
+                                                                                 (next (state:declare-static-field name
+                                                                                                                   v
+                                                                                                                   class-name
+                                                                                                                   s)))))]))))
+
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
@@ -386,8 +399,10 @@
 (define declare-inst-field
   (lambda (class-name var-name state next user-exn)
     (cond
-      [(super-or-this? var-name)                      (user-exn (ue:keyword-as-identifier var-name '|instance field|) state)]
-      [(state:var-already-declared? var-name state)   (user-exn (ue:duplicate-instance-field var-name) state)]
+      [(super-or-this? var-name)                      (user-exn (ue:keyword-as-identifier var-name 'field) state)]
+      [(state:field-already-declared? var-name
+                                      class-name
+                                      state)          (user-exn (ue:duplicate-field var-name) state)]
       [else                                           (next (state:declare-instance-field var-name
                                                                                           class-name
                                                                                           state))])))
@@ -427,7 +442,7 @@
 
 (define declare-constructor
   (lambda (stmt class-name state next user-exn)
-    (if (state:fun-already-declared? class-name (ctor-params stmt) state)
+    (if (state:ctor-already-declared? class-name (ctor-params stmt) state)
         (user-exn (ue:duplicate-constructor (function:formatted-signature class-name (ctor-params stmt))) state)
         (next (state:declare-constructor (ctor-params stmt)
                                          (ctor-body stmt)
@@ -955,7 +970,7 @@
                           (get-environment fun-closure
                                            fun-inputs
                                            eval-state
-                                           (state:push-fun-call-context fun-closure state)
+                                           (state:set-fun-call-context fun-closure state)
                                            conts)
                           conts))))
 
@@ -1114,7 +1129,7 @@
                        (get-environment ctor
                                         args
                                         arg-eval-state
-                                        (state:push-fun-call-context ctor run-state)
+                                        (state:set-fun-call-context ctor run-state)
                                         conts)
                        conts))))
 

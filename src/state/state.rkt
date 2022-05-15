@@ -18,10 +18,9 @@
                                   context-stack
                                   with-context
                                   push-top-level-context
-                                  push-fun-call-context
+                                  set-fun-call-context
                                   pop-context
                                   instance-context?
-                                  formatted-stack-trace
 
                                   set-static-scope
                                   set-instance-scope
@@ -61,8 +60,11 @@
                                   get-constructor
                                   
                                   declare-instance-field
+                                  declare-static-field
+                                  field-already-declared?
                                   declare-init
                                   declare-constructor
+                                  ctor-already-declared?
                                   
                                   end-class-decl)))
 
@@ -102,6 +104,9 @@
 (define $current-type 'current-type)
 (define current-type (map:getter $current-type))
 
+;; current function body. closure / #F. used for nested fun decls
+(define $current-fun-call 'current-fun-call)
+
 ;; current instance. instance / #F
 (define $this 'this)
 (define this (map:getter $this))
@@ -134,11 +139,12 @@
                       $global-vars  new-var-table
                       $global-funs  new-function-table
                       $classes      map:empty
-                      $current-type   #F
-                      $this           #F
-                      $dotted         #F
-                      $super          #F
-                      $context-stack  null))
+                      $current-type     #F
+                      $current-fun-call #F
+                      $this             #F
+                      $dotted           #F
+                      $super            #F
+                      $context-stack    null))
 
 
 ;; State with the top scope removed from the stack and function table
@@ -163,17 +169,15 @@
     (withv state
            $context-stack  context-stack)))
 
-; assumption: existant & non-empty entry for context-stack
-(define current-context (compose1 stack:peek context-stack))
-
 ; assumption: pre-existing entry for context-stack
 (define push-top-level-context
   (lambda (state)
     (push-context context:top-level state)))
 
-(define push-fun-call-context
+(define set-fun-call-context
   (lambda (fun state)
-    (push-context (context:of-fun-call fun) state)))
+    (withv state
+           $current-fun-call  fun)))
 
 (define push-context
   (lambda (context state)
@@ -189,7 +193,7 @@
 ;; T/F whether the current context is of type `top-level`
 (define top-level-context?
   (lambda (state)
-    (eq? context:type:top-level (context:type (current-context state)))))
+    (not (current-type state))))
 
 ;; instance / F 
 (define instance-context?
@@ -208,23 +212,7 @@
 ;; Function Closure / F whether the current context is of type `fun-call`
 (define fun-call-context?
   (lambda (state)
-    (context:fun-call:fun (current-context state))))
-
-;; class-name/F whether the current context is of type `class-def`
-(define class-def-context?
-  (lambda (state)
-    (context:class-def:name (current-context state))))
-
-
-
-;; retrieves the context-stack from state and returns it in a form fit for output
-(define formatted-stack-trace
-  (lambda (state)
-    (if (empty? (context-stack state))
-        ""
-        (string-join (map context:context->string (reverse (context-stack state)))
-                     " -> "
-                     #:before-first "stack trace: "))))
+    (map:get $current-fun-call state)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -286,6 +274,7 @@
            #:dest new-state)
     (withv new-state
            $current-type  (current-type old-state)
+           $current-fun-call  (map:get $current-fun-call old-state)
            $dotted        #F
            $this          (this old-state))))
 
@@ -304,9 +293,6 @@
       [(local-context? state)     (withf state
                                          $local-vars  (curry stack:update-front
                                                              (curry var-table:declare-with-box name box)))]
-      [(class-def-context? state) (update* (curry var-table:declare-with-box name box)
-                                           state $classes (current-type state) class:$s-fields)]
-                                           
       [(top-level-context? state) (withf state
                                          $global-vars (curry var-table:declare-with-box name box))]
       [else                       (error "logical error, exhausted cases in declare-var")])))
@@ -379,11 +365,10 @@
     (not (false? (get-var-box name state)))))
 
 ;; Is a variable with this name already declared in the current scope?
-; used by interpreter to detect duplicate declarations
+; used by interpreter to detect duplicate declarations for local and top-level variables
 (define var-already-declared?
   (lambda (name state)
     (cond
-      [(class-def-context? state) (class:has-field? name (get* state $classes (current-type state)))]
       [(local-context? state)     (var-table:declared? name (stack:peek (local-vars state)))]
       [(top-level-context? state) (var-table:declared? name (global-vars state))])))
 
@@ -413,10 +398,6 @@
 (define get-current-fun-table
   (lambda (f-name state)
     (cond
-      [(class-def-context? state) => (lambda (class-name)
-                                       (get* state $classes class-name (if (eq? f-name class-name)
-                                                                           class:$constructors
-                                                                           class:$methods)))]
       [(local-context? state)         (stack:peek (local-funs state))]
       [(top-level-context? state)     (global-funs state)]
       [else                           (error "exhausted cases in fun lookup. logical error?")])))
@@ -432,7 +413,6 @@
 ;; sweep through local, global, classes
 ; primarily used by interpreter to display suggestions when reporting errors
 ; for calling an undefined function
-; WIP
 (define all-funs-with-name
   (lambda (name state)
     (fun-table:get-all name
@@ -564,6 +544,7 @@
   (lambda (class-name arg-list state)
     (fun-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
 
+(define ctor-already-declared? get-constructor)
 
 ;; State with this fun declared in the current scope
 ; only called for top-level or nested functions
@@ -672,6 +653,15 @@
     (update* (curry cons name)
              state $classes class-name class:$i-field-names)))
 
+(define declare-static-field
+  (lambda (name value class-name state)
+    (update* (curry var-table:declare-with-value name value)
+             state $classes class-name class:$s-fields)))
+
+(define field-already-declared?
+  (lambda (name class-name state)
+    (class:has-field? name (get* state $classes class-name))))
+
 ;; called during class body
 ; handles static | instance | abstract
 (define declare-method
@@ -713,6 +703,7 @@
                     function:scope:constructor
                     class)
              state $classes class class:$constructors)))
+
 
 ;; signal that the earlier class declaration has ended
 ; assumes the current context is a class-decl context

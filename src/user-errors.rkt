@@ -157,19 +157,19 @@
             "A method with the signature `~a` is already declared in class `~a`."
             'fun-sig 'class-name))
 
-(define type:duplicate-instance-field 'redeclare-instance-field)
-(define duplicate-instance-field
-  (exn:ctor type:duplicate-instance-field
+(define type:duplicate-field 'duplicate-field)
+(define duplicate-field
+  (exn:ctor type:duplicate-field
             "A field named `~a` is already declared in this class"
             'field-name))
 
-(define type:duplicate-constructor 'redeclare-constructor)
+(define type:duplicate-constructor 'duplicate-constructor)
 (define duplicate-constructor
   (exn:ctor type:duplicate-constructor
             "A constructor with signature `~a` has already been declared"
             'fun-sig))
 
-(define type:duplicate-function 'redeclare-function)
+(define type:duplicate-function 'duplicate-function)
 (define duplicate-function
   (exn:ctor type:duplicate-function
             "Function `~a` is already declared in the current scope"
