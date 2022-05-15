@@ -17,9 +17,7 @@
                                   
                                   context-stack
                                   with-context
-                                  push-top-level-context
                                   set-fun-call-context
-                                  pop-context
                                   instance-context?
 
                                   set-static-scope
@@ -64,9 +62,7 @@
                                   field-already-declared?
                                   declare-init
                                   declare-constructor
-                                  ctor-already-declared?
-                                  
-                                  end-class-decl)))
+                                  ctor-already-declared?)))
 
 
 ;;;; State
@@ -76,10 +72,6 @@
 ;; local vars and funs    (layered)
 ;; context
 ;; classes
-
-; general assumptions:
-; 1) context stack is non-empty before state is used
-
 
 (define $global-vars 'global-vars)
 (define global-vars (map:getter $global-vars))
@@ -169,29 +161,13 @@
     (withv state
            $context-stack  context-stack)))
 
-; assumption: pre-existing entry for context-stack
-(define push-top-level-context
-  (lambda (state)
-    (push-context context:top-level state)))
-
 (define set-fun-call-context
   (lambda (fun state)
     (withv state
            $current-fun-call  fun)))
 
-(define push-context
-  (lambda (context state)
-    (withf state
-           $context-stack  (curry stack:push context))))
-
-; assumption: non-empty context-stack
-(define pop-context
-  (lambda (state)
-    (update* stack:pop
-             state $context-stack)))
-
 ;; T/F whether the current context is of type `top-level`
-(define top-level-context?
+(define top-level?
   (lambda (state)
     (not (current-type state))))
 
@@ -293,7 +269,7 @@
       [(local-context? state)     (withf state
                                          $local-vars  (curry stack:update-front
                                                              (curry var-table:declare-with-box name box)))]
-      [(top-level-context? state) (withf state
+      [(top-level? state)         (withf state
                                          $global-vars (curry var-table:declare-with-box name box))]
       [else                       (error "logical error, exhausted cases in declare-var")])))
 
@@ -369,8 +345,8 @@
 (define var-already-declared?
   (lambda (name state)
     (cond
-      [(local-context? state)     (var-table:declared? name (stack:peek (local-vars state)))]
-      [(top-level-context? state) (var-table:declared? name (global-vars state))])))
+      [(local-context? state)  (var-table:declared? name (stack:peek (local-vars state)))]
+      [(top-level? state)      (var-table:declared? name (global-vars state))])))
 
 
 ;; Is the in-scope variable with this name and initialized?
@@ -398,9 +374,9 @@
 (define get-current-fun-table
   (lambda (f-name state)
     (cond
-      [(local-context? state)         (stack:peek (local-funs state))]
-      [(top-level-context? state)     (global-funs state)]
-      [else                           (error "exhausted cases in fun lookup. logical error?")])))
+      [(local-context? state)  (stack:peek (local-funs state))]
+      [(top-level? state)      (global-funs state)]
+      [else                    (error "exhausted cases in fun lookup. logical error?")])))
 
 ;; Is a function with this signature in scope (reachable)?
 ; Assumptions:
@@ -568,7 +544,7 @@
                                                           #F
                                                           state)]
       ; not in funcall or class body, not in block etc
-      [(top-level-context? state)      (declare-fun-global name
+      [(top-level? state)              (declare-fun-global name
                                                            params
                                                            body
                                                            state)]
@@ -705,11 +681,6 @@
              state $classes class class:$constructors)))
 
 
-;; signal that the earlier class declaration has ended
-; assumes the current context is a class-decl context
-(define end-class-decl
-  (lambda (class-name state)
-    (pop-context state)))
 
 ;; returns a 0-initialized instance of the given class
 ; all fields set to 0, before any initializers
@@ -740,7 +711,7 @@
   (require rackunit)
 
   ;; variables
-  (let* ([s1  (push-new-layer (push-top-level-context new-state))]
+  (let* ([s1  (push-new-layer new-state)]
          [s2  (declare-var 'a s1)])
     (check-true (var-declared? 'a s2))
     (check-false (var-initialized? 'a s2))
@@ -770,15 +741,15 @@
         (check-eq? (get-var-value 'd s8) 10))))
   
   ;; local fun lookup
-  (let* ([s1      (push-top-level-context new-state)]
+  (let* ([s1      new-state]
          [fmn     'main] [fma     '()]
          [s2      (declare-fun fmn fma null s1)]
          [fm      (get-function fmn fma s2)]
          [fan     'a] [faa     '()]
          [fbn     'b] [fba     '()]
-         [s3      (declare-fun fan faa null (push-context (context:of-fun-call fm) (push-new-layer s2)))]
+         [s3      (declare-fun fan faa null (set-fun-call-context fm (push-new-layer s2)))]
          [s4      (declare-fun fbn fba null s3)]
-         [s5      (pop-context (pop-layer s4))]
+         [s5      (pop-layer s4)]
          )
     (check-true (has-fun? fmn fma s4))
     (check-true (has-fun? fan faa s4))
@@ -791,13 +762,13 @@
     )
 
   ;; get all funs
-  (let* ([s1  (push-top-level-context new-state)]
+  (let* ([s1      new-state]
          [fgn     'foo] [fga     '()]
          [s2      (declare-fun fgn fga null s1)]
          [fg      (get-function fgn fga s2)]
          
          [fan     'foo] [faa     '(a b c)]
-         [s3      (declare-fun fan faa null (push-context (context:of-fun-call fg) (push-new-layer s2)))]
+         [s3      (declare-fun fan faa null (set-fun-call-context fg (push-new-layer s2)))]
          [fa      (get-function fan faa s3)]
          
          [fbn     'bar] [fba     '()]
@@ -813,42 +784,39 @@
                                   function:scope:instance
                                   c1n
                                   s5)]
-         [s7      (end-class-decl c1n s6)]
-         [fc      (get-i-a-method-rec fcn fca c1n s7)]
+         [fc      (get-i-a-method-rec fcn fca c1n s6)]
 
          [c2n     'Class2] [c2p    #f]
-         [s8      (declare-class c2n c2p s7)]
+         [s7      (declare-class c2n c2p s6)]
          [fdn     'foo] [fda     '(a b c d e)]
-         [s9      (declare-method fdn
+         [s8      (declare-method fdn
                                   fda
                                   '()
                                   function:scope:abstract
                                   c2n
-                                  s8)]
-         [s10     (end-class-decl c2n s9)]
-         [fd      (get-i-a-method-rec fdn fda c2n s10)]
+                                  s7)]
+         [fd      (get-i-a-method-rec fdn fda c2n s8)]
          
          [c3n     'Class3] [c3p    c2n]
-         [s11     (declare-class c3n c3p s10)]
+         [s9      (declare-class c3n c3p s8)]
          [fen     'bar] [fea     '(a b c)]
-         [s12     (declare-method fen
+         [s10     (declare-method fen
                                   fea
                                   '()
                                   function:scope:static
                                   c3n
-                                  s11)]
-         [s13     (end-class-decl c3n s12)]
+                                  s9)]
          [fe      (get-static-method fen
                                      fea
                                      c3n
-                                     s13)])
+                                     s10)])
     (check-true (empty? (all-funs-with-name 'foo s1)))
-    (check-true (empty? (all-funs-with-name 'x s13)))
+    (check-true (empty? (all-funs-with-name 'x s10)))
     
     
     (check-not-false (andmap (lambda (f)
-                               (member f (all-funs-with-name 'foo s13)))
+                               (member f (all-funs-with-name 'foo s10)))
                              (list fg fa fc fd)))
     (check-not-false (andmap (lambda (f)
-                               (member f (all-funs-with-name 'bar s13)))
+                               (member f (all-funs-with-name 'bar s10)))
                              (list fb fe)))))

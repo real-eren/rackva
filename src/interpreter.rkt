@@ -45,7 +45,7 @@
 (define interpret-parse-tree-v3
   (lambda (parse-tree entry-point return throw user-exn)
     (Mstate-stmt-list parse-tree
-                      (state:push-top-level-context new-state)
+                      new-state
                       (conts-of
                        #:next (lambda (s)
                                 (Mstate-main s
@@ -61,7 +61,7 @@
 (define interpret-parse-tree-v2
   (lambda (parse-tree return throw user-exn)
     (Mstate-stmt-list parse-tree
-                      (state:push-top-level-context new-state)
+                      new-state
                       (conts-of ; only next and throw are actually reachable
                        #:next (lambda (s) (Mstate-main s return throw user-exn))
                        #:throw throw
@@ -73,7 +73,7 @@
 (define interpret-parse-tree-v1
   (lambda (simple-parse-tree return throw user-exn)
     (Mstate-stmt-list simple-parse-tree
-                      (state:push-top-level-context new-state)
+                      new-state
                       (conts-of
                        #:return return
                        #:next (lambda (s) (raise-user-error "reached end of program without return"))
@@ -179,8 +179,7 @@
                                                                parent
                                                                body
                                                                (state:declare-class class-name parent state)
-                                                               (lambda (s)
-                                                                 ((next conts) (state:end-class-decl class-name s)))
+                                                               (next conts)
                                                                (throw conts)
                                                                (user-exn conts))]
       [else                                   ((user-exn conts) (ue:not-a-class class-name) state)])))
