@@ -78,6 +78,8 @@
                        #:return return
                        #:next (lambda (s) (raise-user-error "reached end of program without return"))
                        #:throw throw
+                       #:break default-break
+                       #:continue default-continue
                        #:user-exn user-exn))))
 
 ;; takes a value and modifies it for output
@@ -108,7 +110,7 @@
                 (cond
                   [(not class)                     state]
                   [(state:has-class? class state)  (state:set-static-scope class state)]
-                  [else                            (myerror (format "~a is not a class." class) state)])
+                  [else                            (user-exn (ue:not-a-class class) state)])
                 (conts-of
                  #:throw throw
                  #:return return
@@ -170,8 +172,8 @@
 (define Mstate-class-decl-impl
   (lambda (class-name parent body state conts)
     (cond
-      [(state:has-class? class-name state)    (myerror (format "Attempted to re-declare class `~a`" class-name) state)]
-      [(eq? class-name parent)                (myerror (format "class `~a` cannot extend itself" class-name) state)]
+      [(state:has-class? class-name state)    ((user-exn conts) (ue:duplicate-class class-name) state)]
+      [(eq? class-name parent)                ((user-exn conts) (ue:class-extend-self class-name) state)]
       [(or (null? parent)
            (state:has-class? parent state))   (eval-class-body class-name
                                                                parent
@@ -181,11 +183,7 @@
                                                                  ((next conts) (state:end-class-decl class-name s)))
                                                                (throw conts)
                                                                (user-exn conts))]
-      [else                                   (myerror (format "class `~a` cannot extend class `~a`, `~a` has not been declared yet"
-                                                               class-name
-                                                               parent
-                                                               parent)
-                                                       state)])))
+      [else                                   ((user-exn conts) (ue:not-a-class class-name) state)])))
 
 
 
@@ -271,40 +269,36 @@
 
 (define declare-method
   (lambda (stmt class-name state next user-exn)
-    (next (declare-method-impl (method-name stmt)
-                               (method-params stmt)
-                               (method-body-or-null stmt)
-                               (method-type stmt)
-                               class-name
-                               state
-                               user-exn))))
+    (declare-method-impl (method-name stmt)
+                         (method-params stmt)
+                         (method-body-or-null stmt)
+                         (method-type stmt)
+                         class-name
+                         state
+                         next
+                         user-exn)))
 
 (define declare-method-impl
-  (lambda (m-name m-params m-body m-type class-name state user-exn)
+  (lambda (m-name m-params m-body m-type class-name state next user-exn)
     (cond
-      [(super-or-this? m-name)                           (myerror (format "Keyword `~a` cannot be used as a function or method name"
-                                                                          m-name)
-                                                                  state)]
+      [(super-or-this? m-name)                           (user-exn (ue:keyword-as-identifier m-name 'method) state)]
       [(state:fun-already-declared? m-name
                                     m-params
-                                    state)               (myerror (format "A method with the signature `~a` is already declared in class `~a`."
-                                                                          (function:formatted-signature m-name m-params)
-                                                                          class-name)
-                                                                  state)]
+                                    state)               (user-exn (ue:duplicate-method (function:formatted-signature m-name m-params)
+                                                                                        class-name)
+                                                                   state)]
       [(and (eq? function:scope:abstract m-type)
             (state:class-get-inst-method class-name
                                          m-name
                                          m-params
                                          state))   =>    (lambda (fun)
-                                                           (myerror (format "Cannot override concrete `~a` with abstract method"
-                                                                            (function->string fun))
-                                                                    state))]
-      [else                                              (state:declare-method m-name
-                                                                               m-params
-                                                                               m-body
-                                                                               m-type
-                                                                               class-name
-                                                                               state)])))
+                                                           (user-exn (ue:override-c-w/-abstr (function->string fun)) state))]
+      [else                                              (next (state:declare-method m-name
+                                                                                     m-params
+                                                                                     m-body
+                                                                                     m-type
+                                                                                     class-name
+                                                                                     state))])))
 ;; Assumes all instance&abstract methods of this class have been declared
 ; verify that all of parent's abstract methods are redeclared in this class
 (define verify-abstracts-overridden
@@ -326,10 +320,9 @@
                                                                     state
                                                                     next
                                                                     user-exn)]
-      [else                                  (myerror (format "class `~a` does not override abstract method `~a`"
-                                                              class-name
-                                                              (function->string (first abstract-funs)))
-                                                      state)])))
+      [else                                  (user-exn (ue:unoverridden-abstract class-name
+                                                                                 (function->string (first abstract-funs)))
+                                                       state)])))
 ; whether a class declares an override for a method
 ; to be called on abstract methods of parent
 (define fun-overridden?
@@ -359,7 +352,7 @@
                           (conts-of 
                            #:next     next
                            #:throw    throw
-                           #:user-exn exn))))
+                           #:user-exn user-exn))))
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
@@ -393,11 +386,8 @@
 (define declare-inst-field
   (lambda (class-name var-name state next user-exn)
     (cond
-      [(super-or-this? var-name)                      (myerror (format "Keyword `~a` cannot be used as an instance field name"
-                                                                       var-name)
-                                                               state)]
-      [(state:var-already-declared? var-name state)   (myerror (format "field named `~a` is already declared in this class" var-name)
-                                                               state)]
+      [(super-or-this? var-name)                      (user-exn (ue:keyword-as-identifier var-name '|instance field|) state)]
+      [(state:var-already-declared? var-name state)   (user-exn (ue:duplicate-instance-field var-name) state)]
       [else                                           (next (state:declare-instance-field var-name
                                                                                           class-name
                                                                                           state))])))
@@ -438,9 +428,7 @@
 (define declare-constructor
   (lambda (stmt class-name state next user-exn)
     (if (state:fun-already-declared? class-name (ctor-params stmt) state)
-        (myerror (format "A constructor with signature `~a` has already been declared"
-                         (function:formatted-signature class-name (ctor-params stmt)))
-                 state)
+        (user-exn (ue:duplicate-constructor (function:formatted-signature class-name (ctor-params stmt))) state)
         (next (state:declare-constructor (ctor-params stmt)
                                          (ctor-body stmt)
                                          class-name
@@ -564,7 +552,8 @@
   (lambda (statement state conts)
     (Mvalue (throw-expr-part statement)
             state
-            (conts-of conts #:return (throw conts)))))
+            (conts-of conts
+                      #:return (throw conts)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;   FUNCTION DECLARATION   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -586,11 +575,8 @@
 
 (define Mstate-fun-decl-impl
   (lambda (fun-name fun-params fun-body state conts)
-    ; fun w/ same signature can't be in same scope
     (if (state:fun-already-declared? fun-name fun-params state)
-        (myerror (format "function `~s` is already declared in the current scope."
-                         fun-name)
-                 state)
+        ((user-exn conts) (ue:duplicate-function (function:formatted-signature fun-name fun-params)) state)
         ((next conts) (state:declare-fun fun-name 
                                          fun-params
                                          fun-body
@@ -616,9 +602,7 @@
 ; invokes the break continuation
 (define Mstate-break
   (lambda (statement state conts)
-    (if (break conts)
-        ((break conts) state)
-        ((user-exn conts) ue:break-outside-loop (list 'break)))))
+    ((break conts) state)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CONTINUE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -627,9 +611,7 @@
 ; invokes the continue continuation
 (define Mstate-continue
   (lambda (statement state conts)
-    (if (continue conts)
-        ((continue conts) state)
-        ((user-exn conts) ue:continue-outside-loop (list 'continue)))))
+    ((continue conts) state)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; DECLARE ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -653,12 +635,8 @@
 (define Mstate-var-decl-impl
   (lambda (var-name maybe-expr state conts)
     (cond
-      [(super-or-this? var-name)                      (myerror (format "`~a` cannot be used as a field or variable name"
-                                                                       var-name)
-                                                               state)]
-      [(state:var-already-declared? var-name state)   (myerror (format "`~a` is already declared in the current scope."
-                                                                       var-name)
-                                                               state)]
+      [(super-or-this? var-name)                      ((user-exn conts) (ue:keyword-as-identifier var-name '|field or variable|) state)]
+      [(state:var-already-declared? var-name state)   ((user-exn conts) (ue:duplicate-variable var-name) state)]
       [(null? maybe-expr)                             ((next conts) (state:declare-var var-name state))]
       [else                                           (Mvalue (get maybe-expr)
                                                               state
@@ -879,13 +857,9 @@
 (define read-var-box
   (lambda (name state user-exn)
     (cond
-      [(eq? 'super name)                             (myerror "keyword `super` cannot be used alone an expression" state)]
-      [(not (state:var-declared? name state))        (myerror (format "referenced `~a` before declaring it."
-                                                                      name)
-                                                              state)]
-      [(not (state:var-initialized? name state))     (myerror (format "accessed `~a` before initializing it."
-                                                                      name)
-                                                              state)]
+      [(eq? 'super name)                             (user-exn (ue:keyword-as-identifier 'super 'variable) state)]
+      [(not (state:var-declared? name state))        (user-exn (ue:reference-undeclared-var name) state)]
+      [(not (state:var-initialized? name state))     (user-exn (ue:access-uninitialized-var name) state)]
       [else                                          (state:get-var-box name state)])))
 
 
@@ -912,10 +886,8 @@
   (lambda (expr state conts)
     (Mshared-fun expr
                  state
-                 (conts-of conts
-                           #:next (lambda (s) (myerror (format "Function call `~a` was expected to produce a return value, but did not."
-                                                               (funcall->string expr))
-                                                       s))
+                 (conts-of conts ; todo: refactor funcall arg, move to context stack
+                           #:next (lambda (s) ((user-exn conts) (ue:no-return-value-fun (funcall->string expr)) state))
                            #:return (lambda (v s) ((return conts) v state))))))
 
 ;; given a valid funcall AST node, produces a user-readable
@@ -942,13 +914,13 @@
            (conts-of conts
                      #:return (lambda (n s)
                                 (cond
-                                  [(super-or-this? n)             (myerror (format "calls to `~a` can only appear in the first line of a constructor" n)
-                                                                           s)]
+                                  [(super-or-this? n)             ((user-exn conts) (ue:ctor-chain-outside-ctor n) state)]
                                   [(state:has-fun? n arg-list s)  (Mvalue-fun-impl (state:get-function n arg-list s)
                                                                                    arg-list
                                                                                    state
                                                                                    s
-                                                                                   ; passing state in next, throw and return, because the s returned from fun call was scoped
+                                                                                   ; passing state in next, throw and return,
+                                                                                   ; because the s returned from fun call was scoped
                                                                                    ; aka the continuations that leave the fun-body (return to call-site)
                                                                                    ; boxes handle the side-effects from the function body
                                                                                    ; however s2 has the context-stack during fun body, needed for error messages
@@ -958,26 +930,27 @@
                                                                                     #:throw    (lambda (e s2)
                                                                                                  ((throw conts) e (state:with-context (state:context-stack s2) state)))
                                                                                     #:return   (lambda (v s2) ((return conts) v state))
+                                                                                    #:break    default-break
+                                                                                    #:continue default-continue
                                                                                     #:user-exn (user-exn conts)))]
-                                  [else                           (myerror (format "A function `~a` with ~a parameter(s) is not in scope.~a"
-                                                                                   name
-                                                                                   (length arg-list)
-                                                                                   (let ([similar-funs  (state:all-funs-with-name n state)])
-                                                                                     (if (null? similar-funs)
-                                                                                         ""
-                                                                                         (string-join (map function->string similar-funs)
-                                                                                                      "\n"
-                                                                                                      #:before-first "\nDid you mean one of the following?\n----------\n"
-                                                                                                      #:after-last "\n----------\n"))))
-                                                                           s)]))))))
-
+                                  [else                           ((user-exn conts) (ue:function-not-in-scope name
+                                                                                                              (length arg-list)
+                                                                                                              (get-similar-fun-suggestions n state))
+                                                                                    state)]))))))
+(define get-similar-fun-suggestions
+  (lambda (name state)
+    (let ([similar-funs  (state:all-funs-with-name name state)])
+      (if (null? similar-funs)
+          ""
+          (string-join (map function->string similar-funs)
+                       "\n"
+                       #:before-first "\nDid you mean one of the following?\n----------\n"
+                       #:after-last "\n----------\n")))))
 
 (define Mvalue-fun-impl
   (lambda (fun-closure fun-inputs eval-state state conts)
     (if (function:abstract? fun-closure)
-        (myerror (format "~a is abstract and cannot be invoked."
-                         (function->string fun-closure))
-                 state)
+        ((user-exn conts) (ue:invoke-abstract-method (function->string fun-closure)) state)
         (Mstate-stmt-list (function:body fun-closure) ; needs to run in scope before Mname
                           (get-environment fun-closure
                                            fun-inputs
@@ -999,10 +972,7 @@
                                              l
                                              (state:push-new-layer ((function:scoper fun) out-state))))
                         (lambda (p s)
-                          (myerror (format "Function `~a` expects a reference for `~a`"
-                                           (function->string fun)
-                                           p)
-                                   s)))))
+                          ((user-exn conts) (ue:non-var-in-ref-param (function->string fun) p) s)))))
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
@@ -1026,7 +996,7 @@
                                                                                                        (cons (box v1) bs)))
                                                                                          param-ref-error))))]
       ;; by reference
-      [(eq? 'this (first actual-params)) (myerror "`this` cannot be passed as a reference parameter" eval-state)]
+      [(eq? 'this (first actual-params)) ((user-exn conts) (ue:this-as-ref-param) eval-state)]
       [(name? (first actual-params))     (boxed-arg-list-cps (cddr formal-params)
                                                              (cdr actual-params)
                                                              eval-state
@@ -1071,12 +1041,10 @@
                                                   #:return (lambda (n s2)
                                                              (cond
                                                                [(or (eq? 'super n)
-                                                                    (eq? 'this n))           (myerror (format "`~a` cannot be assigned to" n)
-                                                                                                      s)]
+                                                                    (eq? 'this n))           ((user-exn conts) (ue:assigning-to-this/super n) state)]
                                                                [(state:var-declared? n s2)   ((return conts) v (state:restore-scope #:dest (state:assign-var n v s2)
                                                                                                                                     #:src state))]
-                                                               [else                         (myerror (format "tried to assign to `~a` before declaring it." n)
-                                                                                                      s)])))))))))
+                                                               [else                         ((user-exn conts) (ue:reference-undeclared-var n) state)])))))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   NEW   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1107,8 +1075,10 @@
                                                                         #:next (lambda (s) state)
                                                                         #:return (lambda (v s) state)
                                                                         #:throw (lambda (e s) ((throw conts) e state))
+                                                                        #:break default-break
+                                                                        #:continue default-continue
                                                                         #:user-exn (user-exn conts))))))
-        (myerror (format "`~a` is not a recognized class" class-name) state))))
+        ((user-exn conts) (ue:not-a-class class-name) state))))
 
 (define zero-init-instance
   (lambda (class-name state return)
@@ -1125,20 +1095,18 @@
                   arg-eval-state
                   run-state
                   conts)
-        (myerror (format "class `~a` does not declare a constructor that accepts arguments `~a`"
-                         class-name
-                         (string-join (map (curry format "~a") arg-list)
-                                      ", "
-                                      #:before-first "("
-                                      #:after-last ")"))
-                 arg-eval-state))))
+        ((user-exn conts) (ue:ctor-DNE class-name 
+                                       (string-join (map (curry format "~a") arg-list)
+                                                    ", "
+                                                    #:before-first "("
+                                                    #:after-last ")"))
+                          arg-eval-state))))
 
 ;; Evaluate constructor closure. Recurses into other constructors if necessary
 (define ctor-rec
   (lambda (ctor args class-name ctor-chain arg-eval-state run-state conts)
     (if (member ctor ctor-chain)
-        (myerror "Cyclic constructor chaining. At least one constructor must call super(...)"
-                 arg-eval-state)
+        ((user-exn conts) (ue:cyclic-ctor-chaining) run-state)
         (ctor-rec-impl (function:body ctor)
                        class-name
                        (state:get-parent-name class-name arg-eval-state)
@@ -1181,9 +1149,7 @@
                                                             conts)]
       ; super and no parent -> error
       [(and (start-super? body)
-            (not parent))               (myerror (format "Class `~a` has no parent class, cannot call super constructor."
-                                                         class-name)
-                                                 state)]
+            (not parent))               ((user-exn conts) (ue:super-w/out-parent class-name) state)]
       ; no parent -> init
       [(not parent)                     (Mvalue-fun-impl (state:get-init class-name state)
                                                          '()
@@ -1296,26 +1262,27 @@
                                      (dot-RHS name)
                                      state
                                      conts)]
-      [else               (myerror (format "malformed identifier `~a`" name) state)])))
+      [else               ((user-exn conts) (ue:malformed-identifier name) state)])))
 
 (define Mname-simple
   (lambda (name state conts)
     ; other checks for `this` and `super` must occur at each site that handles names,
     ; in order to give meaningful error messages and support ctor chaining
     (if (and (eq? 'this name) (not (state:instance-context? state)))
-        (myerror "`this` cannot be reference in a free or static context" state)
+        ((user-exn conts) (ue:this/super-in-static name) state)
         ((return conts) name state))))
 
 (define Mname-dot
   (lambda (LHS RHS state conts)
     (cond
-      [(super-or-this? RHS)             (myerror (format "Keyword `~a` cannot appear on the RHS of a dot expression" RHS) state)]
+      [(super-or-this? RHS)             ((user-exn conts) (ue:this/super-dot-RHS RHS) state)]
+      ; todo: rearrange following 2 cases, group error cases and normal cases
       [(eq? 'this LHS)                  (if (state:instance-context? state)
                                             ((return conts) RHS (state:set-this-scope state))
-                                            (myerror "`this` cannot be used in a free or static context" state))]
+                                            ((user-exn conts) (ue:this/super-in-static LHS) state))]
       [(eq? 'super LHS)                 (if (and (state:instance-context? state) (state:current-type-has-parent? state))
                                             ((return conts) RHS (state:set-super-scope state))
-                                            (myerror "`super` cannot be used in the current context" state))]
+                                            ((user-exn conts) (ue:this/super-in-static LHS) state))]
       ; if not symbol, must be instance yielding expr. if symbol and reachable var, must also yield instance
       [(or (not (symbol? LHS))
            (state:var-declared? LHS
@@ -1325,15 +1292,13 @@
                                                           #:return (lambda (v s)
                                                                      ((return conts) RHS (state:set-instance-scope (assert-instance v s (user-exn conts)) s)))))]
       [(state:has-class? LHS state)     ((return conts) RHS (state:set-static-scope LHS state))]
-      [else                             (myerror (format "`~a` is not a reachable class name or variable" LHS) state)])))
+      [else                             ((user-exn conts) (ue:unknown-LHS-dot LHS) state)])))
 
 (define assert-instance 
   (lambda (v s user-exn) 
     (if (is-instance? v) 
-        v 
-        (myerror (format "`~a` is not an instance of a class, cannot apply dot operator"
-                         (prep-val-for-output v))
-                 s))))
+        v
+        (user-exn (ue:non-instance-dot (prep-val-for-output v)) s))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1451,13 +1416,6 @@
    '*  *
    '%  modulo))
 
-
-;;;;;;; Custom error functions
-;; for user-facing errors
-(define myerror
-  (lambda (msg state)
-    (raise-user-error (string-append msg "\n" (state:formatted-stack-trace state)))))
-
 ; symbol n is 'this or 'super
 (define super-or-this?
   (lambda (sym)
@@ -1466,7 +1424,10 @@
 ;;;;;;;; Common Continuations
 
 (define default-return (lambda (v s) (prep-val-for-output v)))
-(define default-user-exn ue:raise-exn)
 ; interpret-parse functions should use the throw cont parameter
-(define default-throw (lambda (e s) (myerror (format "uncaught exception: ~a" e) s)))
+; false -> Mstate-throw throws a user-exn, needs conts for user-exn's context stack
+(define default-throw (lambda (e s) (ue:raise-exn (ue:uncaught-exception e) s)))
+(define default-user-exn ue:raise-exn)
 
+(define default-break (lambda (s) (ue:raise-exn (ue:break-outside-loop) s)))
+(define default-continue (lambda (s) (ue:raise-exn (ue:continue-outside-loop) s)))
