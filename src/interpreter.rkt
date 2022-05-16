@@ -39,7 +39,8 @@
     (interpret-parse-tree-v3 (parser file-name)
                              class-name
                              default-return
-                             default-throw)))
+                             default-throw
+                             default-user-exn)))
 
 ;; interprets parse-trees produced by classParser.rkt
 (define interpret-parse-tree-v3
