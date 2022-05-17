@@ -10,14 +10,14 @@ v1.0.0 - v3.0.1: Duc Huy Nguyen, Eren Kahriman, Loc Nguyen
 v3.0.1+ : Eren Kahriman 
 
 ### Parsers and lexer:
-The 3 parsers and lexers are lightly modified copies of those given in the assignment.
+The 3 parsers and lexer are lightly modified copies of those given in the assignment.
 They were modified to also support string form programs.
 
 ## Language Features:
 - Dynamic typing
 - Stack trace for user errors
 ### Stack trace examples:
-
+---
 ```
 (interpret-v3-str "
 class A {
@@ -33,8 +33,7 @@ results in
 Cyclic constructor chaining. At least one constructor must call super(...)
 stack trace: top-level -> A::main() -> new A(x, y, z) -> new A() -> new A(x) -> new A(x, y)
 ```
-
-
+---
 ```
 (interpret-v3-str "
 class A {
@@ -74,7 +73,7 @@ C::foo(a, &b, c, &d, e, f, g)
 
 stack trace: top-level -> C::main()
 ```
-
+---
 
 ```
 (interpret-v3-str "
@@ -106,7 +105,7 @@ results in
 uncaught exception: 5
 stack trace: top-level -> C::main() -> new B() -> B::init() -> B::f1() -> B::f2(x, &y) -> new A(a, &b, c)
 ```
-
+---
 
 ```
 (interpret-v2-str "
@@ -128,7 +127,8 @@ stack trace: top-level -> main()
 - Basic Arithmetic and Logical operators
 - Short-circuiting || and &&
 - Variables
-- If, While, Try, block statements
+  - nestable assignment expressions
+- If, While, Try-catch-finally, block statements
 
 #### Sample
 ```js
@@ -173,10 +173,15 @@ function foo(x, y) {
 var globalVar = foo();
 
 function main() {
-  return globalVar + foo(100 * foo(), 1000);
+  
+  function foo(a, b, c) {
+    return a*b*c;
+  }
+  
+  return globalVar + foo(100 * foo(), 1000) + foo(1, 2, 5);
 }
 ```
-returns 1101
+returns 1111
 
 ### V3
 - V2 features
