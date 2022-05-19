@@ -77,10 +77,10 @@
                       new-state
                       (conts-of
                        #:return return
-                       #:next (lambda (s) (raise-user-error "reached end of program without return"))
+                       #:next (lambda (s) (user-exn (ue:did-not-return) s))
                        #:throw throw
-                       #:break default-break
-                       #:continue default-continue
+                       #:break (default-break user-exn)
+                       #:continue (default-continue user-exn)
                        #:user-exn user-exn))))
 
 ;; takes a value and modifies it for output
@@ -107,15 +107,16 @@
 ; should be run after executing all other top-level statements
 (define Mstate-main
   (lambda (state return throw user-exn #:class [class #f])
-    (Mvalue-fun '(funcall main)
-                (cond
-                  [(not class)                     state]
-                  [(state:has-class? class state)  (state:set-static-scope class state)]
-                  [else                            (user-exn (ue:not-a-class class) state)])
-                (conts-of
-                 #:throw throw
-                 #:return return
-                 #:user-exn user-exn))))
+    (if (and class (not (state:has-class? class state)))
+        (user-exn (ue:not-a-class class) state)
+        (Mvalue-fun '(funcall main)
+                    (if class
+                        (state:set-static-scope class state)
+                        state)
+                    (conts-of
+                     #:throw throw
+                     #:return return
+                     #:user-exn user-exn)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -183,7 +184,7 @@
                                                                (next conts)
                                                                (throw conts)
                                                                (user-exn conts))]
-      [else                                   ((user-exn conts) (ue:not-a-class class-name) state)])))
+      [else                                   ((user-exn conts) (ue:not-a-class parent) state)])))
 
 
 
@@ -650,7 +651,7 @@
 (define Mstate-var-decl-impl
   (lambda (var-name maybe-expr state conts)
     (cond
-      [(super-or-this? var-name)                      ((user-exn conts) (ue:keyword-as-identifier var-name '|field or variable|) state)]
+      [(super-or-this? var-name)                      ((user-exn conts) (ue:keyword-as-identifier var-name 'variable) state)]
       [(state:var-already-declared? var-name state)   ((user-exn conts) (ue:duplicate-variable var-name) state)]
       [(null? maybe-expr)                             ((next conts) (state:declare-var var-name state))]
       [else                                           (Mvalue (get maybe-expr)
@@ -787,7 +788,7 @@
 ;; error if not bool
 (define Mbool
   (lambda (expr state conts)
-    (Mbool-impl expr state (w/preproc conts #:map-value assert-bool))))
+    (Mbool-impl expr state (w/preproc conts #:map-value assert-bool)))) ; todo, refactor assert-bool to use user-exn
 ; Like Mvalue, but produces bool else error, and handles short-circuiting
 (define Mbool-impl
   (lambda (expr state conts)
@@ -859,8 +860,10 @@
   (lambda (expr state conts)
     (Mname expr state (conts-of conts
                                 #:return (lambda (n s)
-                                           ((return conts) (read-var-box n s (user-exn conts))
-                                                           state))))))
+                                           (read-var-box n
+                                                         s
+                                                         (λ (v s) ((return conts) v state))
+                                                         (user-exn conts)))))))
 
 (define Mvalue-var
   (lambda (expr state conts)
@@ -870,12 +873,12 @@
 ;; Given a simple name, retrieves box/value of a var from state
 ;; throws appropriate errors if undeclared or uninitialized
 (define read-var-box
-  (lambda (name state user-exn)
+  (lambda (name state return user-exn)
     (cond
       [(eq? 'super name)                             (user-exn (ue:keyword-as-identifier 'super 'variable) state)]
       [(not (state:var-declared? name state))        (user-exn (ue:reference-undeclared-var name) state)]
       [(not (state:var-initialized? name state))     (user-exn (ue:access-uninitialized-var name) state)]
-      [else                                          (state:get-var-box name state)])))
+      [else                                          (return (state:get-var-box name state) state)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; LITERALS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -945,8 +948,8 @@
                                                                                     #:throw    (lambda (e s2)
                                                                                                  ((throw conts) e (state:with-context (state:context-stack s2) state)))
                                                                                     #:return   (lambda (v s2) ((return conts) v state))
-                                                                                    #:break    default-break
-                                                                                    #:continue default-continue
+                                                                                    #:break    (default-break (user-exn conts))
+                                                                                    #:continue (default-continue (user-exn conts))
                                                                                     #:user-exn (user-exn conts)))]
                                   [else                           ((user-exn conts) (ue:function-not-in-scope name
                                                                                                               (length arg-list)
@@ -1078,26 +1081,20 @@
   (lambda (class-name arg-list state conts)
     (if (state:has-class? class-name state)
         ; changes to instance during constructors are handled by boxes
-        (zero-init-instance class-name
-                            state
-                            (lambda (inst)
-                              ((return conts) inst (construct-instance class-name
-                                                                       arg-list
-                                                                       '()
-                                                                       state
-                                                                       (state:set-instance-scope inst state)
-                                                                       (conts-of
-                                                                        #:next (lambda (s) state)
-                                                                        #:return (lambda (v s) state)
-                                                                        #:throw (lambda (e s) ((throw conts) e state))
-                                                                        #:break default-break
-                                                                        #:continue default-continue
-                                                                        #:user-exn (user-exn conts))))))
+        (let ([inst  (state:get-zero-init-instance class-name state)])
+          (construct-instance class-name
+                              arg-list
+                              '()
+                              state
+                              (state:set-instance-scope inst state)
+                              (conts-of
+                               #:next (lambda (s) ((return conts) inst state))
+                               #:return (lambda (v s) ((return conts) inst state))
+                               #:throw (lambda (e s) ((throw conts) e state))
+                               #:break (default-break (user-exn conts))
+                               #:continue (default-continue (user-exn conts))
+                               #:user-exn (user-exn conts))))
         ((user-exn conts) (ue:not-a-class class-name) state))))
-
-(define zero-init-instance
-  (lambda (class-name state return)
-    (return (state:get-zero-init-instance class-name state))))
 
 ;; Search for constructor and run. Error if absent
 (define construct-instance
@@ -1305,14 +1302,18 @@
                                                 state
                                                 (conts-of conts
                                                           #:return (lambda (v s)
-                                                                     ((return conts) RHS (state:set-instance-scope (assert-instance v s (user-exn conts)) s)))))]
+                                                                     (assert-instance v
+                                                                                      s
+                                                                                      (λ (v s)
+                                                                                        ((return conts) RHS (state:set-instance-scope v s)))
+                                                                                      (user-exn conts)))))]
       [(state:has-class? LHS state)     ((return conts) RHS (state:set-static-scope LHS state))]
       [else                             ((user-exn conts) (ue:unknown-LHS-dot LHS) state)])))
 
 (define assert-instance 
-  (lambda (v s user-exn) 
+  (lambda (v s return user-exn) 
     (if (is-instance? v) 
-        v
+        (return v s)
         (user-exn (ue:non-instance-dot (prep-val-for-output v)) s))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1444,5 +1445,9 @@
 (define default-throw (lambda (e s) (ue:raise-exn (ue:uncaught-exception e) s)))
 (define default-user-exn ue:raise-exn)
 
-(define default-break (lambda (s) (ue:raise-exn (ue:break-outside-loop) s)))
-(define default-continue (lambda (s) (ue:raise-exn (ue:continue-outside-loop) s)))
+(define default-break
+  (lambda (user-exn)
+    (lambda (s) (user-exn (ue:break-outside-loop) s))))
+(define default-continue
+  (lambda (user-exn)
+    (lambda (s) (user-exn (ue:continue-outside-loop) s))))

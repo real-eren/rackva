@@ -46,14 +46,18 @@
     (lambda (e s)
       (ue e ('todo context s)))))
 
-;; exception constructors
 (define exn:of
   (lambda (type fmt-proc keys values)
     (foldl map:put
-             (map:of 'type      type
-                     'fmt-proc  fmt-proc)
-             keys
-             values)))
+           (map:of 'type      type
+                   'fmt-proc  fmt-proc)
+           keys
+           values)))
+
+(define type
+  (lambda (exn)
+    (map:get 'type exn)))
+
 
 (define formatter
   (lambda (fmt-str keys)
@@ -80,9 +84,15 @@
   (exn:ctor type:continue-outside-loop
             "continue statement outside of loop"))
 
+; currently just for v1. v2 and v3's main() are covered by `no-return-value-fun`
+(define type:did-not-return 'did-not-return)
+(define did-not-return
+  (exn:ctor type:did-not-return
+            "Program did not reach a return statement"))
+
 (define type:uncaught-exception 'uncaught-exception)
 (define uncaught-exception
-  (exn:ctor type:continue-outside-loop
+  (exn:ctor type:uncaught-exception
             "uncaught exception: ~a"
             'exn-val))
 
@@ -205,13 +215,13 @@
 
 (define type:this/super-in-static 'this/super-in-static)
 (define this/super-in-static
-  (exn:ctor type:assigning-to-this/super
+  (exn:ctor type:this/super-in-static
             "`~a` cannot be referenced in a free or static context"
             'name))
 
 (define type:this/super-dot-RHS 'this/super-dot-RHS)
 (define this/super-dot-RHS
-  (exn:ctor type:assigning-to-this/super
+  (exn:ctor type:this/super-dot-RHS
             "Keyword `~a` cannot appear on the RHS of a dot expression"
             'name))
 
