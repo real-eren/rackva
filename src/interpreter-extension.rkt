@@ -18,58 +18,23 @@
 ;; and thus would not function properly in the environment used for grading
 
 
-;; takes a string representing a program, interprets it
-;; returns the result
-; extra white space, including new lines, is ignored
-; ex:
-; (interpret-str "
-; line1
-; line2")
+(define interpret-template
+  (lambda (interpret-proc parse-proc)
+    (lambda (input
+             #:return [return default-return]
+             #:throw [throw default-throw]
+             #:user-exn [user-exn default-user-exn]
+             . args)
+      (apply interpret-proc (parse-proc input) (append args (list return throw user-exn))))))
 
-(define interpret-v1-str
-  (lambda (str [return default-return] [throw default-throw] [user-exn default-user-exn])
-    (interpret-parse-tree-v1 (simple:parser-str str)
-                             return
-                             throw
-                             user-exn)))
+(define interpret-v1-str  (interpret-template interpret-parse-tree-v1 simple:parser-str))
+(define interpret-v1-file (interpret-template interpret-parse-tree-v1 simple:parser))
 
-(define interpret-v1-file
-  (lambda (filename [return default-return] [throw default-throw] [user-exn default-user-exn])
-    (interpret-parse-tree-v1 (simple:parser filename)
-                             return
-                             throw
-                             user-exn)))
+(define interpret-v2-str  (interpret-template interpret-parse-tree-v2 function:parser-str))
+(define interpret-v2-file (interpret-template interpret-parse-tree-v2 function:parser))
 
-
-(define interpret-v2-str
-  (lambda (str [return default-return] [throw default-throw] [user-exn default-user-exn])
-    (interpret-parse-tree-v2 (function:parser-str str)
-                             return
-                             throw
-                             user-exn)))
-
-(define interpret-v2-file
-  (lambda (filename [return default-return] [throw default-throw] [user-exn default-user-exn])
-    (interpret-parse-tree-v2 (function:parser filename)
-                             return
-                             throw
-                             user-exn)))
-
-(define interpret-v3-str
-  (lambda (str entry-point [return default-return] [throw default-throw] [user-exn default-user-exn])
-    (interpret-parse-tree-v3 (class:parser-str str)
-                             entry-point
-                             return
-                             throw
-                             user-exn)))
-
-(define interpret-v3-file
-  (lambda (filename entry-point [return default-return] [throw default-throw] [user-exn default-user-exn])
-    (interpret-parse-tree-v3 (class:parser filename)
-                             entry-point
-                             return
-                             throw
-                             user-exn)))
+(define interpret-v3-str  (interpret-template interpret-parse-tree-v3 class:parser-str))
+(define interpret-v3-file (interpret-template interpret-parse-tree-v3 class:parser))
 
 ;; str equivalent of the `interpret` function provided by `interpreter`
 ;; AKA latest version of interpret
