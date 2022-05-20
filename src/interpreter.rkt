@@ -695,29 +695,62 @@
 
 (define Mstate-try-impl
   (lambda (try-body catch-block finally-block state conts)
+    
+    (define (try-next default-cont)
+      (if (null? finally-block)
+          default-cont
+          (lambda (s)
+            (Mstate-block-impl (finally-body finally-block)
+                               s
+                               (conts-of conts
+                                         #:next default-cont)))))
+    
+    (define (finally-next next)
+      (lambda (s)
+        (Mstate-block-impl (finally-body finally-block)
+                           s
+                           (conts-of conts #:next next))))
+    
+    (define try-throw
+      (lambda (e s)
+        (define old-cs-state (state:with-context (state:context-stack state) s))
+        (cond
+          [(null? catch-block)   (Mstate-block-impl (finally-body finally-block)
+                                                    old-cs-state
+                                                    (conts-of conts
+                                                              #:next (lambda (s2)
+                                                                       ((throw conts) e (state:with-context (state:context-stack s) s2)))))]
+          [(null? finally-block) (Mstate-block-impl (catch-body catch-block)
+                                                    (state:declare-var-with-value (catch-var catch-block)
+                                                                                  e
+                                                                                  old-cs-state)
+                                                    conts)]
+          [else                  (Mstate-block-impl (catch-body catch-block)
+                                                    (state:declare-var-with-value (catch-var catch-block)
+                                                                                  e
+                                                                                  old-cs-state)
+                                                    (conts-of conts ; during catch, before finally
+                                                              #:next (finally-next (next conts))
+                                                              #:break (finally-next (break conts))
+                                                              #:continue (finally-next (continue conts))
+                                                              #:throw (lambda (e2 s2)
+                                                                        (Mstate-block-impl (finally-body finally-block)
+                                                                                           s2
+                                                                                           (conts-of conts
+                                                                                                     #:next (lambda (s3)
+                                                                                                              ((throw conts) e2 s3)))))
+                                                              #:return (lambda (v s2)
+                                                                         (Mstate-block-impl (finally-body finally-block)
+                                                                                            s2
+                                                                                            (conts-of conts
+                                                                                                      #:next (lambda (s3)
+                                                                                                               ((return conts) v s3)))))))])))
     (Mstate-block-impl try-body
                        state
                        (conts-of conts
-                                 #:next (if (null? finally-block)
-                                            (next conts)
-                                            (lambda (s)
-                                              (Mstate-block-impl (finally-body finally-block)
-                                                                 s
-                                                                 conts)))
-                                 #:break (if (null? finally-block)
-                                             (break conts)
-                                             (lambda (s)
-                                               (Mstate-block-impl (finally-body finally-block)
-                                                                  s
-                                                                  (conts-of conts
-                                                                            #:next (break conts)))))
-                                 #:continue (if (null? finally-block)
-                                                (continue conts)
-                                                (lambda (s)
-                                                  (Mstate-block-impl (finally-body finally-block)
-                                                                     s
-                                                                     (conts-of conts
-                                                                               #:next (continue conts)))))
+                                 #:next (try-next (next conts))
+                                 #:break (try-next (break conts))
+                                 #:continue (try-next (continue conts))
                                  #:return (if (null? finally-block)
                                               (return conts)
                                               (lambda (v s)
@@ -726,51 +759,7 @@
                                                                    (conts-of conts
                                                                              #:next (lambda (s2)
                                                                                       ((return conts) v s2))))))
-                                 #:throw (cond
-                                           [(null? catch-block)     (lambda (e s)
-                                                                      (Mstate-block-impl (finally-body finally-block)
-                                                                                         (state:with-context (state:context-stack state) s)
-                                                                                         (conts-of conts
-                                                                                                   #:next (lambda (s2)
-                                                                                                            ((throw conts) e (state:with-context (state:context-stack s) s2))))))]
-                                           [(null? finally-block)   (lambda (e s)
-                                                                      (Mstate-block-impl (catch-body catch-block)
-                                                                                         (state:declare-var-with-value (catch-var catch-block)
-                                                                                                                       e
-                                                                                                                       (state:with-context (state:context-stack state) s))
-                                                                                         conts))]
-                                           [else                    (lambda (e s)
-                                                                      (Mstate-block-impl (catch-body catch-block)
-                                                                                         (state:declare-var-with-value (catch-var catch-block)
-                                                                                                                       e
-                                                                                                                       (state:with-context (state:context-stack state) s))
-                                                                                         (conts-of conts ; after catch, before finally
-                                                                                                   #:next (lambda (s2)
-                                                                                                            (Mstate-block-impl (finally-body finally-block)
-                                                                                                                               s2
-                                                                                                                               conts))
-                                                                                                   #:break (lambda (s2)
-                                                                                                             (Mstate-block-impl (finally-body finally-block)
-                                                                                                                                s2
-                                                                                                                                (conts-of conts
-                                                                                                                                          #:next (break conts))))
-                                                                                                   #:continue (lambda (s2)
-                                                                                                                (Mstate-block-impl (finally-body finally-block)
-                                                                                                                                   s2
-                                                                                                                                   (conts-of conts
-                                                                                                                                             #:next (continue conts))))
-                                                                                                   #:throw (lambda (e2 s2)
-                                                                                                             (Mstate-block-impl (finally-body finally-block)
-                                                                                                                                s2
-                                                                                                                                (conts-of conts
-                                                                                                                                          #:next (lambda (s3)
-                                                                                                                                                   ((throw conts) e2 s3)))))
-                                                                                                   #:return (lambda (v s2)
-                                                                                                              (Mstate-block-impl (finally-body finally-block)
-                                                                                                                                 s2
-                                                                                                                                 (conts-of conts
-                                                                                                                                           #:next (lambda (s3)
-                                                                                                                                                    ((return conts) v s3))))))))])))))
+                                 #:throw try-throw))))
 
 
 
@@ -842,7 +831,6 @@
 (define Mvalue
   (lambda (expr state conts)
     (cond
-      [(null? expr)                         (error "called Mvalue on a null expression")]
       [(or (number? expr)
            (eq? 'true expr)
            (eq? 'false expr))               (Mvalue-literal expr state conts)]
@@ -927,30 +915,32 @@
 
 (define Mshared-fun-impl
   (lambda (name arg-list state conts)
+    (define (on-hit n s)
+      (Mvalue-fun-impl (state:get-function n arg-list s)
+                       arg-list
+                       state
+                       s
+                       ; passing state in next, throw and return,
+                       ; because the s returned from fun call was scoped
+                       ; aka the continuations that leave the fun-body (return to call-site)
+                       ; boxes handle the side-effects from the function body
+                       ; however s2 has the context-stack during fun body, needed for error messages
+                       ; continue, break and throw need s2's context stack
+                       (conts-of
+                        #:next     (lambda (s2) ((next conts) state))
+                        #:throw    (lambda (e s2)
+                                     ((throw conts) e (state:with-context (state:context-stack s2) state)))
+                        #:return   (lambda (v s2) ((return conts) v state))
+                        #:break    (default-break (user-exn conts))
+                        #:continue (default-continue (user-exn conts))
+                        #:user-exn (user-exn conts))))
     (Mname name
            state
            (conts-of conts
                      #:return (lambda (n s)
                                 (cond
                                   [(super-or-this? n)             ((user-exn conts) (ue:ctor-chain-outside-ctor n) state)]
-                                  [(state:has-fun? n arg-list s)  (Mvalue-fun-impl (state:get-function n arg-list s)
-                                                                                   arg-list
-                                                                                   state
-                                                                                   s
-                                                                                   ; passing state in next, throw and return,
-                                                                                   ; because the s returned from fun call was scoped
-                                                                                   ; aka the continuations that leave the fun-body (return to call-site)
-                                                                                   ; boxes handle the side-effects from the function body
-                                                                                   ; however s2 has the context-stack during fun body, needed for error messages
-                                                                                   ; continue, break and throw need s2's context stack
-                                                                                   (conts-of
-                                                                                    #:next     (lambda (s2) ((next conts) state))
-                                                                                    #:throw    (lambda (e s2)
-                                                                                                 ((throw conts) e (state:with-context (state:context-stack s2) state)))
-                                                                                    #:return   (lambda (v s2) ((return conts) v state))
-                                                                                    #:break    (default-break (user-exn conts))
-                                                                                    #:continue (default-continue (user-exn conts))
-                                                                                    #:user-exn (user-exn conts)))]
+                                  [(state:has-fun? n arg-list s)  (on-hit n s)]
                                   [else                           ((user-exn conts) (ue:function-not-in-scope name
                                                                                                               (length arg-list)
                                                                                                               (get-similar-fun-suggestions n state))
@@ -969,13 +959,15 @@
   (lambda (fun-closure fun-inputs eval-state state conts)
     (if (function:abstract? fun-closure)
         ((user-exn conts) (ue:invoke-abstract-method (function->string fun-closure)) state)
-        (Mstate-stmt-list (function:body fun-closure) ; needs to run in scope before Mname
-                          (get-environment fun-closure
-                                           fun-inputs
-                                           eval-state
-                                           (state:set-fun-call-context fun-closure state)
-                                           conts)
-                          conts))))
+        (get-environment fun-closure
+                         fun-inputs
+                         eval-state
+                         (state:set-fun-call-context fun-closure state)
+                         (conts-of conts
+                                   #:next (lambda (s)
+                                            (Mstate-stmt-list (function:body fun-closure)
+                                                              s
+                                                              conts)))))))
 
 
 ;; Evaluates parameters and produces the state in which the function body will be evaluated
@@ -986,9 +978,9 @@
                         eval-state
                         conts
                         (lambda (p l)
-                          (bind-boxed-params p
-                                             l
-                                             (state:push-new-layer ((function:scoper fun) out-state))))
+                          ((next conts) (bind-boxed-params p
+                                                           l
+                                                           (state:push-new-layer ((function:scoper fun) out-state)))))
                         (lambda (p s)
                           ((user-exn conts) (ue:non-var-in-ref-param (function->string fun) p) s)))))
 
@@ -1119,20 +1111,30 @@
   (lambda (ctor args class-name ctor-chain arg-eval-state run-state conts)
     (if (member ctor ctor-chain)
         ((user-exn conts) (ue:cyclic-ctor-chaining) run-state)
-        (ctor-rec-impl (function:body ctor)
-                       class-name
-                       (state:get-parent-name class-name arg-eval-state)
-                       (cons ctor ctor-chain)
-                       (get-environment ctor
-                                        args
-                                        arg-eval-state
-                                        (state:set-fun-call-context ctor run-state)
-                                        conts)
-                       conts))))
+        (get-environment ctor
+                         args
+                         arg-eval-state
+                         (state:set-fun-call-context ctor run-state)
+                         (conts-of conts
+                                   #:next (lambda (s)
+                                            (ctor-rec-impl (function:body ctor)
+                                                           class-name
+                                                           (state:get-parent-name class-name arg-eval-state)
+                                                           (cons ctor ctor-chain)
+                                                           s
+                                                           conts)))))))
 
 (define ctor-rec-impl
   (lambda (body class-name parent ctor-chain state conts)
     ; recursively do parent constructors + inits
+    (define next
+      (lambda (s)
+        (Mstate-stmt-list (if (or (start-super? body)
+                                  (start-this? body))
+                              (cdr body)
+                              body)
+                          state
+                          conts)))
     (ctor-pre-body body
                    class-name
                    parent
@@ -1140,17 +1142,19 @@
                    state
                    (conts-of conts
                              ; then do body of current constructor
-                             #:next (lambda (s)
-                                      (Mstate-stmt-list (if (or (start-super? body)
-                                                                (start-this? body))
-                                                            (cdr body)
-                                                            body)
-                                                        state
-                                                        conts))))))
+                             #:next next
+                             #:return (λ (v s) (next s))))))
 ;; handles pre-body: super+init | this
 ; init function was generated, and will not contain a return statement
 (define ctor-pre-body
   (lambda (body class-name parent ctor-chain state conts)
+    (define super-next
+      (lambda (s)
+        (Mvalue-fun-impl (state:get-init class-name state)
+                         '()
+                         state
+                         state
+                         conts)))
     (cond
       ; this -> run that ctor
       [(start-this? body)               (construct-instance class-name
@@ -1177,12 +1181,8 @@
                                                             state
                                                             state
                                                             (conts-of conts
-                                                                      #:next (lambda (s)
-                                                                               (Mvalue-fun-impl (state:get-init class-name state)
-                                                                                                '()
-                                                                                                state
-                                                                                                state
-                                                                                                conts))))])))
+                                                                      #:next super-next
+                                                                      #:return (lambda (v s) (super-next s))))])))
 
 ; assumes every statement in a function body is nested and has at least 2 elems
 ;; is the first statement of a ctor body this(...) or super(...)
