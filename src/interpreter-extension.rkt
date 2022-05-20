@@ -5,18 +5,11 @@
          (prefix-in function: "functionParser.rkt")
          (prefix-in class: "classParser.rkt"))
 
-(provide interpret-str
-         interpret-v1-str
-         interpret-v1-file
-         interpret-v2-str
-         interpret-v2-file
-         interpret-v3-str
-         interpret-v3-file)
+(provide (all-defined-out))
   
 ;; Useful functions not in the scope of the interpreter project
 ;; Some depend on a modified copy of lex and the parsers,
 ;; and thus would not function properly in the environment used for grading
-
 
 (define interpret-template
   (lambda (interpret-proc parse-proc)
@@ -26,6 +19,7 @@
              #:user-exn [user-exn default-user-exn]
              . args)
       (apply interpret-proc (parse-proc input) (append args (list return throw user-exn))))))
+
 
 (define interpret-v1-str  (interpret-template interpret-parse-tree-v1 simple:parser-str))
 (define interpret-v1-file (interpret-template interpret-parse-tree-v1 simple:parser))

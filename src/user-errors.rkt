@@ -28,10 +28,10 @@
 ;
 
 (define raise-exn
-  (lambda (exn s)
+  (lambda (exn cs)
     (raise-user-error (format "Error: ~a~nSource:~n~a"
                               (exn->string exn)
-                              (context-stack->string (state:context-stack s))))))
+                              (context-stack->string cs)))))
 
 (define exn->string
   (lambda (exn)

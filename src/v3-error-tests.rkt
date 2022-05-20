@@ -9,7 +9,7 @@
     (define user-exn (λ (exn s) exn))
     (interpret-v3-str program
                       class
-                      #:return (λ (v s) (error "expected an error"))
+                      #:return (λ (v s) (fail-check "expected an error"))
                       #:user-exn user-exn
                       #:throw (λ (e s) (user-exn (ue:uncaught-exception e) s)))))
 

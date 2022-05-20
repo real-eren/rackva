@@ -313,7 +313,7 @@
      (and (not (dotted? state))
           (var-table:get-box name (global-vars state))))))
 
-;; Assumes `this` is an instance of `type` (same or sub-class)
+;; Assumes `this` is an instance of `class-name` (same or sub-class)
 (define get-instance-field-box
   (lambda (name this class-name state)
     (ormap (curry var-table:get-box name)
