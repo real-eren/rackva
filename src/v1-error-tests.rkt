@@ -1,58 +1,68 @@
 #lang racket/base
 
 (require "interpreter-extension.rkt"
-         "util/testing.rkt")
+         "user-errors.rkt"
+         rackunit)
 
 
-(define error-file (make-error-tester interpret-v1-file))
-(define error-str (make-error-tester interpret-v1-str))
+(define i
+  (lambda (program)
+    (define user-exn (λ (exn s) exn))
+    (interpret-v1-str program
+                      #:return (λ (v s) (error "expected an error"))
+                      #:user-exn user-exn
+                      #:throw (λ (e s) (user-exn (ue:uncaught-exception e) s)))))
 
-; ; Error Tests
+(test-case
+ "accessing var before declaring it"
+ (define exn (i "return x;"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "accessing var before declaring it"
-           #:catch #t
-           "return x;")
-
-(error-str #:id "assign w/out declaring, statement"
-           #:catch #t
-           "
+(test-case
+ "assign w/out declaring, statement"
+ (define exn (i "
 var x = 1;
 y = 10 + x;
-return y;")
+return y;"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "assign w/out declaring, expression"
-           #:catch #t
-           "
+(test-case
+ "assign w/out declaring, expression"
+ (define exn (i "
 var x = 1;
-return (y = 10 + x);")
+return (y = 10 + x);"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "reference w/out declare or initializing"
-           #:catch #t
-           "
+(test-case
+ "reference w/out declare or initializing"
+ (define exn (i "
 var y;
 y = x;
-return y;")
+return y;"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
 
-(error-str #:id "reference w/out initializing"
-           #:catch #t
-           "
+(test-case
+ "reference w/out initializing"
+ (define exn (i "
 var x;
 var y;
 x = x + y;
-return x;")
+return x;"))
+ (check-equal? (ue:type exn) ue:type:access-uninitialized-var))
 
-(error-str #:id "redeclare in same scope"
-           #:catch #t
-           "
+(test-case
+ "redeclare in same scope"
+ (define exn (i "
 var x = 10;
 var y = 20;
 var x = x + y;
-return x;")
+return x;"))
+ (check-equal? (ue:type exn) ue:type:duplicate-variable))
 
-(error-str #:id "var in block not accessible from subsequent outer scope"
-           #:catch #t
-           "
+(test-case
+ "var in block not accessible from subsequent outer scope"
+ (define exn (i "
 var x = 10;
 var y = 4;
 if (x < y) {
@@ -61,31 +71,34 @@ if (x < y) {
 else {
   var min = y;
 }
-return min;")
+return min;"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
 
-(error-str #:id "var in block can't access undeclared var"
-           #:catch #t
-           "
+(test-case
+ "var in block can't access undeclared var"
+ (define exn (i "
 if (true) {
   a = 0;
 }
-return a;")
+return a;"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "var in block not accessible in later block (same depth in stack)"
-           #:catch #t
-           "
+(test-case
+ "var in block not accessible in later block (same depth in stack)"
+ (define exn (i "
 if (true) {
   var a = 0;
 }
 if (true) {
   a = 2;
 }
-return a;")
+return a;"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "var declared in first iter of while loop doesn't persist through later iters)"
-           #:catch #t
-           "
+(test-case
+ "var declared in first iter of while loop doesn't persist through later iters"
+ (define exn (i "
 var x = 0;
 while (x < 5) {
   if (x != 0) {
@@ -94,29 +107,33 @@ while (x < 5) {
   var a = 5;
   x = x + 1;
 }
-return 0;")
+return 0;"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "break outside of loop"
-           #:catch #t
-           "
+(test-case
+ "break outside of loop"
+ (define exn (i "
 var x = 1;
 break;
-return x;")
+return x;"))
+ (check-equal? (ue:type exn) ue:type:break-outside-loop))
 
-(error-str #:id "continue outside of loop"
-           #:catch #t
-           "
+(test-case
+ "continue outside of loop"
+ (define exn (i "
 var x = 1;
 continue;
-return x;")
+return x;"))
+ (check-equal? (ue:type exn) ue:type:continue-outside-loop))
 
-(error-str #:id "Top-level throw"
-           #:catch #t
-           "throw 1;")
+(test-case
+ "Top-level throw"
+ (define exn (i "throw 1;"))
+ (check-equal? (ue:type exn) ue:type:uncaught-exception))
 
-(error-str #:id "Uncaught throw in (entered) catch block"
-           #:catch #t
-           "
+(test-case
+ "Uncaught throw in (entered) catch block"
+ (define exn (i "
 var x = 10;
 var result = 1;
 try {
@@ -130,11 +147,12 @@ try {
 catch (ex) {
   throw 1;
 }
-return result;")
+return result;"))
+ (check-equal? (ue:type exn) ue:type:uncaught-exception))
 
-(error-str #:id "break exit from block pops frame"
-           #:catch #t
-           "
+(test-case
+ "break exit from block pops frame"
+ (define exn (i "
 var x = 0;
 while (true) {
   x = x + 1;
@@ -144,11 +162,12 @@ while (true) {
   }
 }
 return a;
-")
+"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "continue in while body block, pop frame"
-           #:catch #t
-           "
+(test-case
+ "continue in while body block, pop frame"
+ (define exn (i "
 var x = 1;
 var y = 2;
 if (x < y) {
@@ -164,11 +183,12 @@ if (x < y) {
   }
 }
 return x;
-")
+"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "throw in block, should pop frame. var from try not visible in catch"
-           #:catch #t
-           "
+(test-case
+ "throw in block, should pop frame. var from try not visible in catch"
+ (define exn (i "
 try {
   var a = 1;
   throw 0;
@@ -176,11 +196,12 @@ try {
 catch (e) {
   return a;
 }
-")
+"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "throw in block, should pop frame. var from try not visible in finally"
-           #:catch #t
-           "
+(test-case
+ "throw in block, should pop frame. var from try not visible in finally"
+ (define exn (i "
 try {
   var a = 1;
   throw 0;
@@ -190,8 +211,11 @@ catch (e) {
 finally {
   return a;
 }
-")
+"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "program without return statement"
-           #:catch #t
-           "var x = 2;")
+(test-case
+ "program without return statement"
+ (define exn (i "var x = 2;"))
+ (check-equal? (ue:type exn) ue:type:did-not-return))
+

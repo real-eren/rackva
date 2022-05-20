@@ -1,58 +1,61 @@
 #lang racket/base
 
 (require "interpreter-extension.rkt"
-         "util/testing.rkt")
+         rackunit)
 
-; white space / newlines do not affect the parser,
-; but are included for readability
-(define test-file (make-tester interpret-v2-file))
-(define test-str (make-tester interpret-v2-str))
+(define i interpret-v2-str)
 
 ; ; Simple Tests
 
-(test-str #:id "return a number literal"
-          150 "
+(test-equal? "return a number literal"
+             (i "
 function main() {
   return 150;
 }")
+             150)
 
-(test-str #:id "return a boolean literal"
-          'true "
+(test-equal? "return a boolean literal"
+             (i "
 function main() {
   return true;
 }")
+             'true)
 
-(test-str #:id "return a nested expression"
-          -4 "
+(test-equal? "return a nested expression"
+             (i "
 function main() {
   return 6 * (8 + (5 % 3)) / 11 - 9;
 }")
+             -4)
 
-(test-str #:id "declare, assign a literal, return"
-          10 "
+(test-equal? "declare, assign a literal, return"
+             (i "
 function main() {
   var z;
   z = 10;
   return z;
 }")
+             10)
 
-(test-str #:id "declare with expression value, return"
-          16 "
+(test-equal? "declare with expression value, return"
+             (i "
 function main() {
   var x = (5 * 7 - 3) / 2;
   return x;
 }")
+             16)
 
-(test-str #:id "declare w/ literal, declare w/ reference to prior var, return product"
-          220 "
+(test-equal? "declare w/ literal, declare w/ reference to prior var, return product"
+             (i "
 function main() {
   var x = 10;
   var y = 12 + x;
   return x * y;
 }")
+             220)
 
-(test-str #:id "assign in if statement, <= op"
-          5 "
+(test-equal? "assign in if statement, <= op"
+             (i "
 function main() {
   var x = 5;
   var y = 6;
@@ -63,9 +66,10 @@ function main() {
     m = y;
   return m;
 }")
+             5)
 
-(test-str #:id "assign in if statement, >= op"
-          6 "
+(test-equal? "assign in if statement, >= op"
+             (i "
 function main() {
   var x = 5;
   var y = 6;
@@ -76,9 +80,10 @@ function main() {
     m = y;
   return m;
 }")
+             6)
 
-(test-str #:id "!= cond"
-          10 "
+(test-equal? "!= cond"
+             (i "
 function main() {
   var x = 5;
   var y = 6;
@@ -86,9 +91,10 @@ function main() {
     x = 10;
   return x;
 }")
+             10)
 
-(test-str #:id "== cond"
-          5 "
+(test-equal? "== cond"
+             (i "
 function main() {
   var x = 5;
   var y = 6;
@@ -96,9 +102,10 @@ function main() {
     x = 10;
   return x;
 }")
+             5)
 
-(test-str #:id "Main with no globals" 
-          10 "
+(test-equal? "Main with no globals" 
+             (i "
 function main() {
   var x = 10;
   var y = 20;
@@ -113,20 +120,22 @@ function main() {
     min = z;
   return min;
 }")
+             10)
 
 ; ; Main + other top-level statements
 
-(test-str #:id "Main reads global variables."
-          14 "
+(test-equal? "Main reads global variables."
+             (i "
 var x = 4;
 var y = 6 + x;
 
 function main() {
   return x + y;
 }")
+             14)
 
-(test-str #:id "Main updates global variables"
-          45 "
+(test-equal? "Main updates global variables"
+             (i "
 var x = 1;
 var y = 10;
 var r = 0;
@@ -138,9 +147,10 @@ function main() {
   }
   return r;
 }")
+             45)
 
-(test-str #:id " A recursive function"
-          55 "
+(test-equal? " A recursive function"
+             (i "
 function fib(a) {
   if (a == 0)
     return 0;
@@ -153,9 +163,10 @@ function fib(a) {
 function main() {
   return fib(10);
 }")
+             55)
 
-(test-str #:id "Functions with multiple parameters that hide global variables."
-          1 "
+(test-equal? "Functions with multiple parameters that hide global variables."
+             (i "
 function min(x, y, z) {
   if (x < y) {
     if (x < z)
@@ -185,9 +196,10 @@ function main() {
         return 1;
   return 0;
 }")
+             1)
 
-(test-str #:id "static scoping instead of dynamic scoping"
-          115 "
+(test-equal? "static scoping instead of dynamic scoping"
+             (i "
 var a = 10;
 var b = 20;
 
@@ -205,9 +217,10 @@ function main () {
   var b = 5;
   return cmethod() + a + b;
 }")
+             115)
 
-(test-str #:id "Boolean parameters and return values."
-          'true "
+(test-equal? "Boolean parameters and return values."
+             (i "
 function minmax(a, b, min) {
   if (min && a < b || !min && a > b)
     return true;
@@ -218,9 +231,10 @@ function minmax(a, b, min) {
 function main() {
   return (minmax(10, 100, true) && minmax(5, 3, false));
 }")
+             'true)
 
-(test-str #:id "Multiple function calls in an expression"
-          20 "
+(test-equal? "Multiple function calls in an expression"
+             (i "
 function fact(n) {
   var f = 1;
   while (n > 1) {
@@ -237,11 +251,11 @@ function binom(a, b) {
 
 function main() {
   return binom(6,3);
-}
-")
+}")
+             20)
 
-(test-str #:id "A function call in the parameter of a function."
-          24 "
+(test-equal? "A function call in the parameter of a function."
+             (i "
 function fact(n) {
   var r = 1;
   while (n > 1) {
@@ -254,9 +268,10 @@ function fact(n) {
 function main() {
   return fact(fact(3) - fact(2));
 }")
+             24)
 
-(test-str #:id "A function call that ignores the return value."
-          2 "
+(test-equal? "A function call that ignores the return value."
+             (i "
 var count = 0;
 
 function f(a,b) {
@@ -269,11 +284,11 @@ function main() {
   f(1, 2);
   f(3, 4);
   return count;
-}
-")
+}")
+             2)
 
-(test-str #:id "A function without a return statement. "
-          35 "
+(test-equal? "A function without a return statement.(i "
+             (i "
 var x = 0;
 var y = 0;
 
@@ -285,22 +300,22 @@ function main() {
   setx(5);
   sety(7);
   return x * y;
-}
-")
+}")
+             35)
 
-(test-str #:id "Functions inside functions. "
-          90 "
+(test-equal? "Functions inside functions.(i "
+             (i "
 function main() {
   function h() { return 10; }
 
   function g() { return 100; }
 
   return g() - h();
-}
-")
+}")
+             90)
 
-(test-str #:id " Functions inside functions accessing variables outside. "
-          69 "
+(test-equal? " Functions inside functions accessing variables outside.(i "
+             (i "
 function collatz(n) {
   var counteven = 0;
   var countodd = 0;
@@ -327,9 +342,10 @@ function collatz(n) {
 function main() {
   return collatz(111);
 }")
+             69)
 
-(test-str #:id "Functions inside functions with variables of the same name"
-          87 "
+(test-equal? "Functions inside functions with variables of the same name"
+             (i "
 function f(n) {
   var a;
   var b;
@@ -358,9 +374,10 @@ function main() {
 
   return x - y;
 }")
+             87)
 
-(test-str #:id "Functions inside functions inside functions. "
-          64 "
+(test-equal? "Functions inside functions inside functions.(i "
+             (i "
 function main() {
   var result;
   var base;
@@ -385,12 +402,12 @@ function main() {
   base = 2;
   getpow(6);
   return result;
-}
-")
+}")
+             64)
 
 
-(test-str #:id "try/catch finally, but no exception thrown. "
-          125 "
+(test-equal? "try/catch finally, but no exception thrown.(i "
+             (i "
 function divide(x, y) {
   if (y == 0)
     throw y;
@@ -411,11 +428,11 @@ function main() {
     x = x + 100;
   }
   return x;
-}
-")
+}")
+             125)
 
-(test-str #:id "Throwing an exception inside a function."
-          100 "
+(test-equal? "Throwing an exception inside a function."
+             (i "
 function divide(x, y) {
   if (y == 0)
     throw y;
@@ -436,11 +453,11 @@ function main() {
     x = x + 100;
   }
   return x;
-}
-")
+}")
+             100)
 
-(test-str #:id "Throwing an exception from a function"
-          2000400 "
+(test-equal? "Throwing an exception from a function"
+             (i "
 function divide(x, y) {
   if (y == 0)
     throw 1000000;
@@ -470,11 +487,11 @@ function divide(x, y) {
     x = x * 2;
   }
   return x;
-}
-")
+}")
+             2000400)
 
-(test-str #:id "Simple call-by-reference"
-          1 "
+(test-equal? "Simple call-by-reference"
+             (i "
 function swap(&first, &second) {
   var temp = first;
   first = second;
@@ -486,9 +503,10 @@ function main() {
   swap(a, b);
   return b - a;
 }")
+             1)
 
-(test-str #:id "Call-by-value vs Call-by-reference"
-          3421 "
+(test-equal? "Call-by-value vs Call-by-reference"
+             (i "
 function swap1(x, y) {
   var temp = x;
   x = y;
@@ -509,11 +527,11 @@ function main() {
   var d = 4;
   swap2(c,d);
   return a + 10*b + 100*c + 1000*d;
-}
-")
+}")
+             3421)
 
-(test-str #:id "Assignment side effects with function calls"
-          20332 "
+(test-equal? "Assignment side effects with function calls"
+             (i "
 var x;
 
 function f(a,b) {
@@ -538,9 +556,10 @@ function main() {
   var z = f(x = fib(3), y = fib(4));
   return z * 100 + y * 10 + x;
 }")
+             20332)
 
-(test-str #:id "Mixture of call-by-value and call-by-reference."
-          21 "
+(test-equal? "Mixture of call-by-value and call-by-reference."
+             (i "
 function gcd(a, &b) {
   if (a < b) {
     var temp = a;
@@ -561,38 +580,38 @@ function main () {
   gcd(x,y);
   return x+y;
 }")
+             21)
 
-(test-str #:id "global function invokes function defined later"
-          2
-          "
+(test-equal? "global function invokes function defined later"
+             (i "
 function a() { return b(); }
 
 function b() { return 2; }
 function main() {
   return a();
 }")
+             2)
 
-(test-str #:id "global function invokes later function that invokes function defined later"
-          2
-          "
+(test-equal? "global function invokes later function that invokes function defined later"
+             (i "
 function main() {
   return a();
 }
 function a() { return b(); }
 function b() { return 2; }")
+             2)
 
-(test-str #:id "function w/ return used as statement"
-          0
-          "
+(test-equal? "function w/ return used as statement"
+             (i "
 function f() { return 2; }
 function main() {
   f();
   return 0;
 }")
+             0)
 
-(test-str #:id "param shadows global var"
-          0
-          "
+(test-equal? "param shadows global var"
+             (i "
 var x = 3;
 function decrement(x) {
   x = x - 1;
@@ -601,10 +620,10 @@ function decrement(x) {
 function main() {
   return decrement(1);
 }")
- ; insufficient, should test whether the old values are actually preserved
-(test-str #:id "recursion between two global functions, matching param names"
-          303
-          "
+             0)
+; insufficient, should test whether the old values are actually preserved
+(test-equal? "recursion between two global functions, matching param names"
+             (i "
 function a(n, i) {
   if (i > 0) {
     return b(n + 1, i-1);
@@ -620,10 +639,10 @@ function b(n, i) {
 function main() {
   return a(0, 6);
 }")
+             303)
 
-(test-str #:id "nested function refers to later nested function"
-          11
-          "
+(test-equal? "nested function refers to later nested function"
+             (i "
 function main() {
   function b() {
     return 10 + a();
@@ -633,49 +652,49 @@ function main() {
   }
   return b();
 }")
+             11)
 
-(test-str #:id "global function refers to later global var"
-          5
-          "
+(test-equal? "global function refers to later global var"
+             (i "
 function getX() { return x; }
 var x = 5;
 
 function main() {
   return getX();
 }")
+             5)
 
-(test-str #:id "main function refers to later global var"
-          5
-          "
+(test-equal? "main function refers to later global var"
+             (i "
 function main() {
   return x;
 }
 
 var x = 5;")
+             5)
 
-(test-str #:id "nested function refers to later global var"
-          5
-          "
+(test-equal? "nested function refers to later global var"
+             (i "
 function main() {
   function nested() { return a; }
   return nested();
 }
 var a = 5;")
+             5)
 
-(test-str #:id "nested function refers to later local var"
-          5
-          "
+(test-equal? "nested function refers to later local var"
+             (i "
 function main() {
   function nested() { return a; }
   var a = 5;
   return nested();
 }")
+             5)
 
 ; ; Function Overloading
 
-(test-str #:id "two functions with same name, different # params"
-          1111
-          "
+(test-equal? "two functions with same name, different # params"
+             (i "
 function foo() {
   return 1;
 }
@@ -689,4 +708,4 @@ function foo(x, y) {
 function main() {
   return foo() + foo(10) + foo(100, 1000);
 }")
-
+             1111)

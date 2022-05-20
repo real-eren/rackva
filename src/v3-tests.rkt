@@ -1,20 +1,16 @@
 #lang racket
 (require "interpreter-extension.rkt"
-         "util/testing.rkt")
+         rackunit)
 
 ; white space / newlines do not affect the parser,
 ; but are included for readability
 
-
-(define test-file (make-tester interpret-v3-file))
-
-(define test-str (make-tester interpret-v3-str))
+(define i interpret-v3-str)
 
 ; ; INSTANCE CREATION AND INSTANCE FIELDS
 
-(test-str #:id "instance fields w/out initializer should be initialized to zero, no parent"
-          'true
-          #:args (list "A") "
+(test-equal? "instance fields w/out initializer should be initialized to zero, no parent"
+             (i "
 class A {
   var x;
   var y;
@@ -22,11 +18,11 @@ class A {
     var a = new A();
     return (a.x == 0) && (a.y == 0);
   }
-}")
+}" "A")
+             'true)
 
-(test-str #:id "instance fields w/out initializer should be initialized to zero, with super class"
-          'true
-          #:args (list "A") "
+(test-equal? "instance fields w/out initializer should be initialized to zero, with super class"
+             (i "
 class Parent { var w; }
 class A extends Parent {
   var x;
@@ -35,22 +31,22 @@ class A extends Parent {
     var a = new A();
     return (a.x == 0) && (a.y == 0) && (a.w == 0);
   }
-}")
+}" "A")
+             'true)
 
-(test-str #:id "instance field w/ initializer"
-          10
-          #:args (list "A") "
+(test-equal? "instance field w/ initializer"
+             (i "
 class A {
   var x = 10;
   static function main() {
     var a = new A();
     return a.x;
   }
-}")
+}" "A")
+             10)
 
-(test-str #:id "setting field in constructor"
-          109
-          #:args (list "A") "
+(test-equal? "setting field in constructor"
+             (i "
 class A {
   var x;
   A() {
@@ -60,11 +56,11 @@ class A {
     var a = new A();
     return a.x;
   }
-}")
+}" "A")
+             109)
 
-(test-str #:id "ctor body runs after init"
-          20
-          #:args (list "A") "
+(test-equal? "ctor body runs after init"
+             (i "
 class A {
   static var counter = 0;
 
@@ -78,11 +74,11 @@ class A {
     var a = new A();
     return a.x;
   }
-}")
+}" "A")
+             20)
 
-(test-str #:id "ctor calls super()"
-          251
-          #:args (list "Child") "
+(test-equal? "ctor calls super()"
+             (i "
 class Parent {
   var x;
   Parent(v) {
@@ -97,11 +93,11 @@ class Child extends Parent {
     var c = new Child(251);
     return c.x;
   }
-}")
+}" "Child")
+             251)
 
-(test-str #:id "init runs only once when ctor chaining"
-          20
-          #:args (list "A") "
+(test-equal? "init runs only once when ctor chaining"
+             (i "
 class A {
   static var counter = 0;
 
@@ -118,11 +114,11 @@ class A {
     var a = new A();
     return a.x;
   }
-}")
+}" "A")
+             20)
 
-(test-str #:id "dot expr in arg"
-          124
-          #:args (list "A") "
+(test-equal? "dot expr in arg"
+             (i "
 class A {
   static var counter = 0;
 
@@ -138,11 +134,11 @@ class A {
     var a2 = new A(a1.x * 2);
     return a2.x + counter;
   }
-}")
+}" "A")
+             124)
 
-(test-str #:id "return statement in constructor, still returns instance"
-          765
-          #:args (list "A") "
+(test-equal? "return statement in constructor, still returns instance"
+             (i "
 class A {
   var x = 765;
 
@@ -155,24 +151,24 @@ class A {
     var a = new A(2);
     return a.x;
   }
-}")
+}" "A")
+             765)
 
 
 
 ; ; STATIC METHODS
 
-(test-str #:id "single class, no fields, only main method"
-          10
-          #:args (list "A") "
+(test-equal? "single class, no fields, only main method"
+             (i "
 class A {
   static function main() {
     return 10;
   }
-}")
+}" "A")
+             10)
 
-(test-str #:id "single class, no fields, only static methods"
-          11
-          #:args (list "A") "
+(test-equal? "single class, no fields, only static methods"
+             (i "
 class A {
   static function foo(x) {
     return 10 + x;
@@ -181,11 +177,11 @@ class A {
   static function main() {
     return foo(1);
   }
-}")
+}" "A")
+             11)
 
-(test-str #:id "single class, no fields, only static methods, call using dot"
-          11
-          #:args (list "A") "
+(test-equal? "single class, no fields, only static methods, call using dot"
+             (i "
 class A {
   static function foo(x) {
     return 10 + x;
@@ -194,11 +190,11 @@ class A {
   static function main() {
     return A.foo(1);
   }
-}")
+}" "A")
+             11)
 
-(test-str #:id "sub class can call static method of super class w/out dot"
-          6
-          #:args (list "A") "
+(test-equal? "sub class can call static method of super class w/out dot"
+             (i "
 class Parent {
   static function foo() { return 6; }
 }
@@ -206,11 +202,11 @@ class A extends Parent {
   static function main() {
     return foo();
   }
-}")
+}" "A")
+             6)
 
-(test-str #:id "sub class can call static method of super class with dot"
-          6
-          #:args (list "A") "
+(test-equal? "sub class can call static method of super class with dot"
+             (i "
 class Parent {
   static function foo() { return 6; }
 }
@@ -218,11 +214,11 @@ class A extends Parent {
   static function main() {
     return Parent.foo();
   }
-}")
+}" "A")
+             6)
 
-(test-str #:id "class can call static method of other class with dot"
-          6
-          #:args (list "A") "
+(test-equal? "class can call static method of other class with dot"
+             (i "
 class B {
   static function foo() { return 6; }
 }
@@ -230,11 +226,11 @@ class A {
   static function main() {
     return B.foo();
   }
-}")
+}" "A")
+             6)
 
-(test-str #:id "sub class static method has precedence over static method of super class"
-          7
-          #:args (list "A") "
+(test-equal? "sub class static method has precedence over static method of super class"
+             (i "
 class Parent {
   static function foo() { return 6; }
 }
@@ -243,25 +239,25 @@ class A extends Parent {
   static function main() {
     return foo();
   }
-}")
+}" "A")
+             7)
 
 
 ; ; STATIC FIELDS
 
-(test-str #:id "static field and main method, same class"
-          11
-          #:args (list "TheClass") "
+(test-equal? "static field and main method, same class"
+             (i "
 class TheClass {
   static var x = 10;
 
   static function main() {
     return x + 1;
   }
-}")
+}" "TheClass")
+             11)
 
-(test-str #:id "local vars have priority over static fields"
-          5
-          #:args (list "MyClass") "
+(test-equal? "local vars have priority over static fields"
+             (i "
 class MyClass {
   static var x = 10;
 
@@ -269,22 +265,22 @@ class MyClass {
     var x = 5;
     return x;
   }
-}")
+}" "MyClass")
+             5)
 
-(test-str #:id "params have priority over static fields"
-          6
-          #:args (list "MyClass") "
+(test-equal? "params have priority over static fields"
+             (i "
 class MyClass {
   static var x = 10;
 
   static function echo(x) { return x; }
 
   static function main() { return echo(6); }
-}")
+}" "MyClass")
+             6)
 
-(test-str #:id "writes to shadowing local vars don't affect shadowed static fields"
-          10
-          #:args (list "MyClass") "
+(test-equal? "writes to shadowing local vars don't affect shadowed static fields"
+             (i "
 class MyClass {
   static var x = 10;
 
@@ -297,11 +293,11 @@ class MyClass {
     foo();
     return x;
   }
-}")
+}" "MyClass")
+             10)
 
-(test-str #:id "Assigning to and reading form static field of super class w/out dot"
-          4
-          #:args (list "Child") "
+(test-equal? "Assigning to and reading form static field of super class w/out dot"
+             (i "
 class Parent {
   static var x = 1;
 }
@@ -310,11 +306,11 @@ class Child extends Parent {
     x = 2 + (x = x + 1);
     return x;
   }
-}")
+}" "Child")
+             4)
 
-(test-str #:id "Assigning to and reading from static fields of super class with dot"
-          4
-          #:args (list "Child") "
+(test-equal? "Assigning to and reading from static fields of super class with dot"
+             (i "
 class Parent {
   static var x = 1;
   static var y = 3;
@@ -324,11 +320,11 @@ class Child extends Parent {
     Parent.y = Parent.x = 2;
     return Parent.x + Parent.y;
   }
-}")
+}" "Child")
+             4)
 
-(test-str #:id "accessing static field of super super class w/out dot"
-          1
-          #:args (list "Child") "
+(test-equal? "accessing static field of super super class w/out dot"
+             (i "
 class GrandParent { static var x = 1; }
 
 class Parent extends GrandParent { }
@@ -337,11 +333,11 @@ class Child extends Parent {
   static function main() {
     return x;
   }
-}")
+}" "Child")
+             1)
 
-(test-str #:id "more recent static field takes precedence"
-          2
-          #:args (list "Child") "
+(test-equal? "more recent static field takes precedence"
+             (i "
 class GrandParent { static var x = 1; }
 
 class Parent extends GrandParent { static var x = 2; }
@@ -350,14 +346,14 @@ class Child extends Parent {
   static function main() {
     return x;
   }
-}")
+}" "Child")
+             2)
 
 
 ; ; ABSTRACT METHODS
 
-(test-str #:id "subclass can override parent's abstract method with another abstract method"
-          0
-          #:args (list "Child") "
+(test-equal? "subclass can override parent's abstract method with another abstract method"
+             (i "
 class Parent { function foo(x, y); }
 
 class Child extends Parent {
@@ -365,13 +361,13 @@ class Child extends Parent {
   static function main() {
     return 0;
   }
-}")
+}" "Child")
+             0)
 
 ; ; DOT
 
-(test-str #:id "Nested dot and side effect in inst field expr"
-          4
-          #:args (list "List") "
+(test-equal? "Nested dot and side effect in inst field expr"
+             (i "
 class List {
   static var counter = 0;
   var x = (counter = counter + 1);
@@ -388,11 +384,11 @@ class List {
     return l1.next.next.next.x;
   }
 }
-")
+" "List")
+             4)
 
-(test-str #:id "dotted field passed by reference"
-          4321
-          #:args (list "A") "
+(test-equal? "dotted field passed by reference"
+             (i "
 class A {
 
   var x = 0;
@@ -413,12 +409,11 @@ class A {
     return acc;
   }
 }
-")
+" "A")
+             4321)
 
-(test-str #:id "Instance yielding function call in LHS of dot"
-          4
-          #:args (list "A")
-          "
+(test-equal? "Instance yielding function call in LHS of dot"
+             (i "
 class A {
   var n;
 
@@ -431,23 +426,23 @@ class A {
     
     return a.successor().n;
   }
-}")
+}" "A")
+             4)
 
 ; ; SUPER FIELDS & METHODS
-(test-str #:id "todo"
-          5
-          #:args (list "A") "
+(test-equal? "todo"
+             (i "
 class A {
   static function main() {
     return 5;
   }
 }
-")
+" "A")
+             5)
 
 ; ; PASSING INSTANCES
-(test-str #:id "storing inst in variable, then var to ref param"
-          3
-          #:args (list "A") "
+(test-equal? "storing inst in variable, then var to ref param"
+             (i "
 class A {
   var x = 2;
   function refFun(&inst) {
@@ -461,5 +456,6 @@ class A {
     a.refFun(b);
     return b.x;
   }
-}")
+}" "A")
+             3)
 

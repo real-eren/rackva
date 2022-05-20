@@ -1,54 +1,62 @@
 #lang racket/base
 
 (require "interpreter-extension.rkt"
-         "util/testing.rkt")
+         rackunit)
 
 ; white space / newlines do not affect the parser,
 ; but are included for readability
 
-
-(define test-str (make-tester interpret-v1-str))
+(define i interpret-v1-str)
 
 ; ; Literal Tests
-(test-str #:id "return a positive literal"
-          150 "return 150;")
+(test-equal? "return a positive literal"
+             (i "return 150;")
+             150)
 
-(test-str #:id "return a negative literal"
-          -150 "return -150;")
+(test-equal? "return a negative literal"
+             (i "return -150;")
+             -150)
 
-(test-str #:id "return a true literal"
-          'true "return true;")
+(test-equal? "return a true literal"
+             (i "return true;")
+             'true)
 
-(test-str #:id "return a false literal"
-          'false "return false;")
+(test-equal? "return a false literal"
+             (i "return false;")
+             'false)
 
 ; ; Number Tests
 
-(test-str #:id "return a nested expression"
-          -4 "return 6 * (8 + (5 % 3)) / 11 - 9;")
+(test-equal? "return a nested expression"
+             (i "return 6 * (8 + (5 % 3)) / 11 - 9;")
+             -4)
 
-(test-str #:id "return a nested boolean expression"
-          'true "return (true && false) || (!(1 == 0) && !(2 + 2 == 5));")
+(test-equal? "return a nested boolean expression"
+             (i "return (true && false) || (!(1 == 0) && !(2 + 2 == 5));")
+             'true)
 
-(test-str #:id "declare, assign a literal, return"
-          10 "
+(test-equal? "declare, assign a literal, return"
+             (i "
 var z;
 z = 10;
 return z;")
+             10)
 
-(test-str #:id "declare with expression value, return"
-          16 "
+(test-equal? "declare with expression value, return"
+             (i "
 var x = (5 * 7 - 3) / 2;
 return x;")
+             16)
 
-(test-str #:id "declare w/ literal, declare w/ reference to prior var, return sum"
-          220 "
+(test-equal? "declare w/ literal, declare w/ reference to prior var, return sum"
+             (i "
 var x = 10;
 var y = 12 + x;
 return x * y;")
+             220)
 
-(test-str #:id "assign in if statement, <= op"
-          5 "
+(test-equal? "assign in if statement, <= op"
+             (i "
 var x = 5;
 var y = 6;
 var m;
@@ -57,9 +65,10 @@ if (x <= y)
 else
   m = y;
 return m;")
+             5)
 
-(test-str #:id "assign in if statement, >= op"
-          6 "
+(test-equal? "assign in if statement, >= op"
+             (i "
 var x = 5;
 var y = 6;
 var m;
@@ -68,28 +77,32 @@ if (x >= y)
 else
   m = y;
 return m;")
+             6)
 
-(test-str #:id "!= cond"
-          10 "
+(test-equal? "!= cond"
+             (i "
 var x = 5;
 var y = 6;
 if (x != y)
   x = 10;
 return x;")
+             10)
 
-(test-str #:id "== cond"
-          5 "
+(test-equal? "== cond"
+             (i "
 var x = 5;
 var y = 6;
 if (x == y)
   x = 10;
 return x;")
+             5)
 
-(test-str #:id "negative sign on nested expression"
-          -39 "return 6 * -(4 * 2) + 9;")
+(test-equal? "negative sign on nested expression"
+             (i "return 6 * -(4 * 2) + 9;")
+             -39)
 
-(test-str #:id "return immediately upon first encountered return statement"
-          25 "
+(test-equal? "return immediately upon first encountered return statement"
+             (i "
 var x = 0;
 x = x + 25;
 return x;
@@ -97,24 +110,27 @@ x = x + 25;
 return x;
 x = x + 25;
 return x;")
+             25)
 
 
 ; ; Boolean, If, While Tests
 
-(test-str #:id "return nested bool expr"
-          'true "return (10 > 20) || (5 - 6 < 10) && true;")
+(test-equal? "return nested bool expr"
+             (i "return (10 > 20) || (5 - 6 < 10) && true;")
+             'true)
 
-(test-str #:id "return literal in if-else"
-          100 "
+(test-equal? "return literal in if-else"
+             (i "
 var x = 10;
 var y = 20;
 if (x < y && (x % 2) == 0)
   return 100;
 else
   return 200;")
+             100)
 
-(test-str #:id "if with block statements in then and else"
-          100 "
+(test-equal? "if with block statements in then and else"
+             (i "
 var x = 10;
 var y = 20;
 if (x < y && (x % 2) == 0) {
@@ -122,16 +138,18 @@ if (x < y && (x % 2) == 0) {
 } else {
   return 200;
 }")
+             100)
 
-(test-str #:id "if w/ empty then block"
-          5 "
+(test-equal? "if w/ empty then block"
+             (i "
 var x = 10;
 if ((x = x / 2) == 5) {}
 return x;
 ")
+             5)
 
-(test-str #:id "if w/ empty else block"
-          10 "
+(test-equal? "if w/ empty else block"
+             (i "
 var x = 10;
 if (false) {
   x = 0;
@@ -139,9 +157,10 @@ if (false) {
 }
 return x;
 ")
+             10)
 
-(test-str #:id "return var assigned in if-else"
-          'false "
+(test-equal? "return var assigned in if-else"
+             (i "
 var x = 100 % 2 == 0;
 var y = 10 >= 20;
 var z;
@@ -150,9 +169,10 @@ if (x || y)
 else
   z = x;
 return z;")
+             'false)
 
-(test-str #:id "return var assigned in if-else"
-          'true "
+(test-equal? "return var assigned in if-else"
+             (i "
 var x = 10;
 var y = 20;
 var z = 20 >= 10;
@@ -161,33 +181,37 @@ if (!z || false)
 else
   z = z;
 return z;")
+             'true)
 
-(test-str #:id "update var in while loop, return"
-          128 "
+(test-equal? "update var in while loop, return"
+             (i "
 var x = 2;
 while (x < 100)
   x = x * 2;
 return x;")
+             128)
 
-(test-str #:id "while w/ 1 line block"
-          128 "
+(test-equal? "while w/ 1 line block"
+             (i "
 var x = 2;
 while (x < 100) {
   x = x * 2;
 }
 return x;")
+             128)
 
-(test-str #:id "update var in while loop, update after, return"
-          12 "
+(test-equal? "update var in while loop, update after, return"
+             (i "
 var x = 20;
 var y = 128;
 while (x * x > 128)
   x = x - 1;
 x = x + 1;
 return x;")
+             12)
 
-(test-str #:id "while w/ multi-line block"
-          12 "
+(test-equal? "while w/ multi-line block"
+             (i "
 var x = 20;
 var y = 128;
 while (x * x > 128) {
@@ -196,26 +220,29 @@ while (x * x > 128) {
 }
 x = x + 1;
 return x;")
+             12)
 
-(test-str #:id "while w/ empty block"
-          15 "
+(test-equal? "while w/ empty block"
+             (i "
 var x = 0;
 while ((x = x + 1) < 15) {}
 return x;
 ")
+             15)
 
 
 ; ; Advanced Tests
 
-(test-str #:id "nested assign"
-          30 "
+(test-equal? "nested assign"
+             (i "
 var x;
 var y;
 var z = x = y = 10;
 return x + y + z;")
+             30)
 
-(test-str #:id "assign in if cond"
-          11 "
+(test-equal? "assign in if cond"
+             (i "
 var x;
 var y;
 x = y = 10;
@@ -223,60 +250,68 @@ if ((x = x + 1) > y)
   return x;
 else
   return y;")
+             11)
 
-(test-str #:id "assign x twice in same expr"
-          1106 "
+(test-equal? "assign x twice in same expr"
+             (i "
 var x;
 var y = (x = 5) + (x = 6);
 return y * 100 + x;")
+             1106)
 
-(test-str #:id "reference x twice in expr, update in left should carry over to right operand"
-          12 "
+(test-equal? "reference x twice in expr, update in left should carry over to right operand"
+             (i "
 var x = 10;
 x = (x = 6) + x;
 return x;")
+             12)
 
-(test-str #:id "update in right operand should not affect left operand"
-          16 "
+(test-equal? "update in right operand should not affect left operand"
+             (i "
 var x = 10;
 x = x + (x = 6);
 return x;")
+             16)
 
-(test-str #:id "nested assign"
-          72 "
+(test-equal? "nested assign"
+             (i "
 var x;
 var y;
 var z;
 var w = (x = 6) + (y = z = 20);
 return w + x + y + z;")
+             72)
 
-(test-str #:id "assign in while cond"
-          21 "
+(test-equal? "assign in while cond"
+             (i "
 var x = 0;
 while ((x = x + 1) < 21)
   x = x;
 return x;")
+             21)
 
-(test-str #:id "left-associative side-effects in while cond"
-          10 "
+(test-equal? "left-associative side-effects in while cond"
+             (i "
 var x = 0;
 var y = 20;
 while ((x = x + 1) < (y = y - 1))
   x = x;
 return x;")
+             10)
 
-(test-str #:id "modulus, assign expr in left and right operands"
-          164 "
+(test-equal? "modulus, assign expr in left and right operands"
+             (i "
 var a = 31160;
 var b = 1476;
 var r = a % b;
 while (r != 0)
   r = (a = b) % (b = r);
 return b;")
+             164)
 
 
-(test-str #:id "assign bool to var in condition"
-          5 "
+(test-equal? "assign bool to var in condition"
+             (i "
 var i = 0;
 var x;
 while (x = true) {
@@ -285,9 +320,10 @@ while (x = true) {
 }
 return i;
 ")
+             5)
 
-(test-str #:id "assign bool to var in condition"
-          'true "
+(test-equal? "assign bool to var in condition"
+             (i "
 var i = 0;
 var x;
 if (x = true) {
@@ -295,75 +331,83 @@ if (x = true) {
 }
 return x;
 ")
+             'true)
 
 ; ; Short-circuit side-effects
 
-(test-str #:id "short-circuit or, should evaluate second arg"
-          12 "
+(test-equal? "short-circuit or, should evaluate second arg"
+             (i "
 var x = 1;
 if (false || ((x = 2) == 2)) {
   x = x + 10;
 }
 return x;
 ")
+             12)
 
-(test-str #:id "short-circuit or, should not evaluate second arg"
-          11 "
+(test-equal? "short-circuit or, should not evaluate second arg"
+             (i "
 var x = 1;
 if (true || ((x = 2) == 2)) {
   x = x + 10;
 }
 return x;
 ")
+             11)
 
-(test-str #:id "short-circuit and, should evaluate second arg (false)"
-          2 "
+(test-equal? "short-circuit and, should evaluate second arg (false)"
+             (i "
 var x = 1;
 if (true && ((x = 2) == 0)) {
   x = x + 10;
 }
 return x;
 ")
+             2)
 
-(test-str #:id "short-circuit and, should evaluate second arg (true)"
-          12 "
+(test-equal? "short-circuit and, should evaluate second arg (true)"
+             (i "
 var x = 1;
 if (true && ((x = 2) == 2)) {
   x = x + 10;
 }
 return x;
 ")
+             12)
 
-(test-str #:id "short-circuit and, should not evaluate second arg"
-          1 "
+(test-equal? "short-circuit and, should not evaluate second arg"
+             (i "
 var x = 1;
 if (false && ((x = 2) == 2)) {
   x = x + 10;
 }
 return x;
 ")
+             1)
 
 ;;;; Static scoping
 
 
-(test-str #:id "var in block shadows outer scope var"
-          10 "
+(test-equal? "var in block shadows outer scope var"
+             (i "
 var a = 10;
 if (true) {
   var a = 2;
 }
 return a;")
+             10)
 
-(test-str #:id "inner block can access var from outer scope"
-          0 "
+(test-equal? "inner block can access var from outer scope"
+             (i "
 var a = 10;
 if (true) {
   a = 0;
 }
 return a;")
+             0)
 
-(test-str #:id "update var from outer scope"
-          20 "
+(test-equal? "update var from outer scope"
+             (i "
 var x = 10;
 {
   var y = 2;
@@ -371,9 +415,10 @@ var x = 10;
   x = z;
 }
 return x;")
+             20)
 
-(test-str #:id "update var in multiple nested scopes"
-          164 "
+(test-equal? "update var in multiple nested scopes"
+             (i "
 var a = 31160;
 var b = 1476;
 if (a < b) {
@@ -388,10 +433,11 @@ while (r != 0) {
   r = a % b;
 }
 return b;")
+             164)
 
 
-(test-str #:id "nested blocks are consistent"
-          3 "
+(test-equal? "nested blocks are consistent"
+             (i "
 var a = 0;
 if (true) {
   var a = 1;
@@ -405,12 +451,13 @@ if (true) {
     }
   }
 }")
+             3)
 
 
 ; ; Loop Flow Control
 
-(test-str #:id "while loop with break, single iter"
-          1 "
+(test-equal? "while loop with break, single iter"
+             (i "
 var x = 0;
 while(true) {
   x = x + 1;
@@ -420,9 +467,10 @@ while(true) {
 }
 return x;
 ")
+             1)
 
-(test-str #:id "break in while loop skips remaining statements in body"
-          -1 "
+(test-equal? "break in while loop skips remaining statements in body"
+             (i "
 var x = 0;
 while (x < 10) {
   x = x - 1;
@@ -430,9 +478,10 @@ while (x < 10) {
   x = x + 100;
 }
 return x;")
+             -1)
 
-(test-str #:id "while loop with break, multiple iters"
-          5 "
+(test-equal? "while loop with break, multiple iters"
+             (i "
 var x = 0;
 while(true) {
   x = x + 1;
@@ -442,9 +491,10 @@ while(true) {
 }
 return x;
 ")
+             5)
 
-(test-str #:id "nested whiles, break exits only the immediate loop"
-          'true "
+(test-equal? "nested whiles, break exits only the immediate loop"
+             (i "
 var x = 0;
 var y = 0;
 while (x < 5) {
@@ -457,9 +507,10 @@ while (x < 5) {
 }
 return (x == 5) && (y == 9);
 ")
+             'true)
 
-(test-str #:id "while loop with continue"
-          2 "
+(test-equal? "while loop with continue"
+             (i "
 var y = 2;
 var x = 3;
 while(x > y) {
@@ -469,9 +520,10 @@ while(x > y) {
 }
 return x;
 ")
+             2)
 
-(test-str #:id "while w/ continue. multiple iters"
-          5 "
+(test-equal? "while w/ continue. multiple iters"
+             (i "
 var accumulator = 0;
 var y = 0;
 while (y < 10) {
@@ -482,9 +534,10 @@ while (y < 10) {
 }
 return accumulator;
 ")
+             5)
 
-(test-str #:id "nested whiles w/ continue, jumps to immediate loop.  multiple iters"
-          50 "
+(test-equal? "nested whiles w/ continue, jumps to immediate loop.  multiple iters"
+             (i "
 var accumulator = 0;
 var x = 0;
 while (x < 10) {
@@ -498,11 +551,12 @@ while (x < 10) {
   x = x + 1;
 }
 return accumulator;")
+             50)
 
 ; ; Try catch finally
 
-(test-str #:id "Try catch test #15"
-          125 "
+(test-equal? "Try catch test #15"
+             (i "
 var x;
 try {
   x = 20;
@@ -518,9 +572,10 @@ finally {
 }
 return x;
 ")
+             125)
 
-(test-str #:id "Try catch test #16"
-          110 "
+(test-equal? "Try catch test #16"
+             (i "
 var x;
 try {
   x = 20;
@@ -535,9 +590,10 @@ finally {
   x = x + 100;
 }
 return x;")
+             110)
 
-(test-str #:id "Try catch test #17"
-          2000400 "
+(test-equal? "Try catch test #17"
+             (i "
 var x = 0;
 var j = 1;
 try {
@@ -563,9 +619,10 @@ catch (e2) {
   x = x * 2;
 }
 return x;")
+             2000400)
 
-(test-str #:id "Side effect in finally"
-          101 "
+(test-equal? "Side effect in finally"
+             (i "
 var x = 10;
 var result = 1;
 try {
@@ -585,9 +642,10 @@ finally {
 }
 return result;
 ")
+             101)
 
-(test-str #:id "try in loop, try has break and finally block"
-          505 "
+(test-equal? "try in loop, try has break and finally block"
+             (i "
 var x = 0;
 var i = 0;
 while (i < 5) {
@@ -604,9 +662,10 @@ while (i < 5) {
 }
 return x;
 ")
+             505)
 
-(test-str #:id "try {throw; return} catch {} finally {return}. should return val in finally"
-          2 "
+(test-equal? "try {throw; return} catch {} finally {return}. should return val in finally"
+             (i "
 try {
   throw 5;
   return 1;
@@ -617,9 +676,10 @@ finally {
   return 2;
 }
 ")
+             2)
 
-(test-str #:id "side effects of try and catch visible in finally"
-          111 "
+(test-equal? "side effects of try and catch visible in finally"
+             (i "
 var x = 0;
 try {
   x = x + 1;
@@ -634,9 +694,10 @@ finally {
 }
 return x;
 ")
+             111)
 
-(test-str #:id "while loop with continue inside try and try is inside while"
-          22 "
+(test-equal? "while loop with continue inside try and try is inside while"
+             (i "
 var x = 0;
 while(x < 12) {
   try{
@@ -649,9 +710,10 @@ while(x < 12) {
 }
 return x;
 ")
+             22)
 
-(test-str #:id "while loop with break inside try and try is inside while"
-          11 "
+(test-equal? "while loop with break inside try and try is inside while"
+             (i "
 var x = 0;
 while(x < 12) {
   try{
@@ -665,3 +727,4 @@ while(x < 12) {
 }
 return x;
 ")
+             11)

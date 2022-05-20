@@ -1,322 +1,318 @@
 #lang racket
 (require "interpreter-extension.rkt"
-         "util/testing.rkt")
+         rackunit)
 ;; Tests provided in the assignment
 
-; white space / newlines do not affect the parser,
-; but are included for readability
+(define i interpret-v3-str)
 
-(define test-str (make-tester interpret-v3-str))
+(test-equal? "Test 1"
+             (i "
+class A {
+  var x = 5;
+  var y = 10;
 
-(test-str #:id "Test 1"
-          15
-          #:args (list "A") "
- class A {
-   var x = 5;
-   var y = 10;
+  static function main() {
+    var a = new A();
+    return a.x + a.y;
+  }
+}" "A")
+             15)
 
-   static function main() {
-     var a = new A();
-     return a.x + a.y;
-   }
- }")
+(test-equal? "Test 2"
+             (i "
+class A {
 
-(test-str #:id "Test 2"
-          12
-          #:args (list "A") "
- class A {
+  function add(g, h) {
+    return g + h;
+  }
 
-   function add(g, h) {
-     return g + h;
-   }
+  static function main() {
+    var a = new A();
+    return a.add(10, 2);
+  }
+}" "A")
+             12)
 
-   static function main() {
-     var a = new A();
-     return a.add(10, 2);
-   }
- }")
+(test-equal? "Test 3"
+             (i "
+class A {
 
-(test-str #:id "Test 3"
-          125
-          #:args (list "A") "
- class A {
+  var x = 100;
 
-   var x = 100;
+  function add(x) {
+    return this.x + x;
+  }
 
-   function add(x) {
-     return this.x + x;
-   }
+  static function main() {
+    var a = new A();
+    return a.add(25);
+  }
+}" "A")
+             125)
 
-   static function main() {
-     var a = new A();
-     return a.add(25);
-   }
- }")
+(test-equal? "Test 4"
+             (i "
+class A {
 
-(test-str #:id "Test 4"
-          36
-          #:args (list "A") "
- class A {
+  var x = 100;
 
-   var x = 100;
+  function setX(x) {
+    this.x = x;
+  }
 
-   function setX(x) {
-     this.x = x;
-   }
+  function add(a) {
+    return a.x + this.x;
+  }
 
-   function add(a) {
-     return a.x + this.x;
-   }
+  static function main() {
+    var a1 = new A();
+    var a2 = new A();
+    a1.setX(30);
+    a2.setX(6);
+    return a1.add(a2);
+  }
+}" "A")
+             36)
 
-   static function main() {
-     var a1 = new A();
-     var a2 = new A();
-     a1.setX(30);
-     a2.setX(6);
-     return a1.add(a2);
-   }
- }")
+(test-equal? "Test 5"
+             (i "
+class A {
 
-(test-str #:id "Test 5"
-          54
-          #:args (list "A") "
- class A {
+  var x = 100;
 
-   var x = 100;
+  function setX(x) {
+    this.x = x;
+  }
 
-   function setX(x) {
-     this.x = x;
-   }
+  function getX() {
+    return this.x;
+  }
 
-   function getX() {
-     return this.x;
-   }
+  function add(a) {
+    return a.getX() + this.getX();
+  }
 
-   function add(a) {
-     return a.getX() + this.getX();
-   }
+  static function main() {
+    var a1 = new A();
+    var a2 = new A();
+    a1.setX(50);
+    a2.setX(4);
+    return a1.add(a2);
+  }
+}" "A")
+             54)
 
-   static function main() {
-     var a1 = new A();
-     var a2 = new A();
-     a1.setX(50);
-     a2.setX(4);
-     return a1.add(a2);
-   }
- }")
+(test-equal? "Test 6"
+             (i "
+class A {
 
-(test-str #:id "Test 6"
-          110
-          #:args (list "A") "
- class A {
+  var x = 100;
+  var y = 10;
 
-   var x = 100;
-   var y = 10;
+  function add(g, h) {
+    return g + h;
+  }
 
-   function add(g, h) {
-     return g + h;
-   }
+  static function main() {
+    return new A().add(new A().x, new A().y);
+  }
+}" "A")
+             110)
 
-   static function main() {
-     return new A().add(new A().x, new A().y);
-   }
- }")
+(test-equal? "Test 6"
+             (i "
+class A {
+  var x = 1;
+  var y = 2;
 
-(test-str #:id "Test 6"
-          26
-          #:args (list "C") "
- class A {
-   var x = 1;
-   var y = 2;
+  function m() {
+    return this.m2();
+  }
 
-   function m() {
-     return this.m2();
-   }
+  function m2() {
+    return x+y;
+  }
+}
 
-   function m2() {
-     return x+y;
-   }
- }
+class B extends A {
+  var y = 22;
+  var z = 3;
 
- class B extends A {
-   var y = 22;
-   var z = 3;
+  function m() {
+    return super.m();
+  }
 
-   function m() {
-     return super.m();
-   }
+  function m2() {
+    return x+y+z;
+  }
+}
 
-   function m2() {
-     return x+y+z;
-   }
- }
+class C extends B {
+  var y = 222;
+  var w = 4;
 
- class C extends B {
-   var y = 222;
-   var w = 4;
+  function m() {
+    return super.m();
+  }
 
-   function m() {
-     return super.m();
-   }
+  static function main() {
+    return new C().m();
+  }
+}" "C")
+             26)
 
-   static function main() {
-     return new C().m();
-   }
- }")
+(test-equal? "Test 8"
+             (i "
+class Shape {
+  function area() {
+    return 0;
+  }
+}
 
-(test-str #:id "Test 8"
-          117
-          #:args (list "Square") "
- class Shape {
-   function area() {
-     return 0;
-   }
- }
+class Rectangle extends Shape {
+  var height;
+  var width;
 
- class Rectangle extends Shape {
-   var height;
-   var width;
+  function setHeight(h) {
+    height = h;
+  }
 
-   function setHeight(h) {
-     height = h;
-   }
+  function setWidth(w) {
+    width = w;
+  }
 
-   function setWidth(w) {
-     width = w;
-   }
+  function getHeight() {
+    return height;
+  }
 
-   function getHeight() {
-     return height;
-   }
+  function getWidth() {
+    return width;
+  }
 
-   function getWidth() {
-     return width;
-   }
+  function area() {
+    return getWidth() * getHeight();
+  }
+}
 
-   function area() {
-     return getWidth() * getHeight();
-   }
- }
+class Square extends Rectangle {
+  function setSize(size) {
+    super.setWidth(size);
+  }
 
- class Square extends Rectangle {
-   function setSize(size) {
-     super.setWidth(size);
-   }
+  function getHeight() {
+    return super.getWidth();
+  }
 
-   function getHeight() {
-     return super.getWidth();
-   }
+  function setHeight(h) {
+    super.setWidth(h);
+  }
 
-   function setHeight(h) {
-     super.setWidth(h);
-   }
-
-   static function main() {
-     var s = new Square();
-     var sum = 0;
-     s.setSize(10);
-     sum = sum + s.area();
-     s.setHeight(4);
-     sum = sum + s.area();
-     s.setWidth(1);
-     sum = sum + s.area();
-     return sum;
-   }
- }")
+  static function main() {
+    var s = new Square();
+    var sum = 0;
+    s.setSize(10);
+    sum = sum + s.area();
+    s.setHeight(4);
+    sum = sum + s.area();
+    s.setWidth(1);
+    sum = sum + s.area();
+    return sum;
+  }
+}" "Square")
+             117)
     
-(test-str #:id "Test 9"
-          32
-          #:args (list "Square") "
- class Shape {
-   function area() {
-     return 0;
-   }
+(test-equal? "Test 9"
+             (i "
+class Shape {
+  function area() {
+    return 0;
+  }
 
-   function largerThan(s) {
-     return this.area() > s.area();
-   }
- }
+  function largerThan(s) {
+    return this.area() > s.area();
+  }
+}
 
- class Rectangle extends Shape {
-   var height;
-   var width;
+class Rectangle extends Shape {
+  var height;
+  var width;
 
-   function setHeight(h) {
-     height = h;
-   }
+  function setHeight(h) {
+    height = h;
+  }
 
-   function setWidth(w) {
-     width = w;
-   }
+  function setWidth(w) {
+    width = w;
+  }
 
-   function getHeight() {
-     return height;
-   }
+  function getHeight() {
+    return height;
+  }
 
-   function getWidth() {
-     return width;
-   }
+  function getWidth() {
+    return width;
+  }
 
-   function area() {
-     return getWidth() * getHeight();
-   }
- }
+  function area() {
+    return getWidth() * getHeight();
+  }
+}
 
- class Square extends Rectangle {
-   function setSize(size) {
-     super.setWidth(size);
-   }
+class Square extends Rectangle {
+  function setSize(size) {
+    super.setWidth(size);
+  }
 
-   function getHeight() {
-     return super.getWidth();
-   }
+  function getHeight() {
+    return super.getWidth();
+  }
 
-   function setHeight(h) {
-     super.setWidth(h);
-   }
+  function setHeight(h) {
+    super.setWidth(h);
+  }
 
-   static function main() {
-     var s1 = new Square();
-     var s2 = new Rectangle();
-     var s3 = new Square();
-     s1.setSize(5);
-     s2.setHeight(8);
-     s2.setWidth(4);
-     s3.setWidth(3);
+  static function main() {
+    var s1 = new Square();
+    var s2 = new Rectangle();
+    var s3 = new Square();
+    s1.setSize(5);
+    s2.setHeight(8);
+    s2.setWidth(4);
+    s3.setWidth(3);
 
-     var max = s1;
-     if (s2.largerThan(max))
-       max = s2;
-     if (s3.largerThan(max))
-       max = s3;
- 
-     return max.area();
-   }
- }")
-   
-(test-str #:id "Test 10"
-          15
-          #:args (list "List") "
- class List {
-   var val;
-   var next;
+    var max = s1;
+    if (s2.largerThan(max))
+      max = s2;
+    if (s3.largerThan(max))
+      max = s3;
 
-   function getNext() {
-     return next;
-   }
+    return max.area();
+  }
+}" "Square")
+             32)
+  
+(test-equal? "Test 10"
+             (i "
+class List {
+  var val;
+  var next;
 
-   function setNext(x) {
-     if (x == 0)
-       next = 0;
-     else {
-       next = new List();
-       next.setVal(val+1);
-       next.setNext(x-1);
-     }
-   }
+  function getNext() {
+    return next;
+  }
+
+  function setNext(x) {
+    if (x == 0)
+      next = 0;
+    else {
+      next = new List();
+      next.setVal(val+1);
+      next.setNext(x-1);
+    }
+  }
 
   function setVal(x) {
-     val = x;
+    val = x;
   }
 
   static function main() {
@@ -325,194 +321,194 @@
     l.setNext(5);
     return l.getNext().getNext().getNext().getNext().getNext().val;
   }
-}")
+}" "List")
+             15)
 
-(test-str #:id "Test 11"
-          123456
-          #:args (list "List") "
- class List {
-   var val;
-   var next;
+(test-equal? "Test 11"
+             (i "
+class List {
+  var val;
+  var next;
 
-   function getNext() {
-     return next;
-   }
+  function getNext() {
+    return next;
+  }
 
-   function setNext(next) {
-     this.next = next;
-   }
+  function setNext(next) {
+    this.next = next;
+  }
 
-   function makeList(x) {
-     if (x == 0)
-       next = 0;
-     else {
-       next = new List();
-       next.setVal(val+1);
-       next.makeList(x-1);
-     }
-   }
+  function makeList(x) {
+    if (x == 0)
+      next = 0;
+    else {
+      next = new List();
+      next.setVal(val+1);
+      next.makeList(x-1);
+    }
+  }
 
-   function setVal(x) {
-     val = x;
-   }
+  function setVal(x) {
+    val = x;
+  }
 
-   function reverse() {
-     if (getNext() == 0)
-       return this;
-     else
-       return getNext().reverse().append(this);
-   }
+  function reverse() {
+    if (getNext() == 0)
+      return this;
+    else
+      return getNext().reverse().append(this);
+  }
 
-   function append(x) {
-     var p = this;
-     while (p.getNext() != 0)
-       p = p.getNext();
-     p.setNext(x);
-     x.setNext(0);
-     return this;
-   }
+  function append(x) {
+    var p = this;
+    while (p.getNext() != 0)
+      p = p.getNext();
+    p.setNext(x);
+    x.setNext(0);
+    return this;
+  }
 
-   static function main() {
-     var l = new List();
-     l.setVal(1);
-     l.makeList(5);
-     l = l.reverse();
+  static function main() {
+    var l = new List();
+    l.setVal(1);
+    l.makeList(5);
+    l = l.reverse();
 
-     var result = 0;
-     var p = l;
-     var c = 1;
-     while (p != 0) {
-       result = result + c * p.val;
-       c = c * 10;
-       p = p.getNext();
-     }
-     return result;
-   }
- }")
+    var result = 0;
+    var p = l;
+    var c = 1;
+    while (p != 0) {
+      result = result + c * p.val;
+      c = c * 10;
+      p = p.getNext();
+    }
+    return result;
+  }
+}" "List")
+             123456)
 
-(test-str #:id "Test 12"
-          5285
-          #:args (list "List") "
- class List {
-   var val;
-   var next;
+(test-equal? "Test 12"
+             (i "
+class List {
+  var val;
+  var next;
 
-   function getNext() {
-     return next;
-   }
+  function getNext() {
+    return next;
+  }
 
-   function makeList(x) {
-     if (x == 0)
-       next = 0;
-     else {
-       next = new List();
-       next.setVal(getVal()+1);
-       next.makeList(x-1);
-     }
-   }
+  function makeList(x) {
+    if (x == 0)
+      next = 0;
+    else {
+      next = new List();
+      next.setVal(getVal()+1);
+      next.makeList(x-1);
+    }
+  }
 
-   function setVal(x) {
-     val = x;
-   }
+  function setVal(x) {
+    val = x;
+  }
 
-   function getVal() {
-     return val;
-   }
+  function getVal() {
+    return val;
+  }
 
-   function expand() {
-     var p = this;
-     while (p != 0) {
-       function exp(a) {
+  function expand() {
+    var p = this;
+    while (p != 0) {
+      function exp(a) {
          while (a != 0) {
            this.setVal(this.getVal() + p.getVal() * a.getVal());
            a = a.getNext();
          }
-       }
-       exp(p);
-       p = p.getNext();
-     }
-   }
+      }
+      exp(p);
+      p = p.getNext();
+    }
+  }
 
 
-   static function main() {
-     var l = new List();
-     l.val = 1;
-     l.makeList(5);
-     l.expand();
-     return l.getVal();
-   }
- }")
+  static function main() {
+    var l = new List();
+    l.val = 1;
+    l.makeList(5);
+    l.expand();
+    return l.getVal();
+  }
+}" "List")
+             5285)
 
-(test-str #:id "Test 13"
-          -716
-          #:args (list "C") "
- class A {
-   var count = 0;
+(test-equal? "Test 13"
+             (i "
+class A {
+  var count = 0;
 
-   function subtract(a, b) {
-     if (a < b) {
+  function subtract(a, b) {
+    if (a < b) {
         throw b - a;
-     }
-     else
+    }
+    else
         return a - b;
-   }
- }
+  }
+}
 
- class B extends A {
-   function divide(a, b) {
-     if (b == 0)
-       throw a;
-     else
-       return a / b;
-   }
+class B extends A {
+  function divide(a, b) {
+    if (b == 0)
+      throw a;
+    else
+      return a / b;
+  }
 
-   function reduce(a, b) {
-     while (a > 1 || a < -1) {
-       try {
+  function reduce(a, b) {
+    while (a > 1 || a < -1) {
+      try {
          a = divide(a, b);
          if (a == 2)
            break;
-       }
-       catch (e) {
+      }
+      catch (e) {
          return subtract(a, b); 
-       }
-       finally {
+      }
+      finally {
          count = count + 1;
-       }
-     }
-     return a;
-   }
- }
+      }
+    }
+    return a;
+  }
+}
 
- class C {
-   static function main() {
-     var x;
-     var b;
+class C {
+  static function main() {
+    var x;
+    var b;
 
-     b = new B();
+    b = new B();
 
-     try {
-       x = b.reduce(10, 5);
-       x = x + b.reduce(81, 3);
-       x = x + b.reduce(5, 0);
-       x = x + b.reduce(-2, 0);
-       x = x + b.reduce(12, 4);
-     }
-     catch (a) {
-       x = x * a;
-     }
-     finally {
-       x = -1 * x;
-     }
-     return x - b.count * 100;
-   }
- }")
+    try {
+      x = b.reduce(10, 5);
+      x = x + b.reduce(81, 3);
+      x = x + b.reduce(5, 0);
+      x = x + b.reduce(-2, 0);
+      x = x + b.reduce(12, 4);
+    }
+    catch (a) {
+      x = x * a;
+    }
+    finally {
+      x = -1 * x;
+    }
+    return x - b.count * 100;
+  }
+}" "C")
+             -716)
 
 ; ; OVERLOADED FUNS, CALL-BY-REF, SIDE-EFFECTS IN EXPR
 
-(test-str #:id "Test 21"
-          530
-          #:args (list "A") "
+(test-equal? "Test 21"
+             (i "
 class A {
 
   function add(a, b) {
@@ -528,11 +524,11 @@ class A {
     var y = 20;
     return new A().add(x, y) + new A().add(x, y, y) * 10;
   }
-}")
+}" "A")
+             530)
 
-(test-str #:id "Test 22"
-          66
-          #:args (list "B") "
+(test-equal? "Test 22"
+             (i "
 class A {
   var x = 10;
   var y = 20;
@@ -558,11 +554,11 @@ class B extends A {
     var b = new B();
     return b.add(b.x,b.y) + b.add(b.x,b.x,b.x);
   }
-}")
+}" "B")
+             66)
 
-(test-str #:id "Test 23"
-          1026
-          #:args (list "A") "
+(test-equal? "Test 23"
+             (i "
 class A {
   var x = 5;
 
@@ -585,11 +581,11 @@ class A {
     sum = sum + a.x * 10 + y;
     return sum;
   }
-}")
+}" "A")
+             1026)
 
-(test-str #:id "Test 24"
-          2045
-          #:args (list "A") "
+(test-equal? "Test 24"
+             (i "
 class A {
   var x = 0;
 
@@ -606,23 +602,23 @@ class A {
     var j = a.setSum(10);
     return (a.x * 200 + j);
   }
-}")
+}" "A")
+             2045)
 
 ; ; STATIC MEMBERS
 
-(test-str #:id "Test 31"
-          20
-          #:args (list "A") "
+(test-equal? "Test 31"
+             (i "
 class A {
   static var x = 10;
   static function main() {
     return A.x + x;
   }
-}")
+}" "A")
+             20)
 
-(test-str #:id "Test 32"
-          530
-          #:args (list "B") "
+(test-equal? "Test 32"
+             (i "
 class A {
   static var x = 10;
   static var y = 20;
@@ -643,11 +639,11 @@ class B extends A {
   static function main() {
     return add(B.x+A.y,B.z+y);
   }
-}")
+}" "B")
+             530)
 
-(test-str #:id "Test 33"
-          615
-          #:args (list "B") "
+(test-equal? "Test 33"
+             (i "
 class A {
   static var a = 1;
   static var b = 10;
@@ -670,11 +666,11 @@ class C {
   static function timesX(a) {
     return a * x;
   }
-}")
+}" "B")
+             615)
 
-(test-str #:id "Test 34"
-          16
-          #:args (list "Box") "
+(test-equal? "Test 34"
+             (i "
 class Box {
   static var countAccesses = 0;
   var size = 1;
@@ -698,11 +694,11 @@ class Box {
 
     return c.size;
   }
-}")
+}" "Box")
+             16)
 
-(test-str #:id "Test 35"
-          100
-          #:args (list "A") "
+(test-equal? "Test 35"
+             (i "
 class A {
   static function divide(x, y) {
     if (y == 0)
@@ -733,11 +729,11 @@ class Zero {
   function getValue() {
     return value;
   }
-}")
+}" "A")
+             100)
 
-(test-str #:id "Test 36"
-          420
-          #:args (list "A") "
+(test-equal? "Test 36"
+             (i "
 class A {
   static function divide(x, y) {
     if (y == 0)
@@ -750,7 +746,7 @@ class A {
     var j = 1;
 
     try { 
-     while (j >= 0) {
+    while (j >= 0) {
       var i = 10;
       while (i >= 0) {
         try {
@@ -762,7 +758,7 @@ class A {
         i = i - 1;
       }
       j = j - 1;
-     }
+    }
     }
     catch (e2) {
       x = x * 2;
@@ -777,13 +773,13 @@ class Zero {
   function getValue() {
     return value;
   }
-}")
+}" "A")
+             420)
 
 ; ; ABSTRACT METHODS
 
-(test-str #:id "Test 41"
-          300
-          #:args (list "Circle") "
+(test-equal? "Test 41"
+             (i "
 class Shape {
   function area();
 
@@ -811,13 +807,13 @@ class Circle extends Shape {
     s.changeSize(2);
     return s.area();
   }
-}")
+}" "Circle")
+             300)
 
 ; ; USER-DEFINED CONSTRUCTORS
 
-(test-str #:id "Test 51"
-          417
-          #:args (list "Square") "
+(test-equal? "Test 51"
+             (i "
 class Shape {
   function area() {
     return 0;
@@ -881,11 +877,11 @@ class Square extends Rectangle {
     sum = sum + s.area();
     return sum;
   }
-}")
+}" "Square")
+             417)
 
-(test-str #:id "Test 52"
-          10
-          #:args (list "A") "
+(test-equal? "Test 52"
+             (i "
 class A {
   var x;
 
@@ -897,11 +893,11 @@ class A {
     var a = new A(10);
     return a.x;
   }
-}")
+}" "A")
+             10)
 
-(test-str #:id "Test 53"
-          48
-          #:args (list "B") "
+(test-equal? "Test 53"
+             (i "
 class A {
   var x;
   var y;
@@ -923,11 +919,11 @@ class B extends A {
     var b = new B(4);
     return b.factor * (b.x + b.y);
   }
-}")
+}" "B")
+             48)
 
-(test-str #:id "Test 54"
-          1629
-          #:args (list "A") "
+(test-equal? "Test 54"
+             (i "
 class A {
   var x = 1;
   var y = x + 1;
@@ -948,5 +944,5 @@ class A {
 
     return (a.x + a.y + a.z) * 100 + (b.x + b.y + b.z);
   }
-}")
-
+}" "A")
+             1629)

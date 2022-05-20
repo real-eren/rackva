@@ -1,78 +1,91 @@
 #lang racket
 
 (require "interpreter-extension.rkt"
-         "util/testing.rkt")
+         "user-errors.rkt"
+         rackunit)
 
-(define error-file (make-error-tester interpret-v3-file))
-(define error-str (make-error-tester interpret-v3-str))
+(define i
+  (lambda (program class)
+    (define user-exn (λ (exn s) exn))
+    (interpret-v3-str program
+                      class
+                      #:return (λ (v s) (error "expected an error"))
+                      #:user-exn user-exn
+                      #:throw (λ (e s) (user-exn (ue:uncaught-exception e) s)))))
 
 ; ; CLASSES
 
-(error-str #:id "Non-existent class as entry-point"
-           #:args (list "NotAClass")
-           #:catch #t "
+(test-case
+ "Non-existent class as entry-point"
+ (define exn (i "
 class A {
   static function main() {
     return 5;
   }
-}")
+}" "NotAClass"))
+ (check-equal? (ue:type exn) ue:type:not-a-class))
 
-(error-str #:id "declaring a class twice"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "declaring a class twice"
+ (define exn (i "
 class A {
 }
 class A {
   static function main() {
     return 5;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:duplicate-class))
 
-(error-str #:id "class extends itself"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "class extends itself"
+ (define exn (i "
 class A extends A {
   static function main() {
     return 5;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:class-extend-self))
 
-(error-str #:id "declaring a child before parent"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "declaring a child before parent"
+ (define exn (i "
 class A extends Parent {
   static function main() {
     return 5;
   }
 }
 class Parent {
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:not-a-class))
 
-(error-str #:id "declaring a class with a non-existent parent"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "declaring a class with a non-existent parent"
+ (define exn (i "
 class A extends NotAClass {
   static function main() {
     return 5;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:not-a-class))
 
 ; ; INSTANCE MEMBERS
 
-(error-str #:id "instance fields with colliding names"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "instance fields with colliding names"
+ (define exn (i "
 class A {
   var x;
   var y;
   var x;
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:duplicate-field))
 
 ; ; STATIC MEMBERS
 
-(error-str #:id "static local vars don't persist"
-           #:args (list "ClassName")
-           #:catch #t "
+(test-case
+ "static local vars don't persist"
+ (define exn (i "
 class ClassName {
   static function foo() {
     var x = 5;
@@ -81,69 +94,77 @@ class ClassName {
     foo();
     return x;
   }
-}")
+}" "ClassName"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "static field declared twice"
-           #:args (list "ClassName")
-           #:catch #t "
+(test-case
+ "static field declared twice"
+ (define exn (i "
 class ClassName {
   static var x;
   static var x = 5;
   static function main() { return x; }
-}")
+}" "ClassName"))
+ (check-equal? (ue:type exn) ue:type:duplicate-field))
 
-(error-str #:id "Can't access static field of unrelated class w/out dot"
-           #:args (list "ClassName")
-           #:catch #t "
+(test-case
+ "Can't access static field of unrelated class w/out dot"
+ (define exn (i "
 class OtherClass { static var x = 5; }
 class ClassName {
   static function main() { return x; }
-}")
+}" "ClassName"))
+ (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
 
-(error-str #:id "Can't access static method of unrelated class w/out dot"
-           #:args (list "ClassName")
-           #:catch #t "
+(test-case
+ "Can't access static method of unrelated class w/out dot"
+ (define exn (i "
 class OtherClass { static function foo() { return 5; } }
 class ClassName {
   static function main() { return foo(); }
-}")
+}" "ClassName"))
+ (check-equal? (ue:type exn) ue:type:function-not-in-scope))
 
-(error-str #:id "Static field calls function that throws"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Static field calls function that throws"
+ (define exn (i "
 class ClassName {
   static var x = foo();
   static function foo() { throw 5; }
   static function main() { return foo(); }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:uncaught-exception))
 
 ; ; Overriding and Abstracts
 
-(error-str #:id "subclass doesn't override parent's abstract methods"
-           #:args (list "Child")
-           #:catch #t "
+(test-case
+ "subclass doesn't override parent's abstract methods"
+ (define exn (i "
 class Parent { function abstractMethod(); }
-class Child extends Parent { static function main() { return 0; } }")
+class Child extends Parent { static function main() { return 0; } }" "Child"))
+ (check-equal? (ue:type exn) ue:type:unoverridden-abstract))
 
-(error-str #:id "subclass overrides parent's concrete with abstract"
-           #:args (list "Child")
-           #:catch #t "
+(test-case
+ "subclass overrides parent's concrete with abstract"
+ (define exn (i "
 class Parent { function foo(x) { } }
 class Child extends Parent {
   function foo(x);
-}")
+}" "Child"))
+ (check-equal? (ue:type exn) ue:type:override-c-w/-abstr))
 
 
-(error-str #:id "subclass declares method with similar signature to parent's abstract methods, but does not override"
-           #:args (list "Child")
-           #:catch #t "
+(test-case
+ "subclass declares method with similar signature to parent's abstract methods, but does not override"
+ (define exn (i "
 class Parent { function overrideMe(x, y); }
-class Child extends Parent { function overrideMe(&x) { } }")
+class Child extends Parent { function overrideMe(&x) { } }" "Child"))
+ (check-equal? (ue:type exn) ue:type:unoverridden-abstract))
 
 
-(error-str #:id "Can't invoke abstract method"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Can't invoke abstract method"
+ (define exn (i "
 class A {
   function overrideMe();
   static function main() {
@@ -151,12 +172,13 @@ class A {
     a.overrideMe();
     return 0;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:invoke-abstract-method))
 
 
-(error-str #:id "Can't invoke abstract method of parent"
-           #:args (list "Child")
-           #:catch #t "
+(test-case
+ "Can't invoke abstract method of parent"
+ (define exn (i "
 class Parent { function overrideMe(x, y); }
 class Child extends Parent {
   function overrideMe(x, y);
@@ -165,27 +187,30 @@ class Child extends Parent {
     var a = b.overrideMe(0, 1);
     return 0;
   }
-}")
+}" "Child"))
+ (check-equal? (ue:type exn) ue:type:invoke-abstract-method))
 
 
-(error-str #:id "static methods don't count as overriding"
-           #:args (list "Child")
-           #:catch #t "
+(test-case
+ "static methods don't count as overriding"
+ (define exn (i "
 class Parent { function overrideMe(x, y, z); }
-class Child extends Parent { static function overrideMe(x, y, z) { } }")
+class Child extends Parent { static function overrideMe(x, y, z) { } }" "Child"))
+ (check-equal? (ue:type exn) ue:type:unoverridden-abstract))
 
 
-(error-str #:id "static methods collide with instance methods"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "static methods collide with instance methods"
+ (define exn (i "
 class A {
   function foo(x, y, z) { }
   static function foo(a, b, c) { }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:duplicate-method))
 
-(error-str #:id "Invoking non-existent function when many similar ones exist"
-           #:args (list "C")
-           #:catch #t "
+(test-case
+ "Invoking non-existent function when many similar ones exist"
+ (define exn (i "
 class A {
   function foo() { return 3; }
   static function foo(a) { return 4; }
@@ -206,85 +231,95 @@ class C extends B {
     }
   }
 }
-")
+" "C"))
+ (check-equal? (ue:type exn) ue:type:function-not-in-scope))
 
 ; ; Dots, this, super
 
-(error-str #:id "this on RHS of dot"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "this on RHS of dot"
+ (define exn (i "
 class A {
   static function main() { return A.this; }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:this/super-dot-RHS))
 
-(error-str #:id "super on RHS of dot"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "super on RHS of dot"
+ (define exn (i "
 class A {
   static function main() { return A.super; }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:this/super-dot-RHS))
 
-(error-str #:id "this in static context"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "this in static context"
+ (define exn (i "
 class A {
   static function main() { return this; }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:this/super-in-static))
 
-(error-str #:id "non-existent class in LHS of dot during funcall"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "non-existent class in LHS of dot during funcall"
+ (define exn (i "
 class A {
   static function main() { return B.c(); }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:unknown-LHS-dot))
 
-(error-str #:id "non-existent class in LHS of dot during field lookup"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "non-existent class in LHS of dot during field lookup"
+ (define exn (i "
 class A {
   static function main() { return B.c; }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:unknown-LHS-dot))
 
-(error-str #:id "non-existent class in LHS of dot during assignment"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "non-existent class in LHS of dot during assignment"
+ (define exn (i "
 class A {
   static function main() { B.c = 2; return B.c; }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:unknown-LHS-dot))
 
-(error-str #:id "Static non-instance var in LHS of dot"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Static non-instance var in LHS of dot"
+ (define exn (i "
 class A {
   static var x = 2;
   static function main() { return x.y; }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:non-instance-dot))
 
-(error-str #:id "Instance Non-instance boolean field in LHS of dot"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Instance Non-instance boolean field in LHS of dot"
+ (define exn (i "
 class A {
   var x = true;
   static function main() {
     var a = new A();
     return a.x.y;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:non-instance-dot))
 
-(error-str #:id "Function return value non-instance var in LHS of dot"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Function return value non-instance var in LHS of dot"
+ (define exn (i "
 class A {
   function getX() { return 2; }
   static function main() {
     var a = new A();
     return a.getX().y;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:non-instance-dot))
 
-(error-str #:id "this in static context called from instance context"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "this in static context called from instance context"
+ (define exn (i "
 class A {
   var x = 10;
 
@@ -300,11 +335,12 @@ class A {
     var a = new A();
     return a.mightwork();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:this/super-in-static))
 
-(error-str #:id "super in static context called from instance context"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "super in static context called from instance context"
+ (define exn (i "
 class A {
   var x = 10;
 
@@ -320,11 +356,12 @@ class A {
     var a = new A();
     return a.mightwork();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:this/super-in-static))
 
-(error-str #:id "attempting to read from super as if var in instance function"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "attempting to read from super as if var in instance function"
+ (define exn (i "
 class Parent { }
 class A extends Parent {
 
@@ -336,73 +373,80 @@ class A extends Parent {
     var a = new A();
     return a.mightwork();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:keyword-as-identifier))
 
-(error-str #:id "declaring an instance field named this"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "declaring an instance field named this"
+ (define exn (i "
 class A {
   var this;
   static function main() {
     return 0;
   }
 }
-")
+" "A"))
+ (check-equal? (ue:type exn) ue:type:keyword-as-identifier))
 
-(error-str #:id "declaring an instance field named super"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "declaring an instance field named super"
+ (define exn (i "
 class A {
   var super;
   static function main() {
     return 0;
   }
 }
-")
+" "A"))
+ (check-equal? (ue:type exn) ue:type:keyword-as-identifier))
 
-(error-str #:id "declaring a static field named this"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "declaring a static field named this"
+ (define exn (i "
 class A {
   static var this;
   static function main() {
     return 0;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:keyword-as-identifier))
 
-(error-str #:id "declaring a static field named super"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "declaring a static field named super"
+ (define exn (i "
 class A {
   static var super;
   static function main() {
     return 0;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:keyword-as-identifier))
 
-(error-str #:id "declaring a local variable named this"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "declaring a local variable named this"
+ (define exn (i "
 class A {
   static function main() {
     var this;
     return 0;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:keyword-as-identifier))
 
-(error-str #:id "declaring a local variable named super"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "declaring a local variable named super"
+ (define exn (i "
 class A {
   static function main() {
     var super;
     return 0;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:keyword-as-identifier))
 
-(error-str #:id "assigning to this"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "assigning to this"
+ (define exn (i "
 class A {
 
   function nowork() {
@@ -414,11 +458,12 @@ class A {
     var a = new A();
     return a.nowork();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:assigning-to-this/super))
 
-(error-str #:id "assigning to super"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "assigning to super"
+ (define exn (i "
 class A {
 
   function mightwork() {
@@ -430,14 +475,15 @@ class A {
     var a = new A();
     return a.mightwork();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:assigning-to-this/super))
 
-(error-str #:id "passing this in a reference parameter"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "passing this in a reference parameter"
+ (define exn (i "
 class A {
-  function refFun(&inst) {
-    inst = new A();
+  function refFun(&inst) { throw 2;
+    inst = inst;
   }
 
   function mightwork() {
@@ -448,11 +494,12 @@ class A {
     var a = new A();
     return a.mightwork();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:this-as-ref-param))
 
-(error-str #:id "Declaring a function named `this`"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Declaring a function named `this`"
+ (define exn (i "
 class A {
   var x;
   function this() {
@@ -462,11 +509,12 @@ class A {
     x = this();
   }
   static function main() { return new A(); }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:keyword-as-identifier))
 
-(error-str #:id "Declaring a function named `super`"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Declaring a function named `super`"
+ (define exn (i "
 class A {
   var x;
   function super(x, y) {
@@ -476,22 +524,24 @@ class A {
     x = super();
   }
   static function main() { return new A(); }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:keyword-as-identifier))
 
 ; ; Constructors
 
-(error-str #:id "Cannot call constructor of undeclared class"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Cannot call constructor of undeclared class"
+ (define exn (i "
 class A {
   static function main() {
     return new B();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:not-a-class))
 
-(error-str #:id "Calling super() with no parent class"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling super() with no parent class"
+ (define exn (i "
 class A {
   A() {
     super();
@@ -499,11 +549,12 @@ class A {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:super-w/out-parent))
 
-(error-str #:id "Calling this(x) when no such constructor exists"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling this(x) when no such constructor exists"
+ (define exn (i "
 class A {
   A() {
     this(2, 3, 4);
@@ -511,11 +562,12 @@ class A {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:ctor-DNE))
 
-(error-str #:id "Calling super(x) when no such constructor exists in parent."
-           #:args (list "B")
-           #:catch #t "
+(test-case
+ "Calling super(x) when no such constructor exists in parent."
+ (define exn (i "
 class A {
   A() {
     this(2, 3, 4);
@@ -528,11 +580,12 @@ class B extends A {
   static function main() {
     return new B();
   }
-}")
+}" "B"))
+ (check-equal? (ue:type exn) ue:type:ctor-DNE))
 
-(error-str #:id "Parent doesn't have default ctor, child only has default ctor"
-           #:args (list "B")
-           #:catch #t "
+(test-case
+ "Parent doesn't have default ctor, child only has default ctor"
+ (define exn (i "
 class A {
   A(x, y) { }
 }
@@ -540,11 +593,12 @@ class B extends A {
   static function main() {
     return new B();
   }
-}")
+}" "B"))
+ (check-equal? (ue:type exn) ue:type:ctor-DNE))
 
-(error-str #:id "Parent doesn't have default ctor, no explicit super in user-defined ctor."
-           #:args (list "B")
-           #:catch #t "
+(test-case
+ "Parent doesn't have default ctor, no explicit super in user-defined ctor."
+ (define exn (i "
 class A {
   A(x, y) { }
 }
@@ -553,11 +607,12 @@ class B extends A {
   static function main() {
     return new B();
   }
-}")
+}" "B"))
+ (check-equal? (ue:type exn) ue:type:ctor-DNE))
 
-(error-str #:id "Calling this() after first line in constructor"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling this() after first line in constructor"
+ (define exn (i "
 class A {
   var x;
   A() {
@@ -570,11 +625,12 @@ class A {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:ctor-chain-outside-ctor))
 
-(error-str #:id "Calling this(...) twice, same ctor"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling this(...) twice, same ctor"
+ (define exn (i "
 class A {
   var x;
   A() {
@@ -587,11 +643,12 @@ class A {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:ctor-chain-outside-ctor))
 
-(error-str #:id "Calling this(...) twice, different ctor"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling this(...) twice, different ctor"
+ (define exn (i "
 class A {
   var x;
   A() {
@@ -605,11 +662,12 @@ class A {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:ctor-chain-outside-ctor))
 
-(error-str #:id "Calling super() after first line in constructor"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling super() after first line in constructor"
+ (define exn (i "
 class Parent {
   Parent() { }
 }
@@ -625,11 +683,12 @@ class A extends Parent {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:ctor-chain-outside-ctor))
 
-(error-str #:id "Calling super() then this()"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling super() then this()"
+ (define exn (i "
 class Parent {
   Parent() { }
   Parent(x) { }
@@ -646,11 +705,12 @@ class A extends Parent {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:ctor-chain-outside-ctor))
 
-(error-str #:id "Calling this() in same constructor, 1 total"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling this() in same constructor, 1 total"
+ (define exn (i "
 class A {
   var x;
   A() {
@@ -659,11 +719,12 @@ class A {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:cyclic-ctor-chaining))
 
-(error-str #:id "Calling this() in same constructor, 2 total"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling this() in same constructor, 2 total"
+ (define exn (i "
 class A {
   var x;
   A() {
@@ -675,11 +736,12 @@ class A {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:cyclic-ctor-chaining))
 
-(error-str #:id "Calling this() in same constructor, many"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Calling this() in same constructor, many"
+ (define exn (i "
 class A {
   var x;
   A() {
@@ -693,32 +755,35 @@ class A {
   static function main() {
     return new A();
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:cyclic-ctor-chaining))
 
-(error-str #:id "Cycle of constructors when chaining, revisits initial constructor"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Cycle of constructors when chaining, revisits initial constructor"
+ (define exn (i "
 class A {
   A() { this(1); }
   A(x) { this(1, 2); }
   A(x, y) { this(); }
   static function main() { return new A(); }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:cyclic-ctor-chaining))
 
-(error-str #:id "Cycle of constructors when chaining, does not revisit initial constructor"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Cycle of constructors when chaining, does not revisit initial constructor"
+ (define exn (i "
 class A {
   A() { this(1); }
   A(x) { this(1, 2); }
   A(x, y) { this(); }
   A(x, y, z) { this(); }
   static function main() { return new A(1, 2, 3); }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:cyclic-ctor-chaining))
 
-(error-str #:id "Colliding constructor signatures"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "Colliding constructor signatures"
+ (define exn (i "
 class A {
   var x;
   A() {
@@ -728,21 +793,23 @@ class A {
     x = 6;
   }
   static function main() { return new A().x; }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:duplicate-constructor))
 
-(error-str #:id "throw in ctor"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "throw in ctor"
+ (define exn (i "
 class A {
   A() {
     throw 5;
   }
   static function main() { return new A(); }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:uncaught-exception))
 
-(error-str #:id "break in ctor called in loop"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "break in ctor called in loop"
+ (define exn (i "
 class A {
   A() {
     break;
@@ -755,11 +822,12 @@ class A {
     }
     return 5;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:break-outside-loop))
 
-(error-str #:id "continue in ctor called in loop"
-           #:args (list "A")
-           #:catch #t "
+(test-case
+ "continue in ctor called in loop"
+ (define exn (i "
 class A {
   A() {
     continue;
@@ -772,4 +840,6 @@ class A {
     }
     return 5;
   }
-}")
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:continue-outside-loop))
+
