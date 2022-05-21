@@ -16,7 +16,7 @@
     (lambda (input
              #:return [return default-return]
              #:throw [throw default-throw]
-             #:user-exn [user-exn default-user-exn]
+             #:user-exn [user-exn (default-user-exn)]
              . args)
       (apply interpret-proc (parse-proc input) (append args (list return throw user-exn))))))
 

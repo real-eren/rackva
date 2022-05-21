@@ -40,7 +40,7 @@
                              class-name
                              default-return
                              default-throw
-                             default-user-exn)))
+                             (default-user-exn))))
 
 ;; interprets parse-trees produced by classParser.rkt
 (define interpret-parse-tree-v3
@@ -55,8 +55,7 @@
                                              user-exn
                                              #:class (string->symbol entry-point)))
                        #:throw throw
-                       #:user-exn user-exn)
-                      #:legal-construct? is-class-decl?)))
+                       #:user-exn user-exn))))
 
 ;;interprets parse-trees produced by functionParser.rkt
 (define interpret-parse-tree-v2
@@ -66,8 +65,7 @@
                       (conts-of ; only next and throw are actually reachable
                        #:next (lambda (s) (Mstate-main s return throw user-exn))
                        #:throw throw
-                       #:user-exn user-exn)
-                      #:legal-construct? (join-or is-var-decl? is-assign? is-fun-decl?))))
+                       #:user-exn user-exn))))
 
 ;; legacy, for testing
 ;; interprets parse-trees produced by simpleParser.rkt
@@ -126,18 +124,16 @@
 ; optionally takes a filter function (on statement) and throws an error if an
 ; encountered statement does not pass the filter
 (define Mstate-stmt-list
-  (lambda (stmt-list state conts #:legal-construct? [legal? (λ (v) #T)])
-    (cond
-      [(null? stmt-list)             ((next conts) state)]
-      [(legal? (first stmt-list))    (Mstate-statement (first stmt-list)
-                                                       state
-                                                       (conts-of conts
-                                                                 #:next (lambda (s)
-                                                                          (Mstate-stmt-list (rest stmt-list) 
-                                                                                            s
-                                                                                            conts))))]
-      ; indicative of bug in program
-      [else                          (error "encountered illegal construct type" (first stmt-list))])))
+  (lambda (stmt-list state conts)
+    (if (null? stmt-list)
+        ((next conts) state)
+        (Mstate-statement (first stmt-list)
+                          state
+                          (conts-of conts
+                                    #:next (lambda (s)
+                                             (Mstate-stmt-list (rest stmt-list) 
+                                                               (state:copy-context-stack #:src state #:dest s)
+                                                               conts)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -146,9 +142,7 @@
 ;; returns the state resulting from evaluating it
 (define Mstate-statement
   (lambda (statement state conts)
-    (if (is-construct? statement)
-        ((get-Mstate statement) statement state conts)
-        (error (format "unrecognized stmt: ~a" statement)))))
+    ((get-Mstate statement) statement (state:push-context statement state) conts)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CLASS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -211,11 +205,8 @@
               (λ (s nxt) (static-fields (filter is-static-field-decl? body) class-name s nxt throw user-exn)))))
 
 
-;; takes initial state, last continuation and a sequence of 2-arg functions
 ;; joins a sequence of tail-recursive functions via next continuations
 ;; each function must take two args: state and next(s)
-; for the sake of avoiding absurd indentation and making the intended order clear
-; also makes it trivial to rearrange the execution order
 (define chain-TR
   (lambda (state last-next f . fs)
     (if (null? fs)
@@ -238,7 +229,7 @@
 ; 1) input stmts were already validated
 (define method-type
   (lambda (stmt)
-    (map:get (action stmt) method-type-table)))
+    (map:get (first stmt) method-type-table)))
 ; 2) map:get return #F on miss
 (define is-method? method-type)
 
@@ -713,13 +704,13 @@
     
     (define try-throw
       (lambda (e s)
-        (define old-cs-state (state:with-context (state:context-stack state) s))
+        (define old-cs-state (state:copy-context-stack #:src state #:dest s))
         (cond
           [(null? catch-block)   (Mstate-block-impl (finally-body finally-block)
                                                     old-cs-state
                                                     (conts-of conts
                                                               #:next (lambda (s2)
-                                                                       ((throw conts) e (state:with-context (state:context-stack s) s2)))))]
+                                                                       ((throw conts) e (state:copy-context-stack #:src s #:dest s2)))))]
           [(null? finally-block) (Mstate-block-impl (catch-body catch-block)
                                                     (state:declare-var-with-value (catch-var catch-block)
                                                                                   e
@@ -929,7 +920,7 @@
                        (conts-of
                         #:next     (lambda (s2) ((next conts) state))
                         #:throw    (lambda (e s2)
-                                     ((throw conts) e (state:with-context (state:context-stack s2) state)))
+                                     ((throw conts) e (state:copy-context-stack #:src s2 #:dest state)))
                         #:return   (lambda (v s2) ((return conts) v state))
                         #:break    (default-break (user-exn conts))
                         #:continue (default-continue (user-exn conts))
@@ -1443,7 +1434,17 @@
 ; interpret-parse functions should use the throw cont parameter
 ; false -> Mstate-throw throws a user-exn, needs conts for user-exn's context stack
 (define default-throw (lambda (e s) (ue:raise-exn (ue:uncaught-exception e) s)))
-(define default-user-exn ue:raise-exn)
+
+
+(define (take-up-to lis n)
+  (if (<= (length lis) n)
+      lis
+      (take lis n)))
+
+(define default-user-exn
+  (lambda ([n 20]) ; retain the n deepest/recent elements on the context stack
+    (lambda (exn s)
+      (ue:raise-exn exn (take-up-to (state:context-stack s) n)))))
 
 (define default-break
   (lambda (user-exn)
