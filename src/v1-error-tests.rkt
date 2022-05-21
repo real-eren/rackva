@@ -9,7 +9,7 @@
   (lambda (program)
     (define user-exn (λ (exn s) exn))
     (interpret-v1-str program
-                      #:return (λ (v s) (failcheck "expected an error"))
+                      #:return (λ (v s) (fail-check "expected an error"))
                       #:user-exn user-exn
                       #:throw (λ (e s) (user-exn (ue:uncaught-exception e) s)))))
 

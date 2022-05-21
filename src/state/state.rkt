@@ -16,10 +16,11 @@
                                   pop-layer
                                   
                                   context-stack
-                                  with-context
+                                  push-context
+                                  copy-context-stack
+                                  
                                   set-fun-call-context
                                   instance-context?
-
                                   set-static-scope
                                   set-instance-scope
                                   set-this-scope
@@ -36,11 +37,11 @@
                                   get-var-box
                                   get-var-value
 
+                                  declare-fun
                                   fun-already-declared?
                                   has-fun?
                                   all-funs-with-name
                                   get-function
-                                  declare-fun
 
                                   declare-class
                                   has-class?
@@ -52,14 +53,14 @@
                                   class-get-inst-method
                                   declare-method
                                   method-already-declared?
-
-                                  get-zero-init-instance
-                                  get-init
-                                  get-constructor
                                   
                                   declare-instance-field
                                   declare-static-field
                                   field-already-declared?
+
+                                  get-zero-init-instance
+                                  get-init
+                                  get-constructor
                                   declare-init
                                   declare-constructor
                                   ctor-already-declared?)))
@@ -85,10 +86,6 @@
 (define $local-funs 'local-funs)
 (define local-funs (map:getter $local-funs))
 
-; stack of contexts. ex:
-; (top-level) ; global var and fun defs
-; (class-body 'A) ; class A declaration
-; (fun static (foo closure)) -> (fun instance (bar closure)) ; during A::foo called B::bar
 (define $context-stack 'context-stack)
 (define context-stack (map:getter $context-stack))
 
@@ -118,7 +115,7 @@
 ;        $local-funs   new-local-funs-table)
 ;        $global-funs  new-global-funs-table)
 ; (withf old-state
-;        $global-vars  (curry fun-table:declare function name params body scoper))
+;        $global-funs  (curry fun-table:declare function name params body scoper))
 (define withv map:withv)
 (define withf map:withf)
 (define of map:of)
@@ -155,17 +152,6 @@
            $local-funs  (curry stack:push new-function-table))))
 
 
-;;;; stack of contexts - top-level, fun-call, constructors, class-defs
-(define with-context
-  (lambda (context-stack state)
-    (withv state
-           $context-stack  context-stack)))
-
-(define set-fun-call-context
-  (lambda (fun state)
-    (withv state
-           $current-fun-call  fun)))
-
 ;; T/F whether the current context is of type `top-level`
 (define top-level?
   (lambda (state)
@@ -185,6 +171,21 @@
   (lambda (state)
     (< 0 (height (local-vars state)))))
 
+
+(define (push-context context state)
+  (withf state
+         $context-stack  (curry cons context)))
+
+(define (copy-context-stack #:src old-state #:dest new-state)
+  (withv new-state
+         $context-stack  (context-stack old-state)))
+
+;; called in interpreter before entering a function body
+; needed to correctly handle local function definitions
+(define set-fun-call-context
+  (lambda (fun state)
+    (withv state
+           $current-fun-call  fun)))
 ;; Function Closure / F whether the current context is of type `fun-call`
 (define fun-call-context?
   (lambda (state)
@@ -506,22 +507,6 @@
                 (class:methods (get-parent class-name state)))
         null)))
 
-
-;; Get the init function for this class
-; #F on miss
-(define get-init
-  (lambda (class-name state)
-    (get* state $classes class-name class:$init)))
-
-;; Get closure for the constructor with this signature
-; #F on miss
-; assumes class exists and constructors have class as name
-(define get-constructor
-  (lambda (class-name arg-list state)
-    (fun-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
-
-(define ctor-already-declared? get-constructor)
-
 ;; State with this fun declared in the current scope
 ; only called for top-level or nested functions
 (define declare-fun
@@ -620,7 +605,6 @@
   (lambda (class-name parent-name state)
     (withf state
            $classes  (curry map:put class-name (class:of #:name class-name #:parent parent-name))
-           $context-stack  (curry stack:push (context:of-class-def class-name))
            $current-type  (lambda (v) class-name))))
 
 ; declare an instance field for a class (just name, no initializer)
@@ -655,6 +639,7 @@
   (lambda (class-name fun-name arg-list state)
     (fun-table:get fun-name arg-list (get-class-methods class-name state))))
 
+
 ;; add an init function to a class
 ; assumption: called exactly once during class-body
 (define declare-init
@@ -666,6 +651,12 @@
                        #:scope function:scope:init
                        #:class class)
           state $classes class class:$init)))
+
+;; Get the init function for this class
+; #F on miss
+(define get-init
+  (lambda (class-name state)
+    (get* state $classes class-name class:$init)))
 
 ;; add a constructor to a class
 ; assumption: interpreter checks that this constructor has a unique signature
@@ -680,6 +671,14 @@
                     class)
              state $classes class class:$constructors)))
 
+;; Get closure for the constructor with this signature
+; #F on miss
+; assumes class exists and constructors have class as name
+(define get-constructor
+  (lambda (class-name arg-list state)
+    (fun-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
+
+(define ctor-already-declared? get-constructor)
 
 
 ;; returns a 0-initialized instance of the given class
