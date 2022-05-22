@@ -13,6 +13,16 @@
                       #:user-exn user-exn
                       #:throw (λ (e s) (user-exn (ue:uncaught-exception e) s)))))
 
+(test-case
+ "user-exn raised as user error in normal interpret"
+ (check-exn exn:fail:user?
+            (λ () (interpret-v3-str "
+class A {
+  static function main() {
+    return 5;
+  }
+}" "NotAClass"))))
+   
 ; ; CLASSES
 
 (test-case

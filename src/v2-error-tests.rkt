@@ -13,6 +13,19 @@
                       #:user-exn user-exn
                       #:throw (λ (e s) (user-exn (ue:uncaught-exception e) s)))))
 
+
+(test-case
+ "user-exn raised as user error in normal interpret"
+ (check-exn exn:fail:user?
+            (λ () (interpret-v2-str "
+var x = f();
+
+function main() {
+  return x;
+}"))))
+
+; ; FUNCTIONS
+
 (test-case
  "invoking nonexistent function in top level var declaration"
  (define exn (i "

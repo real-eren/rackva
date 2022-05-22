@@ -14,6 +14,13 @@
                       #:throw (λ (e s) (user-exn (ue:uncaught-exception e) s)))))
 
 (test-case
+ "user-exn raised as user error in normal interpret"
+ (check-exn exn:fail:user?
+            (λ () (interpret-v1-str "return x;"))))
+
+; ; VARIABLES
+
+(test-case
  "accessing var before declaring it"
  (define exn (i "return x;"))
  (check-equal? (ue:type exn) ue:type:reference-undeclared-var))
