@@ -459,3 +459,10 @@ class A {
 }" "A")
              3)
 
+(test-not-exn "Returning an instance should not cause an error"
+              (λ () (i "
+class A {
+  static function main() {
+    return new A();
+  }
+}" "A")))

@@ -22,7 +22,18 @@ class A {
     return 5;
   }
 }" "NotAClass"))))
-   
+
+(test-case
+ "throwing instance should successfully raise user-exn"
+ (define exn (i "
+class A {
+  static function main() {
+    throw new A();
+  }
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:uncaught-exception))
+
+
 ; ; CLASSES
 
 (test-case
