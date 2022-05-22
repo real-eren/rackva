@@ -953,7 +953,7 @@
         (get-environment fun-closure
                          fun-inputs
                          eval-state
-                         (state:set-fun-call-context fun-closure state)
+                         (state:enter-fun-call-context fun-closure state)
                          (conts-of conts
                                    #:next (lambda (s)
                                             (Mstate-stmt-list (function:body fun-closure)
@@ -1105,7 +1105,7 @@
         (get-environment ctor
                          args
                          arg-eval-state
-                         (state:set-fun-call-context ctor run-state)
+                         (state:enter-fun-call-context ctor run-state)
                          (conts-of conts
                                    #:next (lambda (s)
                                             (ctor-rec-impl (function:body ctor)

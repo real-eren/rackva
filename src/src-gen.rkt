@@ -876,6 +876,7 @@ class Base { static var y; }
 (define (AST-path->stack-trace path)
   (string-join (map (λ (e)
                       (cond
+                        [(string? e)      e]
                         [(statement? e)   (statement e)]
                         [else             (value e)]))
                     path)

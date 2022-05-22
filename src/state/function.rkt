@@ -56,7 +56,7 @@
      $params  params
      $body    body
      $scoper  scoper
-     $scope    scope
+     $scope   scope
      $class   class)))
 
 ;; returns the number of formal parameters in a function

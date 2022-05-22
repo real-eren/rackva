@@ -19,7 +19,7 @@
                                   push-context
                                   copy-context-stack
                                   
-                                  set-fun-call-context
+                                  enter-fun-call-context
                                   instance-context?
                                   set-static-scope
                                   set-instance-scope
@@ -182,9 +182,10 @@
 
 ;; called in interpreter before entering a function body
 ; needed to correctly handle local function definitions
-(define set-fun-call-context
+(define enter-fun-call-context
   (lambda (fun state)
     (withv state
+           $context-stack  (cons (function->string fun) (context-stack state))
            $current-fun-call  fun)))
 ;; Function Closure / F whether the current context is of type `fun-call`
 (define fun-call-context?
@@ -746,7 +747,7 @@
          [fm      (get-function fmn fma s2)]
          [fan     'a] [faa     '()]
          [fbn     'b] [fba     '()]
-         [s3      (declare-fun fan faa null (set-fun-call-context fm (push-new-layer s2)))]
+         [s3      (declare-fun fan faa null (enter-fun-call-context fm (push-new-layer s2)))]
          [s4      (declare-fun fbn fba null s3)]
          [s5      (pop-layer s4)]
          )
@@ -767,7 +768,7 @@
          [fg      (get-function fgn fga s2)]
          
          [fan     'foo] [faa     '(a b c)]
-         [s3      (declare-fun fan faa null (set-fun-call-context fg (push-new-layer s2)))]
+         [s3      (declare-fun fan faa null (enter-fun-call-context fg (push-new-layer s2)))]
          [fa      (get-function fan faa s3)]
          
          [fbn     'bar] [fba     '()]
