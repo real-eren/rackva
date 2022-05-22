@@ -1,5 +1,6 @@
 #lang racket
-(require "state/state.rkt"
+(require "src-gen.rkt"
+         "state/state.rkt"
          "util/map.rkt")
 
 (provide (prefix-out ue: (except-out (all-defined-out)
@@ -31,20 +32,11 @@
   (lambda (exn cs)
     (raise-user-error (format "Error: ~a~nSource:~n~a"
                               (exn->string exn)
-                              (context-stack->string cs)))))
+                              (AST-path->stack-trace cs)))))
 
 (define exn->string
   (lambda (exn)
     ((map:get 'fmt-proc exn) exn)))
-
-(define context-stack->string
-  (lambda (cs)
-    (format "~a" cs)))
-
-(define ue-cs-add
-  (lambda (context ue)
-    (lambda (e s)
-      (ue e ('todo context s)))))
 
 (define exn:of
   (lambda (type fmt-proc keys values)
