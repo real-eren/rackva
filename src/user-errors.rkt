@@ -1,6 +1,5 @@
 #lang racket
 (require "src-gen.rkt"
-         "state/state.rkt"
          "util/map.rkt")
 
 (provide (prefix-out ue: (except-out (all-defined-out)
@@ -14,19 +13,18 @@
 ; produced by calling functions here
 ; with parameters from call-site
 
-; error instance
+; exn instance
 ; map {
 ;   type : 'type
 ;   field1 : x
 ;   field2 : y
 ; }
 ; this way, easy to check type but can also
-; check the error's fields in unit-tests
+; check the exn's fields in unit-tests
 
 ; cs - context stack
 ; built by intepreter as it enters Mstates and Mvalues
 ; head is most recent context
-;
 
 (define raise-exn
   (lambda (exn cs)
@@ -63,6 +61,21 @@
           (exn:of type (formatter fmt-str keys) keys vals)
           (apply raise-arity-error 'exn-ctor (length keys) vals)))))
 
+(module+ test
+  (require rackunit)
+  (test-case
+   "fn returned by exn:ctor should validate # inputs"
+   (check-exn exn:fail? (λ () ((exn:ctor type:break-outside-loop
+                                         "str") 'v1)))
+   (check-exn exn:fail? (λ () ((exn:ctor type:break-outside-loop
+                                         "str"
+                                         'k1) 'v1 'v2)))
+   (check-exn exn:fail? (λ () ((exn:ctor type:break-outside-loop
+                                         "str"
+                                         'k1 'k2))))
+   (check-exn exn:fail? (λ () ((exn:ctor type:break-outside-loop
+                                         "str"
+                                         'k1 'k2) 'v1)))))
 
 ;; exception types
 

@@ -6,7 +6,6 @@
          "state/instance.rkt"
          "state/state.rkt"
          "util/map.rkt"
-         "util/predicates.rkt"
          "classParser.rkt")
 
 (provide interpret

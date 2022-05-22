@@ -7,7 +7,6 @@
          "instance.rkt"
          "function.rkt"
          "function-table.rkt"
-         "context.rkt"
          "class.rkt")
 
 (provide new-state
