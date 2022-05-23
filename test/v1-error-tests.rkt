@@ -1,21 +1,17 @@
 #lang racket
 
-(require "../src/interpreter-extension.rkt"
-         "../src/state/state.rkt"
+(require "error-test-shared.rkt"
+         "../src/interpreter-extension.rkt"
          "../src/user-errors.rkt"
          rackunit)
 
 
-(define i
-  (lambda (program)
-    (define user-exn (λ (exn s) (list exn (state:context-stack s))))
-    (interpret-v1-str program
-                      #:return (λ (v s) (fail-check "expected an error"))
-                      #:user-exn user-exn
-                      #:throw (λ (e s) (user-exn (ue:uncaught-exception e) s)))))
-
-(define (cs-types result)
-  (map first (second result)))
+(define (i program)
+  (interpret-v1-str program
+                    #:return (λ (v s) (fail-check "expected an error"))
+                    #:user-exn test-user-exn
+                    #:throw (λ (e s)
+                              (test-user-exn (ue:uncaught-exception e) s))))
 
 (test-case
  "user-exn raised as user error in normal interpret"
@@ -27,9 +23,9 @@
 (test-case
  "accessing var before declaring it"
  (define result (i "return x;"))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(return)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(return)))
 
 (test-case
  "assign w/out declaring, statement"
@@ -37,18 +33,18 @@
 var x = 1;
 y = 10 + x;
 return y;"))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(=)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(=)))
 
 (test-case
  "assign w/out declaring, expression"
  (define result (i "
 var x = 1;
 return (y = 10 + x);"))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(return)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(return)))
 
 (test-case
  "reference w/out declare or initializing"
@@ -56,9 +52,9 @@ return (y = 10 + x);"))
 var y;
 y = x;
 return y;"))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(=)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(=)))
 
 
 (test-case
@@ -68,9 +64,9 @@ var x;
 var y;
 x = x + y;
 return x;"))
- (check-equal? (ue:type (first result)) ue:type:access-uninitialized-var)
- (check-equal? (cs-types result)
-               '(=)))
+ (check-exn-result result
+                   ue:type:access-uninitialized-var
+                   '(=)))
 
 (test-case
  "redeclare in same scope"
@@ -79,9 +75,9 @@ var x = 10;
 var y = 20;
 var x = x + y;
 return x;"))
- (check-equal? (ue:type (first result)) ue:type:duplicate-variable)
- (check-equal? (cs-types result)
-               '(var)))
+ (check-exn-result result
+                   ue:type:duplicate-variable
+                   '(var)))
 
 (test-case
  "var in block not accessible from subsequent outer scope"
@@ -95,9 +91,9 @@ else {
   var min = y;
 }
 return min;"))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(return)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(return)))
 
 
 (test-case
@@ -107,9 +103,9 @@ if (true) {
   a = 0;
 }
 return a;"))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(= begin if)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(= begin if)))
 
 (test-case
  "var in block not accessible in later block (same depth in stack)"
@@ -121,9 +117,9 @@ if (true) {
   a = 2;
 }
 return a;"))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(= begin if)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(= begin if)))
 
 (test-case
  "var declared in first iter of while loop doesn't persist through later iters"
@@ -137,9 +133,9 @@ while (x < 5) {
   x = x + 1;
 }
 return 0;"))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(return begin if begin while)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(return begin if begin while)))
 
 (test-case
  "break outside of loop"
@@ -147,9 +143,9 @@ return 0;"))
 var x = 1;
 break;
 return x;"))
- (check-equal? (ue:type (first result)) ue:type:break-outside-loop)
- (check-equal? (cs-types result)
-               '(break)))
+ (check-exn-result result
+                   ue:type:break-outside-loop
+                   '(break)))
 
 (test-case
  "continue outside of loop"
@@ -157,16 +153,16 @@ return x;"))
 var x = 1;
 continue;
 return x;"))
- (check-equal? (ue:type (first result)) ue:type:continue-outside-loop)
- (check-equal? (cs-types result)
-               '(continue)))
+ (check-exn-result result
+                   ue:type:continue-outside-loop
+                   '(continue)))
 
 (test-case
  "Top-level throw"
  (define result (i "throw 1;"))
- (check-equal? (ue:type (first result)) ue:type:uncaught-exception)
- (check-equal? (cs-types result)
-               '(throw)))
+ (check-exn-result result
+                   ue:type:uncaught-exception
+                   '(throw)))
 
 (test-case
  "Uncaught throw in (entered) catch block"
@@ -185,9 +181,9 @@ catch (ex) {
   throw 1;
 }
 return result;"))
- (check-equal? (ue:type (first result)) ue:type:uncaught-exception)
- (check-equal? (cs-types result)
-               '(throw try)))
+ (check-exn-result result
+                   ue:type:uncaught-exception
+                   '(throw try)))
 
 (test-case
  "break exit from block pops frame"
@@ -202,9 +198,9 @@ while (true) {
 }
 return a;
 "))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(return)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(return)))
 
 (test-case
  "continue in while body block, pop frame"
@@ -225,9 +221,9 @@ if (x < y) {
 }
 return x;
 "))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(= begin if begin if)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(= begin if begin if)))
 
 (test-case
  "throw in block, should pop frame. var from try not visible in catch"
@@ -240,9 +236,9 @@ catch (e) {
   return a;
 }
 "))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(return try)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(return try)))
 
 (test-case
  "throw in block, should pop frame. var from try not visible in finally"
@@ -257,13 +253,14 @@ finally {
   return a;
 }
 "))
- (check-equal? (ue:type (first result)) ue:type:reference-undeclared-var)
- (check-equal? (cs-types result)
-               '(return try)))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(return try)))
 
 (test-case
  "program without return statement"
  (define result (i "var x = 2;"))
- (check-equal? (ue:type (first result)) ue:type:did-not-return)
- (check-equal? (cs-types result) '()))
+ (check-exn-result result
+                   ue:type:did-not-return
+                   '()))
 
