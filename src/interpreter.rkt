@@ -1052,11 +1052,10 @@
     (define (name-return n s)
       (define (value-return v s2)
         ; n is valid in s, but not s2 or state
-        (define assign-to-state (state:restore-scope #:dest s2 #:src s))
-        (define assigned-state (state:assign-var n v assign-to-state))
-        (define return-state (state:restore-scope #:dest assigned-state
-                                                  #:src s2))
-        ((return conts) v return-state))
+        ((return conts) v (state:restore-scope
+                           #:dest (state:assign-var n v (state:restore-scope #:dest s2
+                                                                             #:src s))
+                           #:src s2)))
       (cond
         [(super-or-this? n)          ((user-exn conts) (ue:assigning-to-this/super n) state)]
         [(state:var-declared? n s)   (Mvalue (assign-expr expr)

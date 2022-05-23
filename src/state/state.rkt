@@ -252,7 +252,7 @@
     (withv new-state
            $current-type  (current-type old-state)
            $current-fun-call  (map:get $current-fun-call old-state)
-           $dotted        #F
+           $dotted        (map:get $dotted old-state)
            $this          (this old-state))))
 
 

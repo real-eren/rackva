@@ -349,6 +349,22 @@ class Child extends Parent {
 }" "Child")
              2)
 
+(test-equal? "access static field of unrelated class with dot"
+             (i "
+class A { static var a = 5; }
+class B {
+  static function div(&num, denom) {
+    num = num / denom;
+  }
+
+  static function main() {
+    A.a = A.a + 2;
+    div(A.a, 3);
+    return A.a;
+  }
+}" "B")
+             2)
+
 
 ; ; ABSTRACT METHODS
 
@@ -428,6 +444,33 @@ class A {
   }
 }" "A")
              4)
+
+(test-equal? "assign to dotted field"
+             (i "
+class Point {
+  var x;
+  var y;
+
+  function setX(x) { this.x = x; }
+  function setY(y) { this.y = y; }
+
+  function sqrDistTo(otherPoint) {
+    var dx = otherPoint.x - this.x;
+    var dy = otherPoint.y - this.y;
+    return dx*dx + dy*dy;
+  }
+
+  static function main() {
+    var p1 = new Point();
+    p1.setX(15);
+    p1.setY(5);
+    var p2 = new Point();
+    p2.setX(10);
+    p2.setY(6);
+    return p1.sqrDistTo(p2);
+  }
+}" "Point")
+             26)
 
 ; ; SUPER FIELDS & METHODS
 (test-equal? "todo"
