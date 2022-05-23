@@ -344,22 +344,21 @@
 (define declare-static-field
   (lambda (stmt class-name state next throw user-exn)
     (let* ([name        (decl-var stmt)]
+           [collide?    (state:field-already-declared? name class-name state)]
            [maybe-expr  (decl-maybe-expr stmt)]
            [expr        (if (null? maybe-expr) 0 (get maybe-expr))])
       (cond
-        [(super-or-this? name)                      (user-exn (ue:keyword-as-identifier name 'field) state)]
-        [(state:field-already-declared? name
-                                        class-name
-                                        state)      (user-exn (ue:duplicate-field name) state)]
-        [else                                       (Mvalue expr
-                                                            state
-                                                            (conts-of #:throw throw
-                                                                      #:user-exn user-exn
-                                                                      #:return (lambda (v s)
-                                                                                 (next (state:declare-static-field name
-                                                                                                                   v
-                                                                                                                   class-name
-                                                                                                                   s)))))]))))
+        [(super-or-this? name)    (user-exn (ue:keyword-as-identifier name 'field) state)]
+        [collide?                 (user-exn (ue:duplicate-field name) state)]
+        [else                     (Mvalue expr
+                                          state
+                                          (conts-of #:throw throw
+                                                    #:user-exn user-exn
+                                                    #:return (lambda (v s)
+                                                               (next (state:declare-static-field name
+                                                                                                 v
+                                                                                                 class-name
+                                                                                                 s)))))]))))
 
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
