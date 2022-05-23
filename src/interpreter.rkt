@@ -485,6 +485,13 @@
 
 (define Mstate-while-impl
   (lambda (condition body state conts)
+    (define (repeat s)
+      (Mstate-while-impl condition
+                         body
+                         (state:copy-context-stack #:src state #:dest s)
+                         conts))
+    (define (break s)
+      ((next conts) (state:copy-context-stack #:src state #:dest s)))
     (Mbool condition
            state
            (conts-of conts
@@ -493,17 +500,9 @@
                                     (Mstate-statement body 
                                                       s1
                                                       (conts-of conts
-                                                                #:next (lambda (s2)
-                                                                         (Mstate-while-impl condition
-                                                                                            body
-                                                                                            s2
-                                                                                            conts))
-                                                                #:break (next conts)
-                                                                #:continue (lambda (s3)
-                                                                             (Mstate-while-impl condition
-                                                                                                body
-                                                                                                s3
-                                                                                                conts))))
+                                                                #:next repeat
+                                                                #:break break
+                                                                #:continue repeat))
                                     ((next conts) s1)))))))
 
 
