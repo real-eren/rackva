@@ -184,7 +184,7 @@ class ClassName {
 }" "A"))
  (check-exn-result result
                    ue:type:uncaught-exception
-                   '(throw "ClassName::foo()" var)))
+                   '(throw "ClassName::foo()" var class)))
 
 (test-case
  "Static method with duplicate parameter names"
@@ -491,7 +491,7 @@ class A {
 " "A"))
  (check-exn-result result
                    ue:type:keyword-as-identifier
-                   '(var "A::main()")))
+                   '(var class)))
 
 (test-case
  "declaring an instance field named super"
@@ -505,7 +505,7 @@ class A {
 " "A"))
  (check-exn-result result
                    ue:type:keyword-as-identifier
-                   '(var "A::main()")))
+                   '(var class)))
 
 (test-case
  "declaring a static field named this"
@@ -518,7 +518,7 @@ class A {
 }" "A"))
  (check-exn-result result
                    ue:type:keyword-as-identifier
-                   '(static-var "A::main()")))
+                   '(static-var class)))
 
 (test-case
  "declaring a static field named super"
@@ -531,7 +531,7 @@ class A {
 }" "A"))
  (check-exn-result result
                    ue:type:keyword-as-identifier
-                   '(static-var "A::main()")))
+                   '(static-var class)))
 
 (test-case
  "declaring a local variable named this"
@@ -713,7 +713,7 @@ class B extends A {
 }" "B"))
  (check-exn-result result
                    ue:type:ctor-DNE
-                   '("B::B()" return "B::main()")))
+                   '(funcall "B::B()" return "B::main()")))
 
 (test-case
  "Parent doesn't have default ctor, child only has default ctor"
@@ -728,7 +728,7 @@ class B extends A {
 }" "B"))
  (check-exn-result result
                    ue:type:ctor-DNE
-                   '("B::B()" return "B::main()")))
+                   '(funcall "B::B()" return "B::main()")))
 
 (test-case
  "Parent doesn't have default ctor, no explicit super in user-defined ctor."
@@ -744,7 +744,7 @@ class B extends A {
 }" "B"))
  (check-exn-result result
                    ue:type:ctor-DNE
-                   '("B::B()" return "B::main()")))
+                   '(funcall "B::B()" return "B::main()")))
 
 (test-case
  "Calling this() in static non-ctor function"
@@ -896,7 +896,7 @@ class A {
 }" "A"))
  (check-exn-result result
                    ue:type:cyclic-ctor-chaining
-                   '("A::A()" return "A::main()")))
+                   '(funcall "A::A()" return "A::main()")))
 
 (test-case
  "Calling this() in same constructor, 2 total"
@@ -915,7 +915,7 @@ class A {
 }" "A"))
  (check-exn-result result
                    ue:type:cyclic-ctor-chaining
-                   '("A::A()" return "A::main()")))
+                   '(funcall "A::A()" return "A::main()")))
 
 (test-case
  "Calling this() in same constructor, many"
@@ -936,7 +936,7 @@ class A {
 }" "A"))
  (check-exn-result result
                    ue:type:cyclic-ctor-chaining
-                   '("A::A()" return "A::main()")))
+                   '(funcall "A::A()" return "A::main()")))
 
 (test-case
  "Cycle of constructors when chaining, revisits initial constructor"
@@ -949,7 +949,8 @@ class A {
 }" "A"))
  (check-exn-result result
                    ue:type:cyclic-ctor-chaining
-                   '("A::A(x, y)" "A::A(x)" "A::A()" return "A::main()")))
+                   '(funcall "A::A(x, y)" funcall "A::A(x)"
+                             funcall "A::A()" return "A::main()")))
 
 (test-case
  "Cycle of constructors when chaining, does not revisit initial constructor"
@@ -963,8 +964,8 @@ class A {
 }" "A"))
  (check-exn-result result
                    ue:type:cyclic-ctor-chaining
-                   '("A::A(x, y)" "A::A(x)" "A::A()"
-                                  "A::A(x, y, z)" return "A::main()")))
+                   '(funcall "A::A(x, y)" funcall  "A::A(x)" funcall "A::A()"
+                             funcall "A::A(x, y, z)" return "A::main()")))
 
 (test-case
  "Colliding constructor signatures"

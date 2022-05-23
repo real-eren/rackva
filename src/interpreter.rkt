@@ -1097,7 +1097,7 @@
                               (conts-of
                                #:next (lambda (s) ((return conts) inst state))
                                #:return (lambda (v s) ((return conts) inst state))
-                               #:throw (lambda (e s) ((throw conts) e state))
+                               #:throw (lambda (e s) ((throw conts) e (state:copy-context-stack #:src s #:dest state)))
                                #:break (default-break (user-exn conts))
                                #:continue (default-continue (user-exn conts))
                                #:user-exn (user-exn conts))))
@@ -1163,8 +1163,15 @@
 ; init function was generated, and will not contain a return statement
 (define ctor-pre-body
   (lambda (body class-name parent ctor-chain state conts)
+    ; conts for chain cases, restores context-stack
+    (define chain-state (state:push-context (if (null? body)
+                                                '(funcall super)
+                                                (first body))
+                                            state))
+    (define chain-conts
+      (w/preproc conts #:map-state (λ (s) (state:copy-context-stack #:src state #:dest s))))
     (define super-next
-      (lambda (s)
+      (λ (s)
         (Mvalue-fun-impl (state:get-init class-name state)
                          '()
                          state
@@ -1175,12 +1182,12 @@
       [(start-this? body)               (construct-instance class-name
                                                             (fun-inputs (first body))
                                                             ctor-chain
-                                                            state
-                                                            state
-                                                            conts)]
+                                                            chain-state
+                                                            chain-state
+                                                            chain-conts)]
       ; super and no parent -> error
       [(and (start-super? body)
-            (not parent))               ((user-exn conts) (ue:super-w/out-parent class-name) state)]
+            (not parent))               ((user-exn conts) (ue:super-w/out-parent class-name) chain-state)]
       ; no parent -> init
       [(not parent)                     (Mvalue-fun-impl (state:get-init class-name state)
                                                          '()
@@ -1194,11 +1201,11 @@
                                                                 '())
                                                             '() ; empty chain because going up class heirarchy,
                                                             ; can't revisit ctors of this class
-                                                            state
-                                                            state
-                                                            (conts-of conts
+                                                            chain-state
+                                                            chain-state
+                                                            (conts-of chain-conts
                                                                       #:next super-next
-                                                                      #:return (lambda (v s) (super-next s))))])))
+                                                                      #:return (λ (v s) (super-next s))))])))
 
 ; assumes every statement in a function body is nested and has at least 2 elems
 ;; is the first statement of a ctor body this(...) or super(...)
