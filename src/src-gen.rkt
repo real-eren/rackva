@@ -1,4 +1,6 @@
-#lang racket
+#lang racket/base
+(require racket/list
+         racket/string)
 (provide AST-path->stack-trace)
 
 ;;;; Takes AST nodes from simpleParser/functionParser/classParser

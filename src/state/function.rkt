@@ -1,6 +1,8 @@
-#lang racket
+#lang racket/base
 
-(require "../util/map.rkt")
+(require "../util/map.rkt"
+         racket/list
+         racket/string)
 
 (provide function->string
          (prefix-out function: (except-out (all-defined-out)

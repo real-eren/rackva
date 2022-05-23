@@ -1,5 +1,5 @@
-#lang racket
-
+#lang racket/base
+(require racket/list)
 (provide (prefix-out map:
                      (combine-out empty
                                   empty?
@@ -121,9 +121,9 @@
         (put key value map))))
 
 ;; List of all keys in this map
-(define keys (curry map entry-key))
+(define (keys table) (map entry-key table))
 ;; List of all values in this map
-(define values (curry map entry-value))
+(define (values table) (map entry-value table))
 
 ;;;; deep accessor functions
 ;; keys are applied left-to-right
@@ -134,7 +134,7 @@
 (define get*
   (lambda (map . keys)
     (cond
-      [(false? map)      #F]
+      [(not map)      #F]
       [(null? keys)      map]
       [else              (apply get* (get (car keys) map) (cdr keys))])))
 
@@ -221,7 +221,8 @@
 
 ;;;; Unit Tests
 (module+ test
-  (require rackunit)
+  (require rackunit
+           racket/function)
 
   ;; newly constructed maps are empty
   (check-true (empty? empty))

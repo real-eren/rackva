@@ -1,6 +1,8 @@
-#lang racket
+#lang racket/base
 
-(require "function.rkt")
+(require "function.rkt"
+         racket/bool
+         racket/list)
 
 (provide new-function-table
          (prefix-out fun-table:

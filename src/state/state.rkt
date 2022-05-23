@@ -1,13 +1,16 @@
-#lang racket
+#lang racket/base
 
-(require "../util/map.rkt"
-         "../util/stack.rkt"
-         "../util/predicates.rkt"
-         "var-table.rkt"
-         "instance.rkt"
+(require "class.rkt"
          "function.rkt"
          "function-table.rkt"
-         "class.rkt")
+         "instance.rkt"
+         "var-table.rkt"
+         "../util/map.rkt"
+         "../util/predicates.rkt"
+         "../util/stack.rkt"
+         racket/bool
+         racket/function
+         racket/list)
 
 (provide new-state
          (prefix-out state:

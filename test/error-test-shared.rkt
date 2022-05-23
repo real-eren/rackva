@@ -1,7 +1,8 @@
-#lang racket
+#lang racket/base
 (require "../src/state/state.rkt"
          "../src/user-errors.rkt"
-         rackunit)
+         rackunit
+         racket/list)
 
 (provide cs-types
          test-user-exn

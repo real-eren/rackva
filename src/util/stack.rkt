@@ -1,4 +1,5 @@
-#lang racket
+#lang racket/base
+(require racket/list)
 ;;;; Stack
 ;; "abstraction" for a stack
 ; a singly-linked list is already a stack,

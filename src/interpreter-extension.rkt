@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 (require "interpreter.rkt"
          (prefix-in simple: "parse/simpleParser.rkt")

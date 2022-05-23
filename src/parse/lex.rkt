@@ -1,5 +1,5 @@
 ; If you are not using racket, comment these two lines
-#lang racket
+#lang racket/base
 (provide start-lex
          start-lex-str
          end-lex

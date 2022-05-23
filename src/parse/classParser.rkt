@@ -1,5 +1,5 @@
 ; If you are using scheme instead of racket, comment these two lines, uncomment the (load "lex.scm") line and comment the (require "lex.scm") line
-#lang racket
+#lang racket/base
 (provide (all-defined-out))
 
 ; A simple parser for a Java style language

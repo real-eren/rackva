@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 (require "conts.rkt"
          "user-errors.rkt"
@@ -6,7 +6,11 @@
          "state/function.rkt"
          "state/instance.rkt"
          "state/state.rkt"
-         "util/map.rkt")
+         "util/map.rkt"
+         racket/bool
+         racket/function
+         racket/list
+         racket/string)
 
 (provide interpret
          interpret-parse-tree-v3

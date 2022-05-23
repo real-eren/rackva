@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 (require "../util/map.rkt")
 (provide is-instance?

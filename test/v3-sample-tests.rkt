@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 (require "../src/interpreter-extension.rkt"
          rackunit)
 ;; Tests provided in the assignment

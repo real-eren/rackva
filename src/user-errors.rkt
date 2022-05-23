@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 (require "src-gen.rkt"
          "util/map.rkt")
 

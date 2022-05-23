@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 
 (require "error-test-shared.rkt"
          "../src/interpreter-extension.rkt"
