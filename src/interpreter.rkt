@@ -950,9 +950,9 @@
                                   [(state:has-fun? n arg-list s)  (on-hit n s)]
                                   [else                           ((user-exn conts) (ue:function-not-in-scope name
                                                                                                               (length arg-list)
-                                                                                                              (get-similar-fun-suggestions n state))
+                                                                                                              (similar-funs n state))
                                                                                     state)]))))))
-(define get-similar-fun-suggestions
+(define similar-funs
   (lambda (name state)
     (let ([similar-funs  (state:all-funs-with-name name state)])
       (if (null? similar-funs)
@@ -1046,22 +1046,27 @@
 (define assign-var second)
 (define assign-expr third)
 
+; the non-functional uses of define here are for readability and limiting the width.
 (define Mvalue-assign
   (lambda (expr state conts)
-    (Mvalue (assign-expr expr)
-            state
-            (conts-of conts
-                      #:return (lambda (v s)
-                                 (Mname (assign-var expr)
-                                        s
-                                        (conts-of conts
-                                                  #:return (lambda (n s2)
-                                                             (cond
-                                                               [(or (eq? 'super n)
-                                                                    (eq? 'this n))           ((user-exn conts) (ue:assigning-to-this/super n) state)]
-                                                               [(state:var-declared? n s2)   ((return conts) v (state:restore-scope #:dest (state:assign-var n v s2)
-                                                                                                                                    #:src state))]
-                                                               [else                         ((user-exn conts) (ue:reference-undeclared-var n) state)])))))))))
+    (define (name-return n s)
+      (define (value-return v s2)
+        ; n is valid in s, but not s2 or state
+        (define assign-to-state (state:restore-scope #:dest s2 #:src s))
+        (define assigned-state (state:assign-var n v assign-to-state))
+        (define return-state (state:restore-scope #:dest assigned-state
+                                                  #:src s2))
+        ((return conts) v return-state))
+      (cond
+        [(super-or-this? n)          ((user-exn conts) (ue:assigning-to-this/super n) state)]
+        [(state:var-declared? n s)   (Mvalue (assign-expr expr)
+                                             (state:restore-scope #:dest s #:src state)
+                                             (conts-of conts #:return value-return))]
+        [else                        ((user-exn conts) (ue:reference-undeclared-var n) state)]))
+    (Mname (assign-var expr)
+           state
+           (conts-of conts
+                     #:return name-return))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   NEW   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1184,7 +1189,8 @@
                                                             (if (start-super? body)
                                                                 (fun-inputs (first body))
                                                                 '())
-                                                            '() ; empty chain because going up class heirarchy, can't revisit ctors of this class
+                                                            '() ; empty chain because going up class heirarchy,
+                                                            ; can't revisit ctors of this class
                                                             state
                                                             state
                                                             (conts-of conts

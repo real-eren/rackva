@@ -18,5 +18,5 @@
 
 
 (define-check (check-exn-result result exn-type context-stack)
-  (check-equal? (ue:type (first result)) exn-type)
+  (check-equal? (ue:exn:type (first result)) exn-type)
   (check-equal? (cs-types result) context-stack))

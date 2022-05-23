@@ -69,6 +69,17 @@ return x;"))
                    '(=)))
 
 (test-case
+ "error in LHS of assign reported before error in RHS"
+ (define result (i "
+x = y;
+return x;"))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(=))
+ (check-equal? (ue:exn:property 'var-name (car result))
+               'x))
+
+(test-case
  "redeclare in same scope"
  (define result (i "
 var x = 10;

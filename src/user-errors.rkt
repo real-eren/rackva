@@ -44,11 +44,11 @@
            keys
            values)))
 
-(define type
-  (lambda (exn)
-    (map:get 'type exn)))
+(define (exn:type exn)
+  (map:get 'type exn))
 
-
+(define exn:property map:get)
+  
 (define formatter
   (lambda (fmt-str keys)
     (lambda (exn)
