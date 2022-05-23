@@ -190,11 +190,17 @@
             "Function `~a` is already declared in the current scope"
             'fun-sig))
 
-(define type:duplicate-variable 'redeclare-variable)
+(define type:duplicate-variable 'duplicate-variable)
 (define duplicate-variable
   (exn:ctor type:duplicate-variable
             "A variable named `~a` is already declared in the current scope"
             'var-name))
+
+(define type:duplicate-parameter 'duplicate-parameter)
+(define duplicate-parameter
+  (exn:ctor type:duplicate-parameter
+            "A parameter named `~a` is already declared in this function's signature"
+            'param-name))
 
 
 

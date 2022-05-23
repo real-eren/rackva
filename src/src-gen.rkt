@@ -232,6 +232,10 @@
   (string-append "throw " (value (second stmt)) ";"))
 (define throw? (? 'throw))
 
+(module+ test
+  (ce (return '(return (+ 3 x))) "return 3 + x;")
+  (ce (throw '(throw (+ 3 x))) "throw 3 + x;"))
+
 ; see assign
 (define (assign-stmt stmt [depth 0] [ind-width default-indent-width])
   (string-append (assign stmt) ";"))
@@ -671,10 +675,9 @@ _}
         class-decl))
 
 (define (statement stmt [depth 0] [ind-width default-indent-width])
-  ((λ (v) (if v v (error 'unsupported "~a" stmt)))
-   (ormap (λ (pred proc) (and (pred stmt) (proc stmt depth ind-width)))
-          stmt-preds
-          stmt-procs)))
+  (ormap (λ (pred proc) (and (pred stmt) (proc stmt depth ind-width)))
+         stmt-preds
+         stmt-procs))
 
 (define (statement? stmt)
   (ormap (λ (pred) (pred stmt)) stmt-preds))

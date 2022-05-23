@@ -302,3 +302,16 @@ function main() {
   return noReturn();
 }"))
  (check-equal? (ue:type exn) ue:type:no-return-value-fun))
+
+(test-case
+ "duplicate parameter names in function"
+ (let ([exn  (i "function functor(a, a) { }")])
+   (check-equal? (ue:type exn) ue:type:duplicate-parameter))
+ (let ([exn  (i "function functor(a, b, &a) { }")])
+   (check-equal? (ue:type exn) ue:type:duplicate-parameter))
+ (let ([exn  (i "
+function functor() {
+  function inner(a, a) {}
+}
+function main() { functor(); }")])
+   (check-equal? (ue:type exn) ue:type:duplicate-parameter)))

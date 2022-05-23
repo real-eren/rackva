@@ -82,12 +82,7 @@ class Parent {
 
 (test-case
  "declaring a class with a non-existent parent"
- (define exn (i "
-class A extends NotAClass {
-  static function main() {
-    return 5;
-  }
-}" "A"))
+ (define exn (i "class A extends NotAClass {}" "A"))
  (check-equal? (ue:type exn) ue:type:not-a-class))
 
 ; ; INSTANCE MEMBERS
@@ -101,6 +96,13 @@ class A {
   var x;
 }" "A"))
  (check-equal? (ue:type exn) ue:type:duplicate-field))
+
+(test-case
+ "duplicate parameters in abstract and instance methods"
+ (let ([inst-exn  (i "class A { function foo(a, a) {} }" "A")]
+       [abst-exn  (i "class A { function foo(a, a); }" "A")])
+   (check-equal? (ue:type inst-exn) ue:type:duplicate-parameter)
+   (check-equal? (ue:type abst-exn) ue:type:duplicate-parameter)))
 
 ; ; STATIC MEMBERS
 
@@ -155,6 +157,11 @@ class ClassName {
   static function main() { return foo(); }
 }" "A"))
  (check-equal? (ue:type exn) ue:type:uncaught-exception))
+
+(test-case
+ "Static method with duplicate parameter names"
+ (define exn (i "class A { static function foo(a, &a) {} }" "A"))
+ (check-equal? (ue:type exn) ue:type:duplicate-parameter))
 
 ; ; Overriding and Abstracts
 
@@ -816,6 +823,16 @@ class A {
   static function main() { return new A().x; }
 }" "A"))
  (check-equal? (ue:type exn) ue:type:duplicate-constructor))
+
+(test-case
+ "Duplicate parameters in constructor signature"
+ (define exn (i "
+class A {
+  A(a, a) {
+    x = 5;
+  }
+}" "A"))
+ (check-equal? (ue:type exn) ue:type:duplicate-parameter))
 
 (test-case
  "throw in ctor"

@@ -273,6 +273,10 @@
   (lambda (m-name m-params m-body m-type class-name state next user-exn)
     (cond
       [(super-or-this? m-name)                           (user-exn (ue:keyword-as-identifier m-name 'method) state)]
+      [(check-duplicates (filter-not (λ (e)
+                                       (eq? '& e))
+                                     m-params))   =>     (lambda (dup-param)
+                                                           (user-exn (ue:duplicate-parameter dup-param) state))]
       [(state:method-already-declared? class-name
                                        m-name
                                        m-params
@@ -435,10 +439,14 @@
   (lambda (stmt class-name state next user-exn)
     (if (state:ctor-already-declared? class-name (ctor-params stmt) state)
         (user-exn (ue:duplicate-constructor (function:formatted-signature class-name (ctor-params stmt))) state)
-        (next (state:declare-constructor (ctor-params stmt)
-                                         (ctor-body stmt)
-                                         class-name
-                                         state)))))
+        (check-unique-params (ctor-params stmt)
+                             (λ ()
+                               (next (state:declare-constructor (ctor-params stmt)
+                                                                (ctor-body stmt)
+                                                                class-name
+                                                                state)))
+                             (λ (exn)
+                               (user-exn exn state))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -583,10 +591,21 @@
   (lambda (fun-name fun-params fun-body state conts)
     (if (state:fun-already-declared? fun-name fun-params state)
         ((user-exn conts) (ue:duplicate-function (function:formatted-signature fun-name fun-params)) state)
-        ((next conts) (state:declare-fun fun-name 
-                                         fun-params
-                                         fun-body
-                                         state)))))
+        (check-unique-params fun-params
+                             (λ ()
+                               ((next conts) (state:declare-fun fun-name 
+                                                                fun-params
+                                                                fun-body
+                                                                state)))
+                             (λ (exn)
+                               ((user-exn conts) exn state))))))
+    
+(define check-unique-params
+  (lambda (param-list on-pass on-fail)
+    (let ([dup  (check-duplicates (filter-not (λ (e) (eq? '& e)) param-list) eq?)])
+      (if dup
+          (on-fail (ue:duplicate-parameter dup))
+          (on-pass)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;   FUNCTION INVOCATION   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
