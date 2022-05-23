@@ -2,11 +2,11 @@
 
 (require "conts.rkt"
          "user-errors.rkt"
+         "parse/classParser.rkt"
          "state/function.rkt"
          "state/instance.rkt"
          "state/state.rkt"
-         "util/map.rkt"
-         "classParser.rkt")
+         "util/map.rkt")
 
 (provide interpret
          interpret-parse-tree-v3

@@ -223,6 +223,11 @@
   "continue;")
 (define continue? (? 'continue))
 
+(module+ test
+  (ce (break '(return)) "break;")
+  (ce (continue '(continue)) "continue;"))
+
+
 ; '(return {value}), '(throw {value})
 (define (return stmt [depth 0] [ind-width default-indent-width])
   (string-append "return " (value (second stmt)) ";"))
@@ -755,9 +760,9 @@ _}
 ; generated code should be semantically equivalent to input
 ; parse identity is a sufficiently strong property
 (module+ test
-  (require (prefix-in simple- "simpleParser.rkt")
-           (prefix-in function- "functionParser.rkt")
-           (prefix-in class- "classParser.rkt"))
+  (require (prefix-in simple- "parse/simpleParser.rkt")
+           (prefix-in function- "parse/functionParser.rkt")
+           (prefix-in class- "parse/classParser.rkt"))
   
   (define ((_ce parser) src)
     (ce (parser (stmt-list (parser src)))

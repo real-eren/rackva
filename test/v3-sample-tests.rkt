@@ -1,5 +1,5 @@
 #lang racket
-(require "interpreter-extension.rkt"
+(require "../src/interpreter-extension.rkt"
          rackunit)
 ;; Tests provided in the assignment
 

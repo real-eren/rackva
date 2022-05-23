@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "interpreter-extension.rkt"
+(require "../src/interpreter-extension.rkt"
          rackunit)
 
 (define i interpret-v2-str)

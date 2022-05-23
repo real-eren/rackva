@@ -1,7 +1,7 @@
 #lang racket/base
 (require rackunit
-         "interpreter-extension.rkt"
-         "interpreter.rkt")
+         "../src/interpreter-extension.rkt"
+         "../src/interpreter.rkt")
 
 (define i1 interpret-v1-file)
 (define i2 interpret-v2-file)

@@ -1,7 +1,7 @@
 #lang racket/base
 
-(require "interpreter-extension.rkt"
-         "user-errors.rkt"
+(require "../src/interpreter-extension.rkt"
+         "../src/user-errors.rkt"
          rackunit)
 
 

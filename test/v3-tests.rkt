@@ -1,5 +1,5 @@
 #lang racket
-(require "interpreter-extension.rkt"
+(require "../src/interpreter-extension.rkt"
          rackunit)
 
 ; white space / newlines do not affect the parser,

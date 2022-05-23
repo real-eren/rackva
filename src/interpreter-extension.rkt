@@ -1,9 +1,9 @@
 #lang racket
 
 (require "interpreter.rkt"
-         (prefix-in simple: "simpleParser.rkt")
-         (prefix-in function: "functionParser.rkt")
-         (prefix-in class: "classParser.rkt"))
+         (prefix-in simple: "parse/simpleParser.rkt")
+         (prefix-in function: "parse/functionParser.rkt")
+         (prefix-in class: "parse/classParser.rkt"))
 
 (provide (all-defined-out))
   
