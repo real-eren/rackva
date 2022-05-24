@@ -1,4 +1,5 @@
-#lang racket
+#lang racket/base
+(require racket/list)
 (provide join-or
          join&&)
 

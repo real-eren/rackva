@@ -1,6 +1,8 @@
-#lang racket
+#lang racket/base
 
-(require "../util/map.rkt")
+(require "../util/map.rkt"
+         racket/list
+         racket/string)
 
 (provide function->string
          (prefix-out function: (except-out (all-defined-out)
@@ -56,7 +58,7 @@
      $params  params
      $body    body
      $scoper  scoper
-     $scope    scope
+     $scope   scope
      $class   class)))
 
 ;; returns the number of formal parameters in a function

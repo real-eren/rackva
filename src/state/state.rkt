@@ -1,14 +1,16 @@
-#lang racket
+#lang racket/base
 
-(require "../util/map.rkt"
-         "../util/stack.rkt"
-         "../util/predicates.rkt"
-         "var-table.rkt"
-         "instance.rkt"
+(require "class.rkt"
          "function.rkt"
          "function-table.rkt"
-         "context.rkt"
-         "class.rkt")
+         "instance.rkt"
+         "var-table.rkt"
+         "../util/map.rkt"
+         "../util/predicates.rkt"
+         "../util/stack.rkt"
+         racket/bool
+         racket/function
+         racket/list)
 
 (provide new-state
          (prefix-out state:
@@ -16,13 +18,11 @@
                                   pop-layer
                                   
                                   context-stack
-                                  with-context
-                                  push-top-level-context
-                                  push-fun-call-context
-                                  pop-context
+                                  push-context
+                                  copy-context-stack
+                                  
+                                  enter-fun-call-context
                                   instance-context?
-                                  formatted-stack-trace
-
                                   set-static-scope
                                   set-instance-scope
                                   set-this-scope
@@ -39,11 +39,11 @@
                                   get-var-box
                                   get-var-value
 
+                                  declare-fun
                                   fun-already-declared?
                                   has-fun?
                                   all-funs-with-name
                                   get-function
-                                  declare-fun
 
                                   declare-class
                                   has-class?
@@ -55,16 +55,17 @@
                                   class-get-inst-method
                                   declare-method
                                   method-already-declared?
+                                  
+                                  declare-instance-field
+                                  declare-static-field
+                                  field-already-declared?
 
                                   get-zero-init-instance
                                   get-init
                                   get-constructor
-                                  
-                                  declare-instance-field
                                   declare-init
                                   declare-constructor
-                                  
-                                  end-class-decl)))
+                                  ctor-already-declared?)))
 
 
 ;;;; State
@@ -74,10 +75,6 @@
 ;; local vars and funs    (layered)
 ;; context
 ;; classes
-
-; general assumptions:
-; 1) context stack is non-empty before state is used
-
 
 (define $global-vars 'global-vars)
 (define global-vars (map:getter $global-vars))
@@ -91,16 +88,15 @@
 (define $local-funs 'local-funs)
 (define local-funs (map:getter $local-funs))
 
-; stack of contexts. ex:
-; (top-level) ; global var and fun defs
-; (class-body 'A) ; class A declaration
-; (fun static (foo closure)) -> (fun instance (bar closure)) ; during A::foo called B::bar
 (define $context-stack 'context-stack)
 (define context-stack (map:getter $context-stack))
 
 ;; current class. Name / #F. affects what bindings are in scope
 (define $current-type 'current-type)
 (define current-type (map:getter $current-type))
+
+;; current function body. closure / #F. used for nested fun decls
+(define $current-fun-call 'current-fun-call)
 
 ;; current instance. instance / #F
 (define $this 'this)
@@ -121,7 +117,7 @@
 ;        $local-funs   new-local-funs-table)
 ;        $global-funs  new-global-funs-table)
 ; (withf old-state
-;        $global-vars  (curry fun-table:declare function name params body scoper))
+;        $global-funs  (curry fun-table:declare function name params body scoper))
 (define withv map:withv)
 (define withf map:withf)
 (define of map:of)
@@ -134,11 +130,12 @@
                       $global-vars  new-var-table
                       $global-funs  new-function-table
                       $classes      map:empty
-                      $current-type   #F
-                      $this           #F
-                      $dotted         #F
-                      $super          #F
-                      $context-stack  null))
+                      $current-type     #F
+                      $current-fun-call #F
+                      $this             #F
+                      $dotted           #F
+                      $super            #F
+                      $context-stack    null))
 
 
 ;; State with the top scope removed from the stack and function table
@@ -157,39 +154,10 @@
            $local-funs  (curry stack:push new-function-table))))
 
 
-;;;; stack of contexts - top-level, fun-call, constructors, class-defs
-(define with-context
-  (lambda (context-stack state)
-    (withv state
-           $context-stack  context-stack)))
-
-; assumption: existant & non-empty entry for context-stack
-(define current-context (compose1 stack:peek context-stack))
-
-; assumption: pre-existing entry for context-stack
-(define push-top-level-context
-  (lambda (state)
-    (push-context context:top-level state)))
-
-(define push-fun-call-context
-  (lambda (fun state)
-    (push-context (context:of-fun-call fun) state)))
-
-(define push-context
-  (lambda (context state)
-    (withf state
-           $context-stack  (curry stack:push context))))
-
-; assumption: non-empty context-stack
-(define pop-context
-  (lambda (state)
-    (update* stack:pop
-             state $context-stack)))
-
 ;; T/F whether the current context is of type `top-level`
-(define top-level-context?
+(define top-level?
   (lambda (state)
-    (eq? context:type:top-level (context:type (current-context state)))))
+    (not (current-type state))))
 
 ;; instance / F 
 (define instance-context?
@@ -205,26 +173,26 @@
   (lambda (state)
     (< 0 (height (local-vars state)))))
 
+
+(define (push-context context state)
+  (withf state
+         $context-stack  (curry cons context)))
+
+(define (copy-context-stack #:src old-state #:dest new-state)
+  (withv new-state
+         $context-stack  (context-stack old-state)))
+
+;; called in interpreter before entering a function body
+; needed to correctly handle local function definitions
+(define enter-fun-call-context
+  (lambda (fun state)
+    (withv state
+           $context-stack  (cons (function->string fun) (context-stack state))
+           $current-fun-call  fun)))
 ;; Function Closure / F whether the current context is of type `fun-call`
 (define fun-call-context?
   (lambda (state)
-    (context:fun-call:fun (current-context state))))
-
-;; class-name/F whether the current context is of type `class-def`
-(define class-def-context?
-  (lambda (state)
-    (context:class-def:name (current-context state))))
-
-
-
-;; retrieves the context-stack from state and returns it in a form fit for output
-(define formatted-stack-trace
-  (lambda (state)
-    (if (empty? (context-stack state))
-        ""
-        (string-join (map context:context->string (reverse (context-stack state)))
-                     " -> "
-                     #:before-first "stack trace: "))))
+    (map:get $current-fun-call state)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -286,7 +254,8 @@
            #:dest new-state)
     (withv new-state
            $current-type  (current-type old-state)
-           $dotted        #F
+           $current-fun-call  (map:get $current-fun-call old-state)
+           $dotted        (map:get $dotted old-state)
            $this          (this old-state))))
 
 
@@ -304,10 +273,7 @@
       [(local-context? state)     (withf state
                                          $local-vars  (curry stack:update-front
                                                              (curry var-table:declare-with-box name box)))]
-      [(class-def-context? state) (update* (curry var-table:declare-with-box name box)
-                                           state $classes (current-type state) class:$s-fields)]
-                                           
-      [(top-level-context? state) (withf state
+      [(top-level? state)         (withf state
                                          $global-vars (curry var-table:declare-with-box name box))]
       [else                       (error "logical error, exhausted cases in declare-var")])))
 
@@ -351,7 +317,7 @@
      (and (not (dotted? state))
           (var-table:get-box name (global-vars state))))))
 
-;; Assumes `this` is an instance of `type` (same or sub-class)
+;; Assumes `this` is an instance of `class-name` (same or sub-class)
 (define get-instance-field-box
   (lambda (name this class-name state)
     (ormap (curry var-table:get-box name)
@@ -379,13 +345,12 @@
     (not (false? (get-var-box name state)))))
 
 ;; Is a variable with this name already declared in the current scope?
-; used by interpreter to detect duplicate declarations
+; used by interpreter to detect duplicate declarations for local and top-level variables
 (define var-already-declared?
   (lambda (name state)
     (cond
-      [(class-def-context? state) (class:has-field? name (get* state $classes (current-type state)))]
-      [(local-context? state)     (var-table:declared? name (stack:peek (local-vars state)))]
-      [(top-level-context? state) (var-table:declared? name (global-vars state))])))
+      [(local-context? state)  (var-table:declared? name (stack:peek (local-vars state)))]
+      [(top-level? state)      (var-table:declared? name (global-vars state))])))
 
 
 ;; Is the in-scope variable with this name and initialized?
@@ -413,13 +378,9 @@
 (define get-current-fun-table
   (lambda (f-name state)
     (cond
-      [(class-def-context? state) => (lambda (class-name)
-                                       (get* state $classes class-name (if (eq? f-name class-name)
-                                                                           class:$constructors
-                                                                           class:$methods)))]
-      [(local-context? state)         (stack:peek (local-funs state))]
-      [(top-level-context? state)     (global-funs state)]
-      [else                           (error "exhausted cases in fun lookup. logical error?")])))
+      [(local-context? state)  (stack:peek (local-funs state))]
+      [(top-level? state)      (global-funs state)]
+      [else                    (error "exhausted cases in fun lookup. logical error?")])))
 
 ;; Is a function with this signature in scope (reachable)?
 ; Assumptions:
@@ -432,7 +393,6 @@
 ;; sweep through local, global, classes
 ; primarily used by interpreter to display suggestions when reporting errors
 ; for calling an undefined function
-; WIP
 (define all-funs-with-name
   (lambda (name state)
     (fun-table:get-all name
@@ -550,21 +510,6 @@
                 (class:methods (get-parent class-name state)))
         null)))
 
-
-;; Get the init function for this class
-; #F on miss
-(define get-init
-  (lambda (class-name state)
-    (get* state $classes class-name class:$init)))
-
-;; Get closure for the constructor with this signature
-; #F on miss
-; assumes class exists and constructors have class as name
-(define get-constructor
-  (lambda (class-name arg-list state)
-    (fun-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
-
-
 ;; State with this fun declared in the current scope
 ; only called for top-level or nested functions
 (define declare-fun
@@ -587,7 +532,7 @@
                                                           #F
                                                           state)]
       ; not in funcall or class body, not in block etc
-      [(top-level-context? state)      (declare-fun-global name
+      [(top-level? state)              (declare-fun-global name
                                                            params
                                                            body
                                                            state)]
@@ -663,7 +608,6 @@
   (lambda (class-name parent-name state)
     (withf state
            $classes  (curry map:put class-name (class:of #:name class-name #:parent parent-name))
-           $context-stack  (curry stack:push (context:of-class-def class-name))
            $current-type  (lambda (v) class-name))))
 
 ; declare an instance field for a class (just name, no initializer)
@@ -671,6 +615,15 @@
   (lambda (name class-name state)
     (update* (curry cons name)
              state $classes class-name class:$i-field-names)))
+
+(define declare-static-field
+  (lambda (name value class-name state)
+    (update* (curry var-table:declare-with-value name value)
+             state $classes class-name class:$s-fields)))
+
+(define field-already-declared?
+  (lambda (name class-name state)
+    (class:has-field? name (get* state $classes class-name))))
 
 ;; called during class body
 ; handles static | instance | abstract
@@ -689,6 +642,7 @@
   (lambda (class-name fun-name arg-list state)
     (fun-table:get fun-name arg-list (get-class-methods class-name state))))
 
+
 ;; add an init function to a class
 ; assumption: called exactly once during class-body
 (define declare-init
@@ -700,6 +654,12 @@
                        #:scope function:scope:init
                        #:class class)
           state $classes class class:$init)))
+
+;; Get the init function for this class
+; #F on miss
+(define get-init
+  (lambda (class-name state)
+    (get* state $classes class-name class:$init)))
 
 ;; add a constructor to a class
 ; assumption: interpreter checks that this constructor has a unique signature
@@ -714,11 +674,15 @@
                     class)
              state $classes class class:$constructors)))
 
-;; signal that the earlier class declaration has ended
-; assumes the current context is a class-decl context
-(define end-class-decl
-  (lambda (class-name state)
-    (pop-context state)))
+;; Get closure for the constructor with this signature
+; #F on miss
+; assumes class exists and constructors have class as name
+(define get-constructor
+  (lambda (class-name arg-list state)
+    (fun-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
+
+(define ctor-already-declared? get-constructor)
+
 
 ;; returns a 0-initialized instance of the given class
 ; all fields set to 0, before any initializers
@@ -749,7 +713,7 @@
   (require rackunit)
 
   ;; variables
-  (let* ([s1  (push-new-layer (push-top-level-context new-state))]
+  (let* ([s1  (push-new-layer new-state)]
          [s2  (declare-var 'a s1)])
     (check-true (var-declared? 'a s2))
     (check-false (var-initialized? 'a s2))
@@ -779,15 +743,15 @@
         (check-eq? (get-var-value 'd s8) 10))))
   
   ;; local fun lookup
-  (let* ([s1      (push-top-level-context new-state)]
+  (let* ([s1      new-state]
          [fmn     'main] [fma     '()]
          [s2      (declare-fun fmn fma null s1)]
          [fm      (get-function fmn fma s2)]
          [fan     'a] [faa     '()]
          [fbn     'b] [fba     '()]
-         [s3      (declare-fun fan faa null (push-context (context:of-fun-call fm) (push-new-layer s2)))]
+         [s3      (declare-fun fan faa null (enter-fun-call-context fm (push-new-layer s2)))]
          [s4      (declare-fun fbn fba null s3)]
-         [s5      (pop-context (pop-layer s4))]
+         [s5      (pop-layer s4)]
          )
     (check-true (has-fun? fmn fma s4))
     (check-true (has-fun? fan faa s4))
@@ -800,13 +764,13 @@
     )
 
   ;; get all funs
-  (let* ([s1  (push-top-level-context new-state)]
+  (let* ([s1      new-state]
          [fgn     'foo] [fga     '()]
          [s2      (declare-fun fgn fga null s1)]
          [fg      (get-function fgn fga s2)]
          
          [fan     'foo] [faa     '(a b c)]
-         [s3      (declare-fun fan faa null (push-context (context:of-fun-call fg) (push-new-layer s2)))]
+         [s3      (declare-fun fan faa null (enter-fun-call-context fg (push-new-layer s2)))]
          [fa      (get-function fan faa s3)]
          
          [fbn     'bar] [fba     '()]
@@ -822,42 +786,39 @@
                                   function:scope:instance
                                   c1n
                                   s5)]
-         [s7      (end-class-decl c1n s6)]
-         [fc      (get-i-a-method-rec fcn fca c1n s7)]
+         [fc      (get-i-a-method-rec fcn fca c1n s6)]
 
          [c2n     'Class2] [c2p    #f]
-         [s8      (declare-class c2n c2p s7)]
+         [s7      (declare-class c2n c2p s6)]
          [fdn     'foo] [fda     '(a b c d e)]
-         [s9      (declare-method fdn
+         [s8      (declare-method fdn
                                   fda
                                   '()
                                   function:scope:abstract
                                   c2n
-                                  s8)]
-         [s10     (end-class-decl c2n s9)]
-         [fd      (get-i-a-method-rec fdn fda c2n s10)]
+                                  s7)]
+         [fd      (get-i-a-method-rec fdn fda c2n s8)]
          
          [c3n     'Class3] [c3p    c2n]
-         [s11     (declare-class c3n c3p s10)]
+         [s9      (declare-class c3n c3p s8)]
          [fen     'bar] [fea     '(a b c)]
-         [s12     (declare-method fen
+         [s10     (declare-method fen
                                   fea
                                   '()
                                   function:scope:static
                                   c3n
-                                  s11)]
-         [s13     (end-class-decl c3n s12)]
+                                  s9)]
          [fe      (get-static-method fen
                                      fea
                                      c3n
-                                     s13)])
+                                     s10)])
     (check-true (empty? (all-funs-with-name 'foo s1)))
-    (check-true (empty? (all-funs-with-name 'x s13)))
+    (check-true (empty? (all-funs-with-name 'x s10)))
     
     
     (check-not-false (andmap (lambda (f)
-                               (member f (all-funs-with-name 'foo s13)))
+                               (member f (all-funs-with-name 'foo s10)))
                              (list fg fa fc fd)))
     (check-not-false (andmap (lambda (f)
-                               (member f (all-funs-with-name 'bar s13)))
+                               (member f (all-funs-with-name 'bar s10)))
                              (list fb fe)))))

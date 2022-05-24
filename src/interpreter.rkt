@@ -1,12 +1,16 @@
-#lang racket
+#lang racket/base
 
 (require "conts.rkt"
-         "state/state.rkt"
+         "user-errors.rkt"
+         "parse/classParser.rkt"
          "state/function.rkt"
          "state/instance.rkt"
+         "state/state.rkt"
          "util/map.rkt"
-         "util/predicates.rkt"
-         "classParser.rkt")
+         racket/bool
+         racket/function
+         racket/list
+         racket/string)
 
 (provide interpret
          interpret-parse-tree-v3
@@ -14,7 +18,8 @@
          interpret-parse-tree-v1
 
          default-return
-         default-throw)
+         default-throw
+         default-user-exn)
 
 ;;;; Interpreter
 ;; This module interprets programs parsed by the parsers
@@ -34,46 +39,51 @@
 ;; and returns the result
 (define interpret
   (lambda (file-name class-name)
-    (interpret-parse-tree-v3 (parser file-name)
-                             class-name
-                             default-return
-                             default-throw)))
+    (let ([user-exn  (default-user-exn)])
+      (interpret-parse-tree-v3 (parser file-name)
+                               class-name
+                               default-return
+                               (default-throw user-exn)
+                               user-exn))))
 
 ;; interprets parse-trees produced by classParser.rkt
 (define interpret-parse-tree-v3
-  (lambda (parse-tree entry-point return throw)
+  (lambda (parse-tree entry-point return throw user-exn)
     (Mstate-stmt-list parse-tree
-                      (state:push-top-level-context new-state)
+                      new-state
                       (conts-of
                        #:next (lambda (s)
                                 (Mstate-main s
                                              return
                                              throw
-                                             #:class (string->symbol entry-point))))
-                      #:legal-construct? is-class-decl?)))
+                                             user-exn
+                                             #:class (string->symbol entry-point)))
+                       #:throw throw
+                       #:user-exn user-exn))))
 
 ;;interprets parse-trees produced by functionParser.rkt
 (define interpret-parse-tree-v2
-  (lambda (parse-tree return throw)
+  (lambda (parse-tree return throw user-exn)
     (Mstate-stmt-list parse-tree
-                      (state:push-top-level-context new-state)
+                      new-state
                       (conts-of ; only next and throw are actually reachable
-                       #:next (lambda (s) (Mstate-main s return throw))
-                       #:throw throw)
-                      #:legal-construct? (join-or is-var-decl? is-assign? is-fun-decl?))))
+                       #:next (lambda (s) (Mstate-main s return throw user-exn))
+                       #:throw throw
+                       #:user-exn user-exn))))
 
 ;; legacy, for testing
 ;; interprets parse-trees produced by simpleParser.rkt
 (define interpret-parse-tree-v1
-  (lambda (simple-parse-tree return throw)
+  (lambda (simple-parse-tree return throw user-exn)
     (Mstate-stmt-list simple-parse-tree
-                      (state:push-top-level-context new-state)
+                      new-state
                       (conts-of
                        #:return return
-                       #:next (lambda (s) (raise-user-error "reached end of program without return"))
+                       #:next (lambda (s) (user-exn (ue:did-not-return) s))
                        #:throw throw
-                       #:break default-break
-                       #:continue default-continue))))
+                       #:break (default-break user-exn)
+                       #:continue (default-continue user-exn)
+                       #:user-exn user-exn))))
 
 ;; takes a value and modifies it for output
 (define prep-val-for-output
@@ -98,15 +108,17 @@
 ;; Find and execute the main function with the initial state
 ; should be run after executing all other top-level statements
 (define Mstate-main
-  (lambda (state return throw #:class [class #f])
-    (Mvalue-fun '(funcall main)
-                (cond
-                  [(not class)                     state]
-                  [(state:has-class? class state)  (state:set-static-scope class state)]
-                  [else                            (myerror (format "~a is not a class." class) state)])
-                (conts-of
-                 #:throw throw
-                 #:return return))))
+  (lambda (state return throw user-exn #:class [class #f])
+    (if (and class (not (state:has-class? class state)))
+        (user-exn (ue:not-a-class class) state)
+        (Mvalue-fun '(funcall main)
+                    (if class
+                        (state:set-static-scope class state)
+                        state)
+                    (conts-of
+                     #:throw throw
+                     #:return return
+                     #:user-exn user-exn)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT LIST ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -116,18 +128,16 @@
 ; optionally takes a filter function (on statement) and throws an error if an
 ; encountered statement does not pass the filter
 (define Mstate-stmt-list
-  (lambda (stmt-list state conts #:legal-construct? [legal? (λ (v) #T)])
-    (cond
-      [(null? stmt-list)             ((next conts) state)]
-      [(legal? (first stmt-list))    (Mstate-statement (first stmt-list)
-                                                       state
-                                                       (conts-of conts
-                                                                 #:next (lambda (s)
-                                                                          (Mstate-stmt-list (rest stmt-list) 
-                                                                                            s
-                                                                                            conts))))]
-      ; indicative of bug in program
-      [else                          (error "encountered illegal construct type" (first stmt-list))])))
+  (lambda (stmt-list state conts)
+    (if (null? stmt-list)
+        ((next conts) state)
+        (Mstate-statement (first stmt-list)
+                          state
+                          (conts-of conts
+                                    #:next (lambda (s)
+                                             (Mstate-stmt-list (rest stmt-list) 
+                                                               (state:copy-context-stack #:src state #:dest s)
+                                                               conts)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; STATEMENT ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -136,9 +146,7 @@
 ;; returns the state resulting from evaluating it
 (define Mstate-statement
   (lambda (statement state conts)
-    (if (is-construct? statement)
-        ((get-Mstate statement) statement state conts)
-        (error (format "unrecognized stmt: ~a" statement)))))
+    ((get-Mstate statement) statement (state:push-context statement state) conts)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; CLASS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -159,27 +167,22 @@
                             (parent-or-null (maybe-extend statement))
                             (class-body statement)
                             state
-                            (next conts)
-                            (throw conts))))
+                            conts)))
 
 (define Mstate-class-decl-impl
-  (lambda (class-name parent body state next throw)
+  (lambda (class-name parent body state conts)
     (cond
-      [(state:has-class? class-name state)    (myerror (format "Attempted to re-declare class `~a`" class-name) state)]
-      [(eq? class-name parent)                (myerror (format "class `~a` cannot extend itself" class-name) state)]
+      [(state:has-class? class-name state)    ((user-exn conts) (ue:duplicate-class class-name) state)]
+      [(eq? class-name parent)                ((user-exn conts) (ue:class-extend-self class-name) state)]
       [(or (null? parent)
-           (state:has-class? parent state))   (eval-class-body class-name
-                                                               parent
-                                                               body
-                                                               (state:declare-class class-name parent state)
-                                                               (lambda (s)
-                                                                 (next (state:end-class-decl class-name s)))
-                                                               throw)]
-      [else                                   (myerror (format "class `~a` cannot extend class `~a`, `~a` has not been declared yet"
+           (state:has-class? parent state))   (eval-class-body body
                                                                class-name
                                                                parent
-                                                               parent)
-                                                       state)])))
+                                                               (state:declare-class class-name parent state)
+                                                               (next conts)
+                                                               (throw conts)
+                                                               (user-exn conts))]
+      [else                                   ((user-exn conts) (ue:not-a-class parent) state)])))
 
 
 
@@ -187,30 +190,27 @@
 ; Assumptions:
 ; 1) runs after `state:declare-class` and before `state:end-class-decl`
 (define eval-class-body
-  (lambda (class-name parent body state next throw)
+  (lambda (body class-name parent state next throw user-exn)
     (chain-TR state
               next
               ; declare methods and verify that parent's abstract methods are overridden
-              (curry methods (filter is-method? body) class-name parent)
-              (curry verify-abstracts-overridden class-name)
+              (λ (s nxt) (methods (filter is-method? body) class-name parent s nxt user-exn))
+              (λ (s nxt) (verify-abstracts-overridden class-name s nxt user-exn))
               ; declare instance fields (name only), and initializers (init)
-              (curry inst-fields class-name (filter is-inst-field-decl? body))
+              (λ (s nxt) (inst-fields (filter is-inst-field-decl? body) class-name s nxt user-exn))
               ; declare user-defined constructors
-              (curry constructors class-name (filter is-ctor-decl? body))
+              (λ (s nxt) (constructors (filter is-ctor-decl? body) class-name s nxt user-exn))
               ; add default constructor if no user-defined constructors present
-              (lambda (s nxt)
+              (λ (s nxt)
                 (if (no-constructors? body)
-                    (declare-constructor default-constructor-stmt class-name s nxt)
+                    (declare-constructor default-constructor-stmt class-name s nxt user-exn)
                     (nxt s)))
               ; declare static fields w/ values
-              (curry static-fields (filter is-static-field-decl? body) throw))))
+              (λ (s nxt) (static-fields (filter is-static-field-decl? body) class-name s nxt throw user-exn)))))
 
 
-;; takes initial state, last continuation and a sequence of 2-arg functions
 ;; joins a sequence of tail-recursive functions via next continuations
 ;; each function must take two args: state and next(s)
-; for the sake of avoiding absurd indentation and making the intended order clear
-; also makes it trivial to rearrange the execution order
 (define chain-TR
   (lambda (state last-next f . fs)
     (if (null? fs)
@@ -233,25 +233,27 @@
 ; 1) input stmts were already validated
 (define method-type
   (lambda (stmt)
-    (map:get (action stmt) method-type-table)))
+    (map:get (first stmt) method-type-table)))
 ; 2) map:get return #F on miss
 (define is-method? method-type)
 
 ;; evaluate a list of method declarations in a class body
 ; after all declared, check that parent's abstract methods were overridden
 (define methods
-  (lambda (method-decl-list class-name parent state next)
-    (if (null? method-decl-list)
+  (lambda (method-decls class-name parent state next user-exn)
+    (if (null? method-decls)
         (next state)
-        (declare-method (first method-decl-list)
+        (declare-method (first method-decls)
                         class-name
-                        state
+                        (state:push-context (first method-decls) state)
                         (lambda (s)
-                          (methods (rest method-decl-list)
+                          (methods (rest method-decls)
                                    class-name
                                    parent
-                                   s
-                                   next))))))
+                                   (state:copy-context-stack #:src state #:dest s)
+                                   next
+                                   user-exn))
+                        user-exn))))
 ; these assume a well-formed method declaration statement
 (define method-name second)
 (define method-params third)
@@ -262,51 +264,54 @@
         (fourth stmt))))
 
 (define declare-method
-  (lambda (stmt class-name state next)
-    (next (declare-method-impl (method-name stmt)
-                               (method-params stmt)
-                               (method-body-or-null stmt)
-                               (method-type stmt)
-                               class-name
-                               state))))
+  (lambda (stmt class-name state next user-exn)
+    (declare-method-impl (method-name stmt)
+                         (method-params stmt)
+                         (method-body-or-null stmt)
+                         (method-type stmt)
+                         class-name
+                         state
+                         next
+                         user-exn)))
 
 (define declare-method-impl
-  (lambda (m-name m-params m-body m-type class-name state)
+  (lambda (m-name m-params m-body m-type class-name state next user-exn)
     (cond
-      [(super-or-this? m-name)                           (myerror (format "Keyword `~a` cannot be used as a function or method name"
-                                                                          m-name)
-                                                                  state)]
-      [(state:fun-already-declared? m-name
-                                    m-params
-                                    state)               (myerror (format "A method with the signature `~a` is already declared in class `~a`."
-                                                                          (function:formatted-signature m-name m-params)
-                                                                          class-name)
-                                                                  state)]
+      [(super-or-this? m-name)                           (user-exn (ue:keyword-as-identifier m-name 'method) state)]
+      [(check-duplicates (filter-not (λ (e)
+                                       (eq? '& e))
+                                     m-params))   =>     (lambda (dup-param)
+                                                           (user-exn (ue:duplicate-parameter dup-param) state))]
+      [(state:method-already-declared? class-name
+                                       m-name
+                                       m-params
+                                       state)            (user-exn (ue:duplicate-method (function:formatted-signature m-name m-params)
+                                                                                        class-name)
+                                                                   state)]
       [(and (eq? function:scope:abstract m-type)
             (state:class-get-inst-method class-name
                                          m-name
                                          m-params
                                          state))   =>    (lambda (fun)
-                                                           (myerror (format "Cannot override concrete `~a` with abstract method"
-                                                                            (function->string fun))
-                                                                    state))]
-      [else                                              (state:declare-method m-name
-                                                                               m-params
-                                                                               m-body
-                                                                               m-type
-                                                                               class-name
-                                                                               state)])))
+                                                           (user-exn (ue:override-c-w/-abstr (function->string fun)) state))]
+      [else                                              (next (state:declare-method m-name
+                                                                                     m-params
+                                                                                     m-body
+                                                                                     m-type
+                                                                                     class-name
+                                                                                     state))])))
 ;; Assumes all instance&abstract methods of this class have been declared
 ; verify that all of parent's abstract methods are redeclared in this class
 (define verify-abstracts-overridden
-  (lambda (class-name state next)
+  (lambda (class-name state next user-exn)
     (verify-abstracts-impl class-name
                            (state:get-parents-abstract-methods class-name state)
                            state
-                           next)))
+                           next
+                           user-exn)))
 
 (define verify-abstracts-impl
-  (lambda (class-name abstract-funs state next)
+  (lambda (class-name abstract-funs state next user-exn)
     (cond
       [(null? abstract-funs)                 (next state)]
       [(fun-overridden? (first abstract-funs)
@@ -314,11 +319,11 @@
                         state)               (verify-abstracts-impl class-name
                                                                     (rest abstract-funs)
                                                                     state
-                                                                    next)]
-      [else                                  (myerror (format "class `~a` does not override abstract method `~a`"
-                                                              class-name
-                                                              (function->string (first abstract-funs)))
-                                                      state)])))
+                                                                    next
+                                                                    user-exn)]
+      [else                                  (user-exn (ue:unoverridden-abstract class-name
+                                                                                 (function->string (first abstract-funs)))
+                                                       state)])))
 ; whether a class declares an override for a method
 ; to be called on abstract methods of parent
 (define fun-overridden?
@@ -330,66 +335,85 @@
 
 ;;;;;;;; STATIC FIELD DECLARATIONS
 (define static-fields
-  (lambda (body throw state next)
-    (if (null? body) 
+  (lambda (s-field-decls class-name state next throw user-exn)
+    (if (null? s-field-decls) 
         (next state)
-        (declare-static-field (first body)
-                              throw
-                              state
+        (declare-static-field (first s-field-decls)
+                              class-name
+                              (state:push-context (first s-field-decls) state)
                               (lambda (s)
-                                (static-fields (rest body) throw s next))))))
+                                (static-fields (rest s-field-decls)
+                                               class-name
+                                               (state:copy-context-stack #:dest s #:src state)
+                                               next
+                                               throw
+                                               user-exn))
+                              throw
+                              user-exn))))
 
 (define declare-static-field
-  (lambda (stmt throw state next)
-    (Mstate-var-decl-impl (decl-var stmt)
-                          (decl-maybe-expr stmt)
-                          state
-                          (conts-of 
-                           #:next     next
-                           #:throw    throw
-                           ))))
+  (lambda (stmt class-name state next throw user-exn)
+    (let* ([name        (decl-var stmt)]
+           [collide?    (state:field-already-declared? name class-name state)]
+           [maybe-expr  (decl-maybe-expr stmt)]
+           [expr        (if (null? maybe-expr) 0 (get maybe-expr))])
+      (cond
+        [(super-or-this? name)    (user-exn (ue:keyword-as-identifier name 'field) state)]
+        [collide?                 (user-exn (ue:duplicate-field name) state)]
+        [else                     (Mvalue expr
+                                          state
+                                          (conts-of #:throw throw
+                                                    #:user-exn user-exn
+                                                    #:return (lambda (v s)
+                                                               (next (state:declare-static-field name
+                                                                                                 v
+                                                                                                 class-name
+                                                                                                 s)))))]))))
+
 
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
 (define inst-fields
-  (lambda (class-name instance-field-decls state next)
-    (declare-inst-fields class-name
-                         instance-field-decls
+  (lambda (instance-field-decls class-name state next user-exn)
+    (declare-inst-fields instance-field-decls
+                         class-name
                          state
                          (lambda (s)
-                           (declare-init class-name
-                                         instance-field-decls
+                           (declare-init instance-field-decls
+                                         class-name
                                          s
-                                         next)))))
+                                         next))
+                         user-exn)))
 
 (define declare-inst-fields
-  (lambda (class-name i-field-decls state next)
+  (lambda (i-field-decls class-name state next user-exn)
     (if (null? i-field-decls)
         (next state)
-        (declare-inst-field class-name
-                            (decl-var (first i-field-decls))
-                            state
+        (declare-inst-field (decl-var (first i-field-decls))
+                            class-name
+                            (state:push-context (first i-field-decls) state)
                             (lambda (s)
-                              (declare-inst-fields class-name
-                                                   (rest i-field-decls)
-                                                   s
-                                                   next))))))
+                              (declare-inst-fields (rest i-field-decls)
+                                                   class-name
+                                                   (state:copy-context-stack #:src state #:dest s)
+                                                   next
+                                                   user-exn))
+                            user-exn))))
 
 (define declare-inst-field
-  (lambda (class-name var-name state next)
+  (lambda (var-name class-name state next user-exn)
     (cond
-      [(super-or-this? var-name)                      (myerror (format "Keyword `~a` cannot be used as an instance field name"
-                                                                       var-name)
-                                                               state)]
-      [(state:var-already-declared? var-name state)   (myerror (format "field named `~a` is already declared in this class" var-name)
-                                                               state)]
+      [(super-or-this? var-name)                      (user-exn (ue:keyword-as-identifier var-name 'field) state)]
+      [(state:field-already-declared? var-name
+                                      class-name
+                                      state)          (user-exn (ue:duplicate-field var-name) state)]
       [else                                           (next (state:declare-instance-field var-name
                                                                                           class-name
                                                                                           state))])))
 ;; add the fields with initializers to the classes init method
 ; map to an assignment
 (define declare-init
-  (lambda (class-name i-field-decls state next)
+  (lambda (i-field-decls class-name state next)
     (next (state:declare-init (map decl->assign
                                    (filter (lambda (decl)
                                              (not (null? (decl-maybe-expr decl))))
@@ -406,29 +430,36 @@
 
 (define default-constructor-stmt '(constructor () ()))
 (define no-constructors?
-  (lambda (body)
-    (false? (findf is-ctor-decl? body))))
+  (lambda (class-body)
+    (false? (findf is-ctor-decl? class-body))))
 
 (define constructors
-  (lambda (class-name body state next)
-    (if (null? body)
+  (lambda (ctor-decls class-name state next user-exn)
+    (if (null? ctor-decls)
         (next state)
-        (declare-constructor (first body)
+        (declare-constructor (first ctor-decls)
                              class-name 
-                             state
+                             (state:push-context (first ctor-decls) state)
                              (lambda (s)
-                               (constructors class-name (rest body) s next))))))
+                               (constructors (rest ctor-decls)
+                                             class-name
+                                             (state:copy-context-stack #:src state #:dest s)
+                                             next
+                                             user-exn))
+                             user-exn))))
 
 (define declare-constructor
-  (lambda (stmt class-name state next)
-    (if (state:fun-already-declared? class-name (ctor-params stmt) state)
-        (myerror (format "A constructor with signature `~a` has already been declared"
-                         (function:formatted-signature class-name (ctor-params stmt)))
-                 state)
-        (next (state:declare-constructor (ctor-params stmt)
-                                         (ctor-body stmt)
-                                         class-name
-                                         state)))))
+  (lambda (stmt class-name state next user-exn)
+    (if (state:ctor-already-declared? class-name (ctor-params stmt) state)
+        (user-exn (ue:duplicate-constructor (function:formatted-signature class-name (ctor-params stmt))) state)
+        (check-unique-params (ctor-params stmt)
+                             (λ ()
+                               (next (state:declare-constructor (ctor-params stmt)
+                                                                (ctor-body stmt)
+                                                                class-name
+                                                                state)))
+                             (λ (exn)
+                               (user-exn exn state))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; BLOCK ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -467,6 +498,13 @@
 
 (define Mstate-while-impl
   (lambda (condition body state conts)
+    (define (repeat s)
+      (Mstate-while-impl condition
+                         body
+                         (state:copy-context-stack #:src state #:dest s)
+                         conts))
+    (define (break s)
+      ((next conts) (state:copy-context-stack #:src state #:dest s)))
     (Mbool condition
            state
            (conts-of conts
@@ -475,17 +513,9 @@
                                     (Mstate-statement body 
                                                       s1
                                                       (conts-of conts
-                                                                #:next (lambda (s2)
-                                                                         (Mstate-while-impl condition
-                                                                                            body
-                                                                                            s2
-                                                                                            conts))
-                                                                #:break (next conts)
-                                                                #:continue (lambda (s3)
-                                                                             (Mstate-while-impl condition
-                                                                                                body
-                                                                                                s3
-                                                                                                conts))))
+                                                                #:next repeat
+                                                                #:break break
+                                                                #:continue repeat))
                                     ((next conts) s1)))))))
 
 
@@ -548,7 +578,8 @@
   (lambda (statement state conts)
     (Mvalue (throw-expr-part statement)
             state
-            (conts-of conts #:return (throw conts)))))
+            (conts-of conts
+                      #:return (throw conts)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;   FUNCTION DECLARATION   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -570,15 +601,23 @@
 
 (define Mstate-fun-decl-impl
   (lambda (fun-name fun-params fun-body state conts)
-    ; fun w/ same signature can't be in same scope
     (if (state:fun-already-declared? fun-name fun-params state)
-        (myerror (format "function `~s` is already declared in the current scope."
-                         fun-name)
-                 state)
-        ((next conts) (state:declare-fun fun-name 
-                                         fun-params
-                                         fun-body
-                                         state)))))
+        ((user-exn conts) (ue:duplicate-function (function:formatted-signature fun-name fun-params)) state)
+        (check-unique-params fun-params
+                             (λ ()
+                               ((next conts) (state:declare-fun fun-name 
+                                                                fun-params
+                                                                fun-body
+                                                                state)))
+                             (λ (exn)
+                               ((user-exn conts) exn state))))))
+    
+(define check-unique-params
+  (lambda (param-list on-pass on-fail)
+    (let ([dup  (check-duplicates (filter-not (λ (e) (eq? '& e)) param-list) eq?)])
+      (if dup
+          (on-fail (ue:duplicate-parameter dup))
+          (on-pass)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;   FUNCTION INVOCATION   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -633,12 +672,8 @@
 (define Mstate-var-decl-impl
   (lambda (var-name maybe-expr state conts)
     (cond
-      [(super-or-this? var-name)                      (myerror (format "`~a` cannot be used as a field or variable name"
-                                                                       var-name)
-                                                               state)]
-      [(state:var-already-declared? var-name state)   (myerror (format "`~a` is already declared in the current scope."
-                                                                       var-name)
-                                                               state)]
+      [(super-or-this? var-name)                      ((user-exn conts) (ue:keyword-as-identifier var-name 'variable) state)]
+      [(state:var-already-declared? var-name state)   ((user-exn conts) (ue:duplicate-variable var-name) state)]
       [(null? maybe-expr)                             ((next conts) (state:declare-var var-name state))]
       [else                                           (Mvalue (get maybe-expr)
                                                               state
@@ -681,29 +716,62 @@
 
 (define Mstate-try-impl
   (lambda (try-body catch-block finally-block state conts)
+    
+    (define (try-next default-cont)
+      (if (null? finally-block)
+          default-cont
+          (lambda (s)
+            (Mstate-block-impl (finally-body finally-block)
+                               s
+                               (conts-of conts
+                                         #:next default-cont)))))
+    
+    (define (finally-next next)
+      (lambda (s)
+        (Mstate-block-impl (finally-body finally-block)
+                           s
+                           (conts-of conts #:next next))))
+    
+    (define try-throw
+      (lambda (e s)
+        (define old-cs-state (state:copy-context-stack #:src state #:dest s))
+        (cond
+          [(null? catch-block)   (Mstate-block-impl (finally-body finally-block)
+                                                    old-cs-state
+                                                    (conts-of conts
+                                                              #:next (lambda (s2)
+                                                                       ((throw conts) e (state:copy-context-stack #:src s #:dest s2)))))]
+          [(null? finally-block) (Mstate-block-impl (catch-body catch-block)
+                                                    (state:declare-var-with-value (catch-var catch-block)
+                                                                                  e
+                                                                                  old-cs-state)
+                                                    conts)]
+          [else                  (Mstate-block-impl (catch-body catch-block)
+                                                    (state:declare-var-with-value (catch-var catch-block)
+                                                                                  e
+                                                                                  old-cs-state)
+                                                    (conts-of conts ; during catch, before finally
+                                                              #:next (finally-next (next conts))
+                                                              #:break (finally-next (break conts))
+                                                              #:continue (finally-next (continue conts))
+                                                              #:throw (lambda (e2 s2)
+                                                                        (Mstate-block-impl (finally-body finally-block)
+                                                                                           s2
+                                                                                           (conts-of conts
+                                                                                                     #:next (lambda (s3)
+                                                                                                              ((throw conts) e2 s3)))))
+                                                              #:return (lambda (v s2)
+                                                                         (Mstate-block-impl (finally-body finally-block)
+                                                                                            s2
+                                                                                            (conts-of conts
+                                                                                                      #:next (lambda (s3)
+                                                                                                               ((return conts) v s3)))))))])))
     (Mstate-block-impl try-body
                        state
                        (conts-of conts
-                                 #:next (if (null? finally-block)
-                                            (next conts)
-                                            (lambda (s)
-                                              (Mstate-block-impl (finally-body finally-block)
-                                                                 s
-                                                                 conts)))
-                                 #:break (if (null? finally-block)
-                                             (break conts)
-                                             (lambda (s)
-                                               (Mstate-block-impl (finally-body finally-block)
-                                                                  s
-                                                                  (conts-of conts
-                                                                            #:next (break conts)))))
-                                 #:continue (if (null? finally-block)
-                                                (continue conts)
-                                                (lambda (s)
-                                                  (Mstate-block-impl (finally-body finally-block)
-                                                                     s
-                                                                     (conts-of conts
-                                                                               #:next (continue conts)))))
+                                 #:next (try-next (next conts))
+                                 #:break (try-next (break conts))
+                                 #:continue (try-next (continue conts))
                                  #:return (if (null? finally-block)
                                               (return conts)
                                               (lambda (v s)
@@ -712,51 +780,7 @@
                                                                    (conts-of conts
                                                                              #:next (lambda (s2)
                                                                                       ((return conts) v s2))))))
-                                 #:throw (cond
-                                           [(null? catch-block)     (lambda (e s)
-                                                                      (Mstate-block-impl (finally-body finally-block)
-                                                                                         (state:with-context (state:context-stack state) s)
-                                                                                         (conts-of conts
-                                                                                                   #:next (lambda (s2)
-                                                                                                            ((throw conts) e (state:with-context (state:context-stack s) s2))))))]
-                                           [(null? finally-block)   (lambda (e s)
-                                                                      (Mstate-block-impl (catch-body catch-block)
-                                                                                         (state:declare-var-with-value (catch-var catch-block)
-                                                                                                                       e
-                                                                                                                       (state:with-context (state:context-stack state) s))
-                                                                                         conts))]
-                                           [else                    (lambda (e s)
-                                                                      (Mstate-block-impl (catch-body catch-block)
-                                                                                         (state:declare-var-with-value (catch-var catch-block)
-                                                                                                                       e
-                                                                                                                       (state:with-context (state:context-stack state) s))
-                                                                                         (conts-of conts ; after catch, before finally
-                                                                                                   #:next (lambda (s2)
-                                                                                                            (Mstate-block-impl (finally-body finally-block)
-                                                                                                                               s2
-                                                                                                                               conts))
-                                                                                                   #:break (lambda (s2)
-                                                                                                             (Mstate-block-impl (finally-body finally-block)
-                                                                                                                                s2
-                                                                                                                                (conts-of conts
-                                                                                                                                          #:next (break conts))))
-                                                                                                   #:continue (lambda (s2)
-                                                                                                                (Mstate-block-impl (finally-body finally-block)
-                                                                                                                                   s2
-                                                                                                                                   (conts-of conts
-                                                                                                                                             #:next (continue conts))))
-                                                                                                   #:throw (lambda (e2 s2)
-                                                                                                             (Mstate-block-impl (finally-body finally-block)
-                                                                                                                                s2
-                                                                                                                                (conts-of conts
-                                                                                                                                          #:next (lambda (s3)
-                                                                                                                                                   ((throw conts) e2 s3)))))
-                                                                                                   #:return (lambda (v s2)
-                                                                                                              (Mstate-block-impl (finally-body finally-block)
-                                                                                                                                 s2
-                                                                                                                                 (conts-of conts
-                                                                                                                                           #:next (lambda (s3)
-                                                                                                                                                    ((return conts) v s3))))))))])))))
+                                 #:throw try-throw))))
 
 
 
@@ -774,7 +798,7 @@
 ;; error if not bool
 (define Mbool
   (lambda (expr state conts)
-    (Mbool-impl expr state (w/preproc conts #:map-value assert-bool))))
+    (Mbool-impl expr state (w/preproc conts #:map-value assert-bool)))) ; todo, refactor assert-bool to use user-exn
 ; Like Mvalue, but produces bool else error, and handles short-circuiting
 (define Mbool-impl
   (lambda (expr state conts)
@@ -828,7 +852,6 @@
 (define Mvalue
   (lambda (expr state conts)
     (cond
-      [(null? expr)                         (error "called Mvalue on a null expression")]
       [(or (number? expr)
            (eq? 'true expr)
            (eq? 'false expr))               (Mvalue-literal expr state conts)]
@@ -846,7 +869,10 @@
   (lambda (expr state conts)
     (Mname expr state (conts-of conts
                                 #:return (lambda (n s)
-                                           ((return conts) (read-var-box n s) state))))))
+                                           (read-var-box n
+                                                         s
+                                                         (λ (v s) ((return conts) v state))
+                                                         (user-exn conts)))))))
 
 (define Mvalue-var
   (lambda (expr state conts)
@@ -856,16 +882,12 @@
 ;; Given a simple name, retrieves box/value of a var from state
 ;; throws appropriate errors if undeclared or uninitialized
 (define read-var-box
-  (lambda (name state)
+  (lambda (name state return user-exn)
     (cond
-      [(eq? 'super name)                             (myerror "keyword `super` cannot be used alone an expression" state)]
-      [(not (state:var-declared? name state))        (myerror (format "referenced `~a` before declaring it."
-                                                                      name)
-                                                              state)]
-      [(not (state:var-initialized? name state))     (myerror (format "accessed `~a` before initializing it."
-                                                                      name)
-                                                              state)]
-      [else                                          (state:get-var-box name state)])))
+      [(eq? 'super name)                             (user-exn (ue:keyword-as-identifier 'super 'variable) state)]
+      [(not (state:var-declared? name state))        (user-exn (ue:reference-undeclared-var name) state)]
+      [(not (state:var-initialized? name state))     (user-exn (ue:access-uninitialized-var name) state)]
+      [else                                          (return (state:get-var-box name state) state)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; LITERALS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -891,10 +913,8 @@
   (lambda (expr state conts)
     (Mshared-fun expr
                  state
-                 (conts-of conts
-                           #:next (lambda (s) (myerror (format "Function call `~a` was expected to produce a return value, but did not."
-                                                               (funcall->string expr))
-                                                       s))
+                 (conts-of conts ; todo: refactor funcall arg, move to context stack
+                           #:next (lambda (s) ((user-exn conts) (ue:no-return-value-fun (funcall->string expr)) state))
                            #:return (lambda (v s) ((return conts) v state))))))
 
 ;; given a valid funcall AST node, produces a user-readable
@@ -916,55 +936,59 @@
 
 (define Mshared-fun-impl
   (lambda (name arg-list state conts)
+    (define (on-hit n s)
+      (Mvalue-fun-impl (state:get-function n arg-list s)
+                       arg-list
+                       state
+                       s
+                       ; passing state in next, throw and return,
+                       ; because the s returned from fun call was scoped
+                       ; aka the continuations that leave the fun-body (return to call-site)
+                       ; boxes handle the side-effects from the function body
+                       ; however s2 has the context-stack during fun body, needed for error messages
+                       ; continue, break and throw need s2's context stack
+                       (conts-of
+                        #:next     (lambda (s2) ((next conts) state))
+                        #:throw    (lambda (e s2)
+                                     ((throw conts) e (state:copy-context-stack #:src s2 #:dest state)))
+                        #:return   (lambda (v s2) ((return conts) v state))
+                        #:break    (default-break (user-exn conts))
+                        #:continue (default-continue (user-exn conts))
+                        #:user-exn (user-exn conts))))
     (Mname name
            state
            (conts-of conts
                      #:return (lambda (n s)
                                 (cond
-                                  [(super-or-this? n)             (myerror (format "calls to `~a` can only appear in the first line of a constructor" n)
-                                                                           s)]
-                                  [(state:has-fun? n arg-list s)  (Mvalue-fun-impl (state:get-function n arg-list s)
-                                                                                   arg-list
-                                                                                   state
-                                                                                   s
-                                                                                   ; passing state in next, throw and return, because the s returned from fun call was scoped
-                                                                                   ; aka the continuations that leave the fun-body (return to call-site)
-                                                                                   ; boxes handle the side-effects from the function body
-                                                                                   ; however s2 has the context-stack during fun body, needed for error messages
-                                                                                   ; continue, break and throw need s2's context stack
-                                                                                   (conts-of conts
-                                                                                             #:next     (lambda (s2) ((next conts) state)) 
-                                                                                             #:continue default-continue
-                                                                                             #:break    default-break
-                                                                                             #:throw    (lambda (e s2)
-                                                                                                          ((throw conts) e (state:with-context (state:context-stack s2) state)))
-                                                                                             #:return   (lambda (v s2) ((return conts) v state))))]
-                                  [else                           (myerror (format "A function `~a` with ~a parameter(s) is not in scope.~a"
-                                                                                   name
-                                                                                   (length arg-list)
-                                                                                   (let ([similar-funs  (state:all-funs-with-name n state)])
-                                                                                     (if (null? similar-funs)
-                                                                                         ""
-                                                                                         (string-join (map function->string similar-funs)
-                                                                                                      "\n"
-                                                                                                      #:before-first "\nDid you mean one of the following?\n----------\n"
-                                                                                                      #:after-last "\n----------\n"))))
-                                                                           s)]))))))
-
+                                  [(super-or-this? n)             ((user-exn conts) (ue:ctor-chain-outside-ctor n) state)]
+                                  [(state:has-fun? n arg-list s)  (on-hit n s)]
+                                  [else                           ((user-exn conts) (ue:function-not-in-scope name
+                                                                                                              (length arg-list)
+                                                                                                              (similar-funs n state))
+                                                                                    state)]))))))
+(define similar-funs
+  (lambda (name state)
+    (let ([similar-funs  (state:all-funs-with-name name state)])
+      (if (null? similar-funs)
+          ""
+          (string-join (map function->string similar-funs)
+                       "\n"
+                       #:before-first "\nDid you mean one of the following?\n----------\n"
+                       #:after-last "\n----------\n")))))
 
 (define Mvalue-fun-impl
   (lambda (fun-closure fun-inputs eval-state state conts)
     (if (function:abstract? fun-closure)
-        (myerror (format "~a is abstract and cannot be invoked."
-                         (function->string fun-closure))
-                 state)
-        (Mstate-stmt-list (function:body fun-closure) ; needs to run in scope before Mname
-                          (get-environment fun-closure
-                                           fun-inputs
-                                           eval-state
-                                           (state:push-fun-call-context fun-closure state)
-                                           conts)
-                          conts))))
+        ((user-exn conts) (ue:invoke-abstract-method (function->string fun-closure)) state)
+        (get-environment fun-closure
+                         fun-inputs
+                         eval-state
+                         (state:enter-fun-call-context fun-closure state)
+                         (conts-of conts
+                                   #:next (lambda (s)
+                                            (Mstate-stmt-list (function:body fun-closure)
+                                                              s
+                                                              conts)))))))
 
 
 ;; Evaluates parameters and produces the state in which the function body will be evaluated
@@ -975,14 +999,11 @@
                         eval-state
                         conts
                         (lambda (p l)
-                          (bind-boxed-params p
-                                             l
-                                             (state:push-new-layer ((function:scoper fun) out-state))))
+                          ((next conts) (bind-boxed-params p
+                                                           l
+                                                           (state:push-new-layer ((function:scoper fun) out-state)))))
                         (lambda (p s)
-                          (myerror (format "Function `~a` expects a reference for `~a`"
-                                           (function->string fun)
-                                           p)
-                                   s)))))
+                          ((user-exn conts) (ue:non-var-in-ref-param (function->string fun) p) s)))))
 
 ;; Takes in the inputs and params and the current state, return the mapping of params and values
 ;; The evaluation passing the list of boxes of input, the params without the & and the new state 
@@ -990,37 +1011,37 @@
   (lambda (formal-params actual-params eval-state conts evaluation param-ref-error)
     (cond
       [(and (null? actual-params)
-            (null? formal-params))      (evaluation '() '())]
+            (null? formal-params))       (evaluation '() '())]
       ;; by value
       [(not (eq? (first formal-params)
-                 '&))                   (Mvalue (first actual-params)
-                                                eval-state
-                                                (conts-of conts
-                                                          #:return (lambda (v1 s1)
-                                                                     (boxed-arg-list-cps (rest formal-params)
-                                                                                         (rest actual-params)
-                                                                                         s1
-                                                                                         conts
-                                                                                         (lambda (ps bs)
-                                                                                           (evaluation (cons (first formal-params) ps)
-                                                                                                       (cons (box v1) bs)))
-                                                                                         param-ref-error))))]
+                 '&))                    (Mvalue (first actual-params)
+                                                 eval-state
+                                                 (conts-of conts
+                                                           #:return (λ (v s)
+                                                                      (boxed-arg-list-cps (rest formal-params)
+                                                                                          (rest actual-params)
+                                                                                          s
+                                                                                          conts
+                                                                                          (lambda (ps bs)
+                                                                                            (evaluation (cons (first formal-params) ps)
+                                                                                                        (cons (box v) bs)))
+                                                                                          param-ref-error))))]
       ;; by reference
-      [(eq? 'this (first actual-params)) (myerror "`this` cannot be passed as a reference parameter" eval-state)]
-      [(name? (first actual-params))     (boxed-arg-list-cps (cddr formal-params)
-                                                             (cdr actual-params)
-                                                             eval-state
-                                                             conts
-                                                             (lambda (ps bs)
-                                                               (Mbox-var (first actual-params)
-                                                                         eval-state
-                                                                         (conts-of conts
-                                                                                   #:return (lambda (b s)
+      [(eq? 'this (first actual-params)) ((user-exn conts) (ue:this-as-ref-param) eval-state)]
+      [(name? (first actual-params))     (Mbox-var (first actual-params)
+                                                   eval-state
+                                                   (conts-of conts
+                                                             #:return (λ (b s)
+                                                                        (boxed-arg-list-cps (cddr formal-params)
+                                                                                            (cdr actual-params)
+                                                                                            s
+                                                                                            conts
+                                                                                            (lambda (ps bs)
                                                                                               (evaluation (cons (second formal-params) ps)
-                                                                                                          (cons b bs))))))
-                                                             param-ref-error)]
-      [else                             (param-ref-error (second formal-params)
-                                                         eval-state)])))
+                                                                                                          (cons b bs)))
+                                                                                            param-ref-error))))]
+      [else                              (param-ref-error (second formal-params)
+                                                          eval-state)])))
 
 ;; Binds the names of the formal-params to boxes representing the actual parameters
 ; before calling this, push a layer to state
@@ -1039,24 +1060,26 @@
 (define assign-var second)
 (define assign-expr third)
 
+; the non-functional uses of define here are for readability and limiting the width.
 (define Mvalue-assign
   (lambda (expr state conts)
-    (Mvalue (assign-expr expr)
-            state
-            (conts-of conts
-                      #:return (lambda (v s)
-                                 (Mname (assign-var expr)
-                                        s
-                                        (conts-of conts
-                                                  #:return (lambda (n s2)
-                                                             (cond
-                                                               [(or (eq? 'super n)
-                                                                    (eq? 'this n))           (myerror (format "`~a` cannot be assigned to" n)
-                                                                                                      s)]
-                                                               [(state:var-declared? n s2)   ((return conts) v (state:restore-scope #:dest (state:assign-var n v s2)
-                                                                                                                                    #:src state))]
-                                                               [else                         (myerror (format "tried to assign to `~a` before declaring it." n)
-                                                                                                      s)])))))))))
+    (define (name-return n s)
+      (define (value-return v s2)
+        ; n is valid in s, but not s2 or state
+        ((return conts) v (state:restore-scope
+                           #:dest (state:assign-var n v (state:restore-scope #:dest s2
+                                                                             #:src s))
+                           #:src s2)))
+      (cond
+        [(super-or-this? n)          ((user-exn conts) (ue:assigning-to-this/super n) state)]
+        [(state:var-declared? n s)   (Mvalue (assign-expr expr)
+                                             (state:restore-scope #:dest s #:src state)
+                                             (conts-of conts #:return value-return))]
+        [else                        ((user-exn conts) (ue:reference-undeclared-var n) state)]))
+    (Mname (assign-var expr)
+           state
+           (conts-of conts
+                     #:return name-return))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;   NEW   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1075,24 +1098,20 @@
   (lambda (class-name arg-list state conts)
     (if (state:has-class? class-name state)
         ; changes to instance during constructors are handled by boxes
-        (zero-init-instance class-name
-                            state
-                            (lambda (inst)
-                              ((return conts) inst (construct-instance class-name
-                                                                       arg-list
-                                                                       '()
-                                                                       state
-                                                                       (state:set-instance-scope inst state)
-                                                                       (conts-of conts
-                                                                                 #:next (lambda (s) state)
-                                                                                 #:return (lambda (v s) state)
-                                                                                 #:break default-break
-                                                                                 #:continue default-continue)))))
-        (myerror (format "`~a` is not a recognized class" class-name) state))))
-
-(define zero-init-instance
-  (lambda (class-name state return)
-    (return (state:get-zero-init-instance class-name state))))
+        (let ([inst  (state:get-zero-init-instance class-name state)])
+          (construct-instance class-name
+                              arg-list
+                              '()
+                              state
+                              (state:set-instance-scope inst state)
+                              (conts-of
+                               #:next (lambda (s) ((return conts) inst state))
+                               #:return (lambda (v s) ((return conts) inst state))
+                               #:throw (lambda (e s) ((throw conts) e (state:copy-context-stack #:src s #:dest state)))
+                               #:break (default-break (user-exn conts))
+                               #:continue (default-continue (user-exn conts))
+                               #:user-exn (user-exn conts))))
+        ((user-exn conts) (ue:not-a-class class-name) state))))
 
 ;; Search for constructor and run. Error if absent
 (define construct-instance
@@ -1105,34 +1124,42 @@
                   arg-eval-state
                   run-state
                   conts)
-        (myerror (format "class `~a` does not declare a constructor that accepts arguments `~a`"
-                         class-name
-                         (string-join (map (curry format "~a") arg-list)
-                                      ", "
-                                      #:before-first "("
-                                      #:after-last ")"))
-                 arg-eval-state))))
+        ((user-exn conts) (ue:ctor-DNE class-name 
+                                       (string-join (map (curry format "~a") arg-list)
+                                                    ", "
+                                                    #:before-first "("
+                                                    #:after-last ")"))
+                          arg-eval-state))))
 
 ;; Evaluate constructor closure. Recurses into other constructors if necessary
 (define ctor-rec
   (lambda (ctor args class-name ctor-chain arg-eval-state run-state conts)
     (if (member ctor ctor-chain)
-        (myerror "Cyclic constructor chaining. At least one constructor must call super(...)"
-                 arg-eval-state)
-        (ctor-rec-impl (function:body ctor)
-                       class-name
-                       (state:get-parent-name class-name arg-eval-state)
-                       (cons ctor ctor-chain)
-                       (get-environment ctor
-                                        args
-                                        arg-eval-state
-                                        (state:push-fun-call-context ctor run-state)
-                                        conts)
-                       conts))))
+        ((user-exn conts) (ue:cyclic-ctor-chaining) run-state)
+        (get-environment ctor
+                         args
+                         arg-eval-state
+                         (state:enter-fun-call-context ctor run-state)
+                         (conts-of conts
+                                   #:next (lambda (s)
+                                            (ctor-rec-impl (function:body ctor)
+                                                           class-name
+                                                           (state:get-parent-name class-name arg-eval-state)
+                                                           (cons ctor ctor-chain)
+                                                           s
+                                                           conts)))))))
 
 (define ctor-rec-impl
   (lambda (body class-name parent ctor-chain state conts)
     ; recursively do parent constructors + inits
+    (define next
+      (lambda (s)
+        (Mstate-stmt-list (if (or (start-super? body)
+                                  (start-this? body))
+                              (cdr body)
+                              body)
+                          state
+                          conts)))
     (ctor-pre-body body
                    class-name
                    parent
@@ -1140,30 +1167,37 @@
                    state
                    (conts-of conts
                              ; then do body of current constructor
-                             #:next (lambda (s)
-                                      (Mstate-stmt-list (if (or (start-super? body)
-                                                                (start-this? body))
-                                                            (cdr body)
-                                                            body)
-                                                        state
-                                                        conts))))))
+                             #:next next
+                             #:return (λ (v s) (next s))))))
 ;; handles pre-body: super+init | this
 ; init function was generated, and will not contain a return statement
 (define ctor-pre-body
   (lambda (body class-name parent ctor-chain state conts)
+    ; conts for chain cases, restores context-stack
+    (define chain-state (state:push-context (if (null? body)
+                                                '(funcall super)
+                                                (first body))
+                                            state))
+    (define chain-conts
+      (w/preproc conts #:map-state (λ (s) (state:copy-context-stack #:src state #:dest s))))
+    (define super-next
+      (λ (s)
+        (Mvalue-fun-impl (state:get-init class-name state)
+                         '()
+                         state
+                         state
+                         conts)))
     (cond
       ; this -> run that ctor
       [(start-this? body)               (construct-instance class-name
                                                             (fun-inputs (first body))
                                                             ctor-chain
-                                                            state
-                                                            state
-                                                            conts)]
+                                                            chain-state
+                                                            chain-state
+                                                            chain-conts)]
       ; super and no parent -> error
       [(and (start-super? body)
-            (not parent))               (myerror (format "Class `~a` has no parent class, cannot call super constructor."
-                                                         class-name)
-                                                 state)]
+            (not parent))               ((user-exn conts) (ue:super-w/out-parent class-name) chain-state)]
       ; no parent -> init
       [(not parent)                     (Mvalue-fun-impl (state:get-init class-name state)
                                                          '()
@@ -1175,16 +1209,13 @@
                                                             (if (start-super? body)
                                                                 (fun-inputs (first body))
                                                                 '())
-                                                            '() ; empty chain because going up class heirarchy, can't revisit ctors of this class
-                                                            state
-                                                            state
-                                                            (conts-of conts
-                                                                      #:next (lambda (s)
-                                                                               (Mvalue-fun-impl (state:get-init class-name state)
-                                                                                                '()
-                                                                                                state
-                                                                                                state
-                                                                                                conts))))])))
+                                                            '() ; empty chain because going up class heirarchy,
+                                                            ; can't revisit ctors of this class
+                                                            chain-state
+                                                            chain-state
+                                                            (conts-of chain-conts
+                                                                      #:next super-next
+                                                                      #:return (λ (v s) (super-next s))))])))
 
 ; assumes every statement in a function body is nested and has at least 2 elems
 ;; is the first statement of a ctor body this(...) or super(...)
@@ -1276,26 +1307,27 @@
                                      (dot-RHS name)
                                      state
                                      conts)]
-      [else               (myerror (format "malformed identifier `~a`" name) state)])))
+      [else               ((user-exn conts) (ue:malformed-identifier name) state)])))
 
 (define Mname-simple
   (lambda (name state conts)
     ; other checks for `this` and `super` must occur at each site that handles names,
     ; in order to give meaningful error messages and support ctor chaining
     (if (and (eq? 'this name) (not (state:instance-context? state)))
-        (myerror "`this` cannot be reference in a free or static context" state)
+        ((user-exn conts) (ue:this/super-in-static name) state)
         ((return conts) name state))))
 
 (define Mname-dot
   (lambda (LHS RHS state conts)
     (cond
-      [(super-or-this? RHS)             (myerror (format "Keyword `~a` cannot appear on the RHS of a dot expression" RHS) state)]
+      [(super-or-this? RHS)             ((user-exn conts) (ue:this/super-dot-RHS RHS) state)]
+      ; todo: rearrange following 2 cases, group error cases and normal cases
       [(eq? 'this LHS)                  (if (state:instance-context? state)
                                             ((return conts) RHS (state:set-this-scope state))
-                                            (myerror "`this` cannot be used in a free or static context" state))]
+                                            ((user-exn conts) (ue:this/super-in-static LHS) state))]
       [(eq? 'super LHS)                 (if (and (state:instance-context? state) (state:current-type-has-parent? state))
                                             ((return conts) RHS (state:set-super-scope state))
-                                            (myerror "`super` cannot be used in the current context" state))]
+                                            ((user-exn conts) (ue:this/super-in-static LHS) state))]
       ; if not symbol, must be instance yielding expr. if symbol and reachable var, must also yield instance
       [(or (not (symbol? LHS))
            (state:var-declared? LHS
@@ -1303,17 +1335,19 @@
                                                 state
                                                 (conts-of conts
                                                           #:return (lambda (v s)
-                                                                     ((return conts) RHS (state:set-instance-scope (assert-instance v s) s)))))]
+                                                                     (assert-instance v
+                                                                                      s
+                                                                                      (λ (v s)
+                                                                                        ((return conts) RHS (state:set-instance-scope v s)))
+                                                                                      (user-exn conts)))))]
       [(state:has-class? LHS state)     ((return conts) RHS (state:set-static-scope LHS state))]
-      [else                             (myerror (format "`~a` is not a reachable class name or variable" LHS) state)])))
+      [else                             ((user-exn conts) (ue:unknown-LHS-dot LHS) state)])))
 
 (define assert-instance 
-  (lambda (v s) 
+  (lambda (v s return user-exn) 
     (if (is-instance? v) 
-        v 
-        (myerror (format "`~a` is not an instance of a class, cannot apply dot operator"
-                         (prep-val-for-output v))
-                 s))))
+        (return v s)
+        (user-exn (ue:non-instance-dot (prep-val-for-output v)) s))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1431,13 +1465,6 @@
    '*  *
    '%  modulo))
 
-
-;;;;;;; Custom error functions
-;; for user-facing errors
-(define myerror
-  (lambda (msg state)
-    (raise-user-error (string-append msg "\n" (state:formatted-stack-trace state)))))
-
 ; symbol n is 'this or 'super
 (define super-or-this?
   (lambda (sym)
@@ -1447,7 +1474,25 @@
 
 (define default-return (lambda (v s) (prep-val-for-output v)))
 ; interpret-parse functions should use the throw cont parameter
-(define default-throw (lambda (e s) (myerror (format "uncaught exception: ~a" e) s)))
-(define default-break (lambda (s) (myerror "break statement outside of loop" s)))
-(define default-continue (lambda (s) (myerror "continue statement outside of loop" s)))
+; false -> Mstate-throw throws a user-exn, needs conts for user-exn's context stack
+(define default-throw
+  (lambda (user-exn)
+    (lambda (e s) (user-exn (ue:uncaught-exception e) s))))
 
+
+(define (take-up-to lis n)
+  (if (<= (length lis) n)
+      lis
+      (take lis n)))
+
+(define default-user-exn
+  (lambda ([n 20]) ; retain the n deepest/recent elements on the context stack
+    (lambda (exn s)
+      (ue:raise-exn exn (take-up-to (state:context-stack s) n)))))
+
+(define default-break
+  (lambda (user-exn)
+    (lambda (s) (user-exn (ue:break-outside-loop) s))))
+(define default-continue
+  (lambda (user-exn)
+    (lambda (s) (user-exn (ue:continue-outside-loop) s))))

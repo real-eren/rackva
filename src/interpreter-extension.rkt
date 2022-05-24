@@ -1,69 +1,34 @@
-#lang racket
+#lang racket/base
 
 (require "interpreter.rkt"
-         (prefix-in simple: "simpleParser.rkt")
-         (prefix-in function: "functionParser.rkt")
-         (prefix-in class: "classParser.rkt"))
+         (prefix-in simple: "parse/simpleParser.rkt")
+         (prefix-in function: "parse/functionParser.rkt")
+         (prefix-in class: "parse/classParser.rkt"))
 
-(provide interpret-str
-         interpret-v1-str
-         interpret-v1-file
-         interpret-v2-str
-         interpret-v2-file
-         interpret-v3-str
-         interpret-v3-file)
+(provide (all-defined-out))
   
 ;; Useful functions not in the scope of the interpreter project
 ;; Some depend on a modified copy of lex and the parsers,
 ;; and thus would not function properly in the environment used for grading
 
-
-;; takes a string representing a program, interprets it
-;; returns the result
-; extra white space, including new lines, is ignored
-; ex:
-; (interpret-str "
-; line1
-; line2")
-
-(define interpret-v1-str
-  (lambda (str [return default-return] [throw default-throw])
-    (interpret-parse-tree-v1 (simple:parser-str str)
-                             return
-                             throw)))
-
-(define interpret-v1-file
-  (lambda (filename [return default-return] [throw default-throw])
-    (interpret-parse-tree-v1 (simple:parser filename)
-                             return
-                             throw)))
+(define interpret-template
+  (lambda (interpret-proc parse-proc)
+    (lambda (input
+             #:return [return  default-return]
+             #:user-exn [user-exn  (default-user-exn)]
+             #:throw [throw  (default-throw user-exn)]
+             . args)
+      (apply interpret-proc (parse-proc input) (append args (list return throw user-exn))))))
 
 
-(define interpret-v2-str
-  (lambda (str [return default-return] [throw default-throw])
-    (interpret-parse-tree-v2 (function:parser-str str)
-                             return
-                             throw)))
+(define interpret-v1-str  (interpret-template interpret-parse-tree-v1 simple:parser-str))
+(define interpret-v1-file (interpret-template interpret-parse-tree-v1 simple:parser))
 
-(define interpret-v2-file
-  (lambda (filename [return default-return] [throw default-throw])
-    (interpret-parse-tree-v2 (function:parser filename)
-                             return
-                             throw)))
+(define interpret-v2-str  (interpret-template interpret-parse-tree-v2 function:parser-str))
+(define interpret-v2-file (interpret-template interpret-parse-tree-v2 function:parser))
 
-(define interpret-v3-str
-  (lambda (str entry-point [return default-return] [throw default-throw])
-    (interpret-parse-tree-v3 (class:parser-str str)
-                             entry-point
-                             return
-                             throw)))
-
-(define interpret-v3-file
-  (lambda (filename entry-point [return default-return] [throw default-throw])
-    (interpret-parse-tree-v3 (class:parser filename)
-                             entry-point
-                             return
-                             throw)))
+(define interpret-v3-str  (interpret-template interpret-parse-tree-v3 class:parser-str))
+(define interpret-v3-file (interpret-template interpret-parse-tree-v3 class:parser))
 
 ;; str equivalent of the `interpret` function provided by `interpreter`
 ;; AKA latest version of interpret
