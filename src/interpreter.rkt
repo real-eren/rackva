@@ -174,9 +174,9 @@
       [(state:has-class? class-name state)    ((user-exn conts) (ue:duplicate-class class-name) state)]
       [(eq? class-name parent)                ((user-exn conts) (ue:class-extend-self class-name) state)]
       [(or (null? parent)
-           (state:has-class? parent state))   (eval-class-body class-name
+           (state:has-class? parent state))   (eval-class-body body
+                                                               class-name
                                                                parent
-                                                               body
                                                                (state:declare-class class-name parent state)
                                                                (next conts)
                                                                (throw conts)
@@ -189,18 +189,18 @@
 ; Assumptions:
 ; 1) runs after `state:declare-class` and before `state:end-class-decl`
 (define eval-class-body
-  (lambda (class-name parent body state next throw user-exn)
+  (lambda (body class-name parent state next throw user-exn)
     (chain-TR state
               next
               ; declare methods and verify that parent's abstract methods are overridden
               (λ (s nxt) (methods (filter is-method? body) class-name parent s nxt user-exn))
               (λ (s nxt) (verify-abstracts-overridden class-name s nxt user-exn))
               ; declare instance fields (name only), and initializers (init)
-              (λ (s nxt) (inst-fields class-name (filter is-inst-field-decl? body) s nxt user-exn))
+              (λ (s nxt) (inst-fields (filter is-inst-field-decl? body) class-name s nxt user-exn))
               ; declare user-defined constructors
-              (λ (s nxt) (constructors class-name (filter is-ctor-decl? body) s nxt user-exn))
+              (λ (s nxt) (constructors (filter is-ctor-decl? body) class-name s nxt user-exn))
               ; add default constructor if no user-defined constructors present
-              (lambda (s nxt)
+              (λ (s nxt)
                 (if (no-constructors? body)
                     (declare-constructor default-constructor-stmt class-name s nxt user-exn)
                     (nxt s)))
@@ -239,17 +239,17 @@
 ;; evaluate a list of method declarations in a class body
 ; after all declared, check that parent's abstract methods were overridden
 (define methods
-  (lambda (method-decl-list class-name parent state next user-exn)
-    (if (null? method-decl-list)
+  (lambda (method-decls class-name parent state next user-exn)
+    (if (null? method-decls)
         (next state)
-        (declare-method (first method-decl-list)
+        (declare-method (first method-decls)
                         class-name
-                        state
+                        (state:push-context (first method-decls) state)
                         (lambda (s)
-                          (methods (rest method-decl-list)
+                          (methods (rest method-decls)
                                    class-name
                                    parent
-                                   s
+                                   (state:copy-context-stack #:src state #:dest s)
                                    next
                                    user-exn))
                         user-exn))))
@@ -334,14 +334,19 @@
 
 ;;;;;;;; STATIC FIELD DECLARATIONS
 (define static-fields
-  (lambda (body class-name state next throw user-exn)
-    (if (null? body) 
+  (lambda (s-field-decls class-name state next throw user-exn)
+    (if (null? s-field-decls) 
         (next state)
-        (declare-static-field (first body)
+        (declare-static-field (first s-field-decls)
                               class-name
-                              state
+                              (state:push-context (first s-field-decls) state)
                               (lambda (s)
-                                (static-fields (rest body) class-name s next throw user-exn))
+                                (static-fields (rest s-field-decls)
+                                               class-name
+                                               (state:copy-context-stack #:dest s #:src state)
+                                               next
+                                               throw
+                                               user-exn))
                               throw
                               user-exn))))
 
@@ -368,34 +373,34 @@
 ;;;;;;;; INSTANCE FIELD DECLARATIONS
 
 (define inst-fields
-  (lambda (class-name instance-field-decls state next user-exn)
-    (declare-inst-fields class-name
-                         instance-field-decls
+  (lambda (instance-field-decls class-name state next user-exn)
+    (declare-inst-fields instance-field-decls
+                         class-name
                          state
                          (lambda (s)
-                           (declare-init class-name
-                                         instance-field-decls
+                           (declare-init instance-field-decls
+                                         class-name
                                          s
                                          next))
                          user-exn)))
 
 (define declare-inst-fields
-  (lambda (class-name i-field-decls state next user-exn)
+  (lambda (i-field-decls class-name state next user-exn)
     (if (null? i-field-decls)
         (next state)
-        (declare-inst-field class-name
-                            (decl-var (first i-field-decls))
-                            state
+        (declare-inst-field (decl-var (first i-field-decls))
+                            class-name
+                            (state:push-context (first i-field-decls) state)
                             (lambda (s)
-                              (declare-inst-fields class-name
-                                                   (rest i-field-decls)
-                                                   s
+                              (declare-inst-fields (rest i-field-decls)
+                                                   class-name
+                                                   (state:copy-context-stack #:src state #:dest s)
                                                    next
                                                    user-exn))
                             user-exn))))
 
 (define declare-inst-field
-  (lambda (class-name var-name state next user-exn)
+  (lambda (var-name class-name state next user-exn)
     (cond
       [(super-or-this? var-name)                      (user-exn (ue:keyword-as-identifier var-name 'field) state)]
       [(state:field-already-declared? var-name
@@ -407,7 +412,7 @@
 ;; add the fields with initializers to the classes init method
 ; map to an assignment
 (define declare-init
-  (lambda (class-name i-field-decls state next)
+  (lambda (i-field-decls class-name state next)
     (next (state:declare-init (map decl->assign
                                    (filter (lambda (decl)
                                              (not (null? (decl-maybe-expr decl))))
@@ -424,18 +429,22 @@
 
 (define default-constructor-stmt '(constructor () ()))
 (define no-constructors?
-  (lambda (body)
-    (false? (findf is-ctor-decl? body))))
+  (lambda (class-body)
+    (false? (findf is-ctor-decl? class-body))))
 
 (define constructors
-  (lambda (class-name body state next user-exn)
-    (if (null? body)
+  (lambda (ctor-decls class-name state next user-exn)
+    (if (null? ctor-decls)
         (next state)
-        (declare-constructor (first body)
+        (declare-constructor (first ctor-decls)
                              class-name 
-                             state
+                             (state:push-context (first ctor-decls) state)
                              (lambda (s)
-                               (constructors class-name (rest body) s next user-exn))
+                               (constructors (rest ctor-decls)
+                                             class-name
+                                             (state:copy-context-stack #:src state #:dest s)
+                                             next
+                                             user-exn))
                              user-exn))))
 
 (define declare-constructor

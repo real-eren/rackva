@@ -184,7 +184,7 @@ class ClassName {
 }" "A"))
  (check-exn-result result
                    ue:type:uncaught-exception
-                   '(throw "ClassName::foo()" var class)))
+                   '(throw "ClassName::foo()" static-var class)))
 
 (test-case
  "Static method with duplicate parameter names"
@@ -214,7 +214,7 @@ class Child extends Parent {
 }" "Child"))
  (check-exn-result result
                    ue:type:override-c-w/-abstr
-                   '(function class)))
+                   '(abstract-function class)))
 
 
 (test-case
