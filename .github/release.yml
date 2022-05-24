@@ -8,13 +8,10 @@ changelog:
         - breaking
     - title: New Features ➕
       labels:
-        - addition
-    - title: Changes ➡️
-      labels:
         - enhancement
     - title: Bug-fixes 🐛
       labels:
         - bugfix
-    - title: Other Changes
+    - title: Other Changes➡️
       labels:
         - "*"
