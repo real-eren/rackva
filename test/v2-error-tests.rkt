@@ -61,6 +61,8 @@ function main() {
                    ue:type:function-not-in-scope
                    '(var "main()")))
 
+; ; PARAMETERS AND ARGUMENTS
+
 (test-case
  "Passing too many arguments"
  (define result (i "
@@ -105,6 +107,28 @@ function main() {
  (check-exn-result result
                    ue:type:reference-undeclared-var
                    '(return "main()")))
+
+(test-case
+ "Error in left params detected before error in right param, all by-value"
+ (define result (i "
+function f(a, b, c) {}
+function main() {
+  f(x, notafun(), notafun());
+}"))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(funcall "main()")))
+
+(test-case
+ "Error in left params detected before error in right param, left param by-reference"
+ (define result (i "
+function f(&a, b, c) {}
+function main() {
+  f(x, notafun(), notafun());
+}"))
+ (check-exn-result result
+                   ue:type:reference-undeclared-var
+                   '(funcall "main()")))
 
 (test-case
  "Functions inside functions accessing out of scope variables."

@@ -472,6 +472,87 @@ class Point {
 }" "Point")
              26)
 
+(test-equal? "dotted field passed by reference"
+             (i "
+class A {
+  static var a = 5;
+  static var b = 6;
+
+  static var inst2 = AFactory(9, 0);
+
+  var x = 1;
+  var y = 2;
+
+  static function AFactory(x, y) {
+    var a = new A();
+    a.x = x;
+    a.y = y;
+    return a;
+  }
+
+  static function rotate(&i, &j, &k, &l, &m) {
+    var temp = m;
+    m = l;
+    l = k;
+    k = j;
+    j = i;
+    i = temp;
+  }
+
+  static function main() {
+    var inst1 = AFactory(7, 8);
+    rotate(A.a, A.b, inst1.x, inst1.y, inst2.x);
+    return A.a * 10000 + A.b * 1000 + inst1.x * 100 + inst1.y * 10 + inst2.x;
+  }
+}" "A")
+             95678)
+
+(test-equal? "state changes during fun param evaluation happen left to right, mix of val and ref"
+             (i "
+class A {
+  var x;
+
+  static var logger = 0;
+  static var pos = 0;
+
+  static function decimalShiftLeft(val, n) {
+    if (n > 0) return decimalShiftLeft(val * 10, n - 1);
+    else return val;
+  }
+  static function numDigits(val) {
+    if (val < 10) return 1;
+    else return 1 + numDigits(val/10);
+  }
+
+  static function log(val) {
+    logger = logger + decimalShiftLeft(val, pos);
+    pos = pos + numDigits(val);
+  }
+
+  static function logAndEcho(val) {
+    log(val);
+    return val;
+  }
+
+  static function sideEffectObj(val) {
+    logAndEcho(val);
+    return new A();
+  }
+  static function sideEffectInt(val) {
+    logAndEcho(val);
+    return 0;
+  }
+
+  static function evalAndGetLogger(&a, b, &c, d) {
+    return logger;
+  }
+
+  static function main() {
+    return evalAndGetLogger( sideEffectObj(1).x, sideEffectInt(2), sideEffectObj(3).x, sideEffectInt(4) );
+  }
+}" "A")
+             4321)
+
 ; ; SUPER FIELDS & METHODS
 (test-equal? "todo"
              (i "

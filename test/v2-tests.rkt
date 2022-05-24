@@ -530,6 +530,42 @@ function main() {
 }")
              3421)
 
+; todo: in distance future, after adding feature of loading multiple programs, extract
+; this to test-shared
+(test-equal? "state changes in left params observed while evaluating following params"
+             (i "
+var logger = 0;
+var pos = 0;
+
+function decimalShiftLeft(val, n) {
+  if (n > 0) return decimalShiftLeft(val * 10, n - 1);
+  else return val;
+}
+function numDigits(val) {
+  if (val < 10) return 1;
+  else return 1 + numDigits(val/10);
+}
+
+function log(val) {
+  logger = logger + decimalShiftLeft(val, pos);
+  pos = pos + numDigits(val);
+}
+
+function logAndEcho(val) {
+  log(val);
+  return val;
+}
+
+function foo(a, b) {
+  return a + b;
+}
+
+function main() {
+  var a = logAndEcho(1) + foo( logAndEcho(2), logAndEcho(3) );
+  return logger;
+}")
+             321)
+
 (test-equal? "Assignment side effects with function calls"
              (i "
 var x;
