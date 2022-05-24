@@ -11,8 +11,9 @@ Apart from variables and fields being boxed, within the intepreter, values are i
 ### v3.0.1+:
  Eren Kahriman 
 
+
 ## Parsers and lexer:
-The 3 parsers and lexers are lightly modified copies of those given in the assignment.
+The 3 parsers and lexer are lightly modified copies of those given in the assignment.
 They were modified to also support string-form programs.
 
 # Language Features:
