@@ -39,11 +39,12 @@
 ;; and returns the result
 (define interpret
   (lambda (file-name class-name)
-    (interpret-parse-tree-v3 (parser file-name)
-                             class-name
-                             default-return
-                             default-throw
-                             (default-user-exn))))
+    (let ([user-exn  (default-user-exn)])
+      (interpret-parse-tree-v3 (parser file-name)
+                               class-name
+                               default-return
+                               (default-throw user-exn)
+                               user-exn))))
 
 ;; interprets parse-trees produced by classParser.rkt
 (define interpret-parse-tree-v3
@@ -1474,7 +1475,9 @@
 (define default-return (lambda (v s) (prep-val-for-output v)))
 ; interpret-parse functions should use the throw cont parameter
 ; false -> Mstate-throw throws a user-exn, needs conts for user-exn's context stack
-(define default-throw (lambda (e s) (ue:raise-exn (ue:uncaught-exception e) s)))
+(define default-throw
+  (lambda (user-exn)
+    (lambda (e s) (user-exn (ue:uncaught-exception e) s))))
 
 
 (define (take-up-to lis n)

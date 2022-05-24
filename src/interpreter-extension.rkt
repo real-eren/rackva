@@ -14,9 +14,9 @@
 (define interpret-template
   (lambda (interpret-proc parse-proc)
     (lambda (input
-             #:return [return default-return]
-             #:throw [throw default-throw]
-             #:user-exn [user-exn (default-user-exn)]
+             #:return [return  default-return]
+             #:user-exn [user-exn  (default-user-exn)]
+             #:throw [throw  (default-throw user-exn)]
              . args)
       (apply interpret-proc (parse-proc input) (append args (list return throw user-exn))))))
 

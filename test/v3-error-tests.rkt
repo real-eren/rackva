@@ -14,14 +14,61 @@
                               (test-user-exn (ue:uncaught-exception e) s))))
 
 (test-case
- "user-exn raised as user error in normal interpret"
+ "user-exns raised as user errors in normal interpret"
  (check-exn exn:fail:user?
             (λ () (interpret-v3-str "
 class A {
   static function main() {
     return 5;
   }
-}" "NotAClass"))))
+}" "NotAClass")))
+ (check-exn exn:fail:user?
+            (λ () (interpret-v3-str "
+class A {
+  A(a, &b, c) {
+    throw 5;
+  }
+}
+class B {
+  var a = f1();
+
+  function f1() {
+    var c = 2;
+    return f2(0, c);
+  }
+  static function f2(x, &y) {
+    return new A(x, y, y);
+  }
+}
+class C {
+  static function main() {
+    return new B();
+  }
+}
+" "C")))
+ (check-exn exn:fail:user?
+            (λ () (interpret-v3-str "
+class A {
+  function foo() { return 3; }
+  static function foo(a) { return 4; }
+}
+class B extends A {
+  static function foo (a, b) { return 5; }
+  function foo(a, b, c) { return 6; }
+}
+class C extends B {
+  static function foo(a, &b, c, &d, e, f, g) { return 2; }
+
+  static function main() {
+    {
+      function foo(a, &b, c, &d) {
+        return 7;
+      }
+      return foo(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+  }
+}
+" "C"))))
 
 (test-case
  "throwing instance should successfully raise user-exn"
