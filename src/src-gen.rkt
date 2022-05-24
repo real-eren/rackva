@@ -890,7 +890,7 @@ class Base { static var y; }
                         [(statement? e)   (statement e)]
                         [else             (value e)]))
                     path)
-               "\n\nfrom:\n"
+               "\n\n"
                #:after-last "\n"))
 
 

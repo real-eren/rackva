@@ -28,7 +28,7 @@
 
 (define raise-exn
   (lambda (exn cs)
-    (raise-user-error (format "Error: ~a~nSource:~n~a"
+    (raise-user-error (format "Error: ~a~nSource:~n----------~n~a----------~n"
                               (exn->string exn)
                               (AST-path->stack-trace cs)))))
 
