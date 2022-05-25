@@ -1,5 +1,6 @@
-# Rava interpreter
-name inspired by Jython
+# Rackva interpreter
+name inspired by Jython  
+Rava was taken
 
 Interpreter for a Java-like language, written in Scheme/Racket.
 Apart from variables and fields being boxed, within the intepreter, values are immutable and functions are referentially-transparent.
