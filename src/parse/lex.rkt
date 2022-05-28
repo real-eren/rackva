@@ -1,10 +1,10 @@
 ; If you are not using racket, comment these two lines
 #lang racket/base
 (provide start-lex
-         start-lex-str
          end-lex
          get-next-symbol
-         unget-next-symbol)
+         unget-next-symbol
+         line-number)
 
 ;;===============================================================
 ;; The Lexical Analyzer
@@ -17,6 +17,7 @@
 
 (define last-symbol-saved #f)   ; is there a symbol buffered?
 (define saved-symbol #f)        ; the symbol buffer
+(define line-number 0)
 
 ; gets the next symbol to be processed
 ;
@@ -52,7 +53,10 @@
         (begin
           (set! saved-last-char #f)
           last-read-char)
-        (read-char port))))
+        (let ([char  (read-char port)])
+          (when (eqv? #\newline char)
+            (set! line-number (+ 1 line-number)))
+          char))))
 
 ; unread the last character from the file so it can be read again
 
@@ -65,15 +69,12 @@
 
 (define file-port '())
 
-; open the input file
+; set the input port
 
 (define start-lex
-  (lambda (filename)
-     (set! file-port (open-input-file filename))))
+  (lambda (port)
+     (set! file-port port)))
 
-(define start-lex-str
-  (lambda (str)
-    (set! file-port (open-input-string str))))
 
 ; close the input file
 
