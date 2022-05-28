@@ -67,7 +67,7 @@
                                   declare-constructor
                                   ctor-already-declared?)))
 
-
+(define PHC 'place-holder-context)
 ;;;; State
 ;; Entire (global + local) state of a program being interpreted
 ;; map w/ entries for
@@ -244,7 +244,7 @@
 (define set-super-scope
   (lambda (state)
     (withv state
-           $current-type  (get-parent-name (current-type state) state)
+           $current-type  (get-parent-name (current-type state) PHC state)
            $super         #T
            $dotted        #T)))
 
@@ -268,7 +268,7 @@
 ; top-level -> in global
 ; in local (such as function body) -> local
 (define declare-var-with-box
-  (lambda (name box state)
+  (lambda (name box context state)
     (cond
       [(local-context? state)     (withf state
                                          $local-vars  (curry stack:update-front
@@ -279,21 +279,21 @@
 
 ;; State with this varname declared in the current scope and initialized to this values
 (define declare-var-with-value
-  (lambda (name value state)
-    (declare-var-with-box name (box value) state)))
+  (lambda (name value context state)
+    (declare-var-with-box name (box value) context state)))
 
 ;; State with this varname declared in the current scope
 (define declare-var
-  (lambda (name state)
-    (declare-var-with-value name null state)))
+  (lambda (name context state)
+    (declare-var-with-value name null context state)))
 
 ;; State with val assigned to this varname in the most recent scope containing such a name
 ; Assumptions:
 ; 1) var has already been initialized
 ; 2) get-var-box returns the box of the appropriate binding
 (define assign-var
-  (lambda (name val state)
-    (set-box! (get-var-box name state) val)
+  (lambda (name val context state)
+    (set-box! (get-var-box name context state) val)
     state))
 
 
@@ -302,7 +302,7 @@
 ; local -> instance -> static -> global
 ; if dotted, restrict to instance and static
 (define get-var-box
-  (lambda (name state)
+  (lambda (name context state)
     (or
      (and (not (dotted? state))
           (ormap (curry var-table:get-box name)
@@ -311,43 +311,44 @@
           (eq? 'this name)
           (box (this state)))
      (and (this state)
-          (get-instance-field-box name (this state) (current-type state) state))
+          (get-instance-field-box name (this state) (current-type state) context state))
      (and (current-type state)
-          (get-static-field-box name (current-type state) state))
+          (get-static-field-box name (current-type state) context state))
      (and (not (dotted? state))
           (var-table:get-box name (global-vars state))))))
 
 ;; Assumes `this` is an instance of `class-name` (same or sub-class)
 (define get-instance-field-box
-  (lambda (name this class-name state)
+  (lambda (name this class-name context state)
     (ormap (curry var-table:get-box name)
-           (bottom-layers (instance:fields this) (get-class-height class-name state)))))
+           (bottom-layers (instance:fields this) (get-class-height class-name context state)))))
 ;; Searches this class and its parents for a static field with the name. #F on miss
 (define get-static-field-box
-  (lambda (name class-name state)
+  (lambda (name class-name context state)
     (if class-name
         (or (var-table:get-box name (get* state $classes class-name class:$s-fields))
             (get-static-field-box name
-                                  (class:parent (get-class class-name state))
+                                  (class:parent (get-class class-name context state))
+                                  context
                                   state))
         #F)))
 
 ;; get the current value of this var
 ; assumption: var is declared, get-var-box works correctly
 (define get-var-value
-  (lambda (name state)
-    (unbox (get-var-box name state))))
+  (lambda (name context state)
+    (unbox (get-var-box name context state))))
 
 ;; Is a variable with this name in scope?
 ; assumption: get-var-box returns #F on miss
 (define var-declared?
-  (lambda (name state)
-    (not (false? (get-var-box name state)))))
+  (lambda (name context state)
+    (not (false? (get-var-box name context state)))))
 
 ;; Is a variable with this name already declared in the current scope?
 ; used by interpreter to detect duplicate declarations for local and top-level variables
 (define var-already-declared?
-  (lambda (name state)
+  (lambda (name context state)
     (cond
       [(local-context? state)  (var-table:declared? name (stack:peek (local-vars state)))]
       [(top-level? state)      (var-table:declared? name (global-vars state))])))
@@ -359,8 +360,8 @@
 ; 2) this is only called on variables known to be declared
 ; 3) get-var-value returns the appropriate variable
 (define var-initialized?
-  (lambda (name state)
-    (not (null? (get-var-value name state)))))
+  (lambda (name context state)
+    (not (null? (get-var-value name context state)))))
 
 
 
@@ -372,11 +373,11 @@
 ;; Is a function with this signature in the current scope
 ; used by interpreter to decide whether a declaration collides with an existing function
 (define fun-already-declared?
-  (lambda (name arg-list state)
-    (fun-table:has? name arg-list (get-current-fun-table name state))))
+  (lambda (name arg-list context state)
+    (fun-table:has? name arg-list (get-current-fun-table name context state))))
 ; current table where declarations would go
 (define get-current-fun-table
-  (lambda (f-name state)
+  (lambda (f-name context state)
     (cond
       [(local-context? state)  (stack:peek (local-funs state))]
       [(top-level? state)      (global-funs state)]
@@ -387,8 +388,8 @@
 ; 1) get-function returns #F on miss
 ; 2) get-function performs the lookup in the correct order
 (define has-fun?
-  (lambda (name arg-list state)
-    (not (false? (get-function name arg-list state)))))
+  (lambda (name arg-list context state)
+    (not (false? (get-function name arg-list context state)))))
 
 ;; sweep through local, global, classes
 ; primarily used by interpreter to display suggestions when reporting errors
@@ -406,51 +407,52 @@
 ; traverses scopes in this order:
 ; local (new->old) -> instance (sub->super) -> static (sub->super) -> global
 (define get-function
-  (lambda (name arg-list state)
+  (lambda (name arg-list context state)
     (or (ormap (curry fun-table:get name arg-list) (local-funs state))
-        (get-inst/abst-method name arg-list (this state) (current-type state) state)
-        (get-static-method name arg-list (current-type state) state)
+        (get-inst/abst-method name arg-list (this state) (current-type state) context state)
+        (get-static-method name arg-list (current-type state) context state)
         (fun-table:get name arg-list (global-funs state)))))
 
 ;; list of all the methods declared in this class
 (define get-class-methods
-  (lambda (class-name state)
-    (class:methods (get-class class-name state))))
+  (lambda (class-name context state)
+    (class:methods (get-class class-name context state))))
 ; w/ polymorphism, returns the appropriate instance or abstract method for this.
 ; #F on miss or if the given `compile-time type` doesn't have access to such a method
 (define get-inst/abst-method
-  (lambda (name arg-list this class-name state)
+  (lambda (name arg-list this class-name context state)
     (and this
          class-name
-         (class-has-i-a-method? name arg-list class-name state)
+         (class-has-i-a-method? name arg-list class-name context state)
          (get-i-a-method-rec name
                              arg-list
                              (if (super state)
                                  class-name
                                  (instance:class this))
+                             context
                              state))))
 ; does this type declare or inherit an instance or abstract method w/ this signature
 (define class-has-i-a-method?
-  (lambda (name arg-list class-name state)
+  (lambda (name arg-list class-name context state)
     (if class-name
-        (or (class-declares-inst-or-abst-method? class-name name arg-list state)
-            (class-has-i-a-method? name arg-list (get-parent-name class-name state) state))
+        (or (class-declares-inst-or-abst-method? class-name name arg-list context state)
+            (class-has-i-a-method? name arg-list (get-parent-name class-name context state) context state))
         #F)))
 ;; class's declared or inherited instance method w/ this signature
 ; used when verifying that an abstract method will not override a concrete method
 ; #f on miss
 (define class-get-inst-method
-  (lambda (class-name fun-name params state)
+  (lambda (class-name fun-name params context state)
     (if class-name
-        (or (fun-table:get fun-name params (get-class-i-methods class-name state))
-            (class-get-inst-method (get-parent-name class-name state) fun-name params state))
+        (or (fun-table:get fun-name params (get-class-i-methods class-name context state))
+            (class-get-inst-method (get-parent-name class-name context state) fun-name params context state))
         #f)))
 ; this particular class's inst or abst method w/ given signature. #F on miss
 (define get-class-i-a-method
-  (lambda (class-name fun-name params state)
+  (lambda (class-name fun-name params context state)
     (fun-table:get fun-name
                    params
-                   (get-class-i-a-methods class-name state))))
+                   (get-class-i-a-methods class-name context state))))
 ;; whether this class declares an instance method with this signature
 ; used when verifying that abstract methods were overridden
 ; assumes get returns #f on miss
@@ -458,45 +460,48 @@
 ; returns the (most recent) instance method w/ this signature in this class's ancestry
 ; assumes such a method exists.
 (define get-i-a-method-rec
-  (lambda (name arg-list class-name state)
+  (lambda (name arg-list class-name context state)
     (or (get-class-i-a-method class-name
                               name
                               arg-list
+                              context
                               state)
         (get-i-a-method-rec name
                             arg-list
-                            (get-parent-name class-name state)
+                            (get-parent-name class-name context state)
+                            context
                             state))))
 ;; list of all the instance or abstract methods declared in this class
 ; assumes valid class
 (define get-class-i-a-methods
-  (lambda (class-name state)
+  (lambda (class-name context state)
     (filter (join-or function:abstract? function:instance?)
-            (get-class-methods class-name state))))
+            (get-class-methods class-name context state))))
 ;; list of all the instance methods declared in this class
 ; assumes valid class
 (define get-class-i-methods
-  (lambda (class-name state)
-    (filter function:instance? (get-class-methods class-name state))))
+  (lambda (class-name context state)
+    (filter function:instance? (get-class-methods class-name context state))))
 ;; list of all the static methods declared in this class
 ; assumes valid class
 (define get-class-s-methods
-  (lambda (class-name state)
-    (filter function:static? (get-class-methods class-name state))))
+  (lambda (class-name context state)
+    (filter function:static? (get-class-methods class-name context state))))
 
 ;; searches this class and its superclasses for a static method with this signature
 ; assumes type is not #F
 ; internal
 ; #F on miss
 (define get-static-method
-  (lambda (name arg-list class-name state)
+  (lambda (name arg-list class-name context state)
     (if class-name
         (or (fun-table:get name
                            arg-list
-                           (get-class-s-methods class-name state))
+                           (get-class-s-methods class-name context state))
             (get-static-method name
                                arg-list
-                               (get-parent-name class-name state)
+                               (get-parent-name class-name context state)
+                               context
                                state))
         #F)))
 
@@ -504,16 +509,16 @@
 ; assume valid class-name
 ; empty list if no parent
 (define get-parents-abstract-methods
-  (lambda (class-name state)
-    (if (has-parent? class-name state)
+  (lambda (class-name context state)
+    (if (has-parent? class-name context state)
         (filter function:abstract?
-                (class:methods (get-parent class-name state)))
+                (class:methods (get-parent class-name context state)))
         null)))
 
 ;; State with this fun declared in the current scope
 ; only called for top-level or nested functions
 (define declare-fun
-  (lambda (name params body state)
+  (lambda (name params body context state)
     (cond
       ; special case of local - inherit `type` of enclosing function
       [(fun-call-context? state)  =>   (lambda (fc-fun)
@@ -522,6 +527,7 @@
                                                             body
                                                             (function:scope fc-fun)
                                                             (function:class fc-fun)
+                                                            context
                                                             state))]
       ; general case of local - if not in fun-call, assume free
       ; ex: in top-level block statement. free but not global
@@ -530,18 +536,20 @@
                                                           body
                                                           function:scope:free
                                                           #F
+                                                          context
                                                           state)]
       ; not in funcall or class body, not in block etc
       [(top-level? state)              (declare-fun-global name
                                                            params
                                                            body
+                                                           context
                                                            state)]
       ; todo, replace with separate declare-method function
       [else                            (error "exhausted cases in declare-fun -> logical error")])))
 
 ; global case of declare-fun
 (define declare-fun-global
-  (lambda (name params body state)
+  (lambda (name params body context state)
     (withf state
            $global-funs  (curry fun-table:declare-fun
                                 name
@@ -553,7 +561,7 @@
 
 ; local case of declare-fun
 (define declare-fun-local
-  (lambda (name params body scope class state)
+  (lambda (name params body scope class context state)
     (withf state
            $local-funs  (curry stack:update-front
                                (curry fun-table:declare-fun
@@ -572,63 +580,63 @@
 ;;;;;;;;;;;; CLASS
 
 (define has-class?
-  (lambda (class-name state)
+  (lambda (class-name context state)
     (map:in*? state $classes class-name)))
 
 ; given name of class, returns closure. #F if absent
 (define get-class
-  (lambda (class-name state)
+  (lambda (class-name context state)
     (map:get* state $classes class-name)))
 
 (define current-type-has-parent?
-  (lambda (state)
-    (has-parent? (current-type state) state)))
+  (lambda (context state)
+    (has-parent? (current-type state) context state)))
 ;; returns name and closure of the parent of this class
 ; assumes valid class-name. assumes get* returns false on miss. #F if no parent
 (define has-parent?
-  (lambda (class-name state)
-    (not (false? (get-parent class-name state)))))
+  (lambda (class-name context state)
+    (not (false? (get-parent class-name context state)))))
 
 (define get-parent-name
-  (lambda (class-name state)
+  (lambda (class-name context state)
     (map:get* state $classes class-name class:$parent)))
 
 (define get-parent
-  (lambda (class-name state)
-    (get-class (get-parent-name class-name state) state)))
+  (lambda (class-name context state)
+    (get-class (get-parent-name class-name context state) context state)))
 
 (define get-class-height
-  (lambda (class-name state)
-    (if (has-parent? class-name state)
-        (+ 1 (get-class-height (get-parent-name class-name state) state))
+  (lambda (class-name context state)
+    (if (has-parent? class-name context state)
+        (+ 1 (get-class-height (get-parent-name class-name context state) context state))
         1)))
 
 ;; declares an empty class
 (define declare-class
-  (lambda (class-name parent-name state)
+  (lambda (class-name parent-name context state)
     (withf state
            $classes  (curry map:put class-name (class:of #:name class-name #:parent parent-name))
            $current-type  (lambda (v) class-name))))
 
 ; declare an instance field for a class (just name, no initializer)
 (define declare-instance-field
-  (lambda (name class-name state)
+  (lambda (name class-name context state)
     (update* (curry cons name)
              state $classes class-name class:$i-field-names)))
 
 (define declare-static-field
-  (lambda (name value class-name state)
+  (lambda (name value class-name context state)
     (update* (curry var-table:declare-with-value name value)
              state $classes class-name class:$s-fields)))
 
 (define field-already-declared?
-  (lambda (name class-name state)
+  (lambda (name class-name context state)
     (class:has-field? name (get* state $classes class-name))))
 
 ;; called during class body
 ; handles static | instance | abstract
 (define declare-method
-  (lambda (name params body scope class state)
+  (lambda (name params body scope class context state)
     (update* (curry fun-table:declare-fun
                     name
                     params
@@ -639,14 +647,14 @@
              state $classes class class:$methods)))
 
 (define method-already-declared?
-  (lambda (class-name fun-name arg-list state)
-    (fun-table:get fun-name arg-list (get-class-methods class-name state))))
+  (lambda (class-name fun-name arg-list context state)
+    (fun-table:get fun-name arg-list (get-class-methods class-name context state))))
 
 
 ;; add an init function to a class
 ; assumption: called exactly once during class-body
 (define declare-init
-  (lambda (body class state)
+  (lambda (body class context state)
     (put* (function:of #:name 'init
                        #:params '()
                        #:body body
@@ -658,13 +666,13 @@
 ;; Get the init function for this class
 ; #F on miss
 (define get-init
-  (lambda (class-name state)
+  (lambda (class-name context state)
     (get* state $classes class-name class:$init)))
 
 ;; add a constructor to a class
 ; assumption: interpreter checks that this constructor has a unique signature
 (define declare-constructor
-  (lambda (params body class state)
+  (lambda (params body class context state)
     (update* (curry fun-table:declare-fun
                     class
                     params
@@ -678,7 +686,7 @@
 ; #F on miss
 ; assumes class exists and constructors have class as name
 (define get-constructor
-  (lambda (class-name arg-list state)
+  (lambda (class-name arg-list context state)
     (fun-table:get class-name arg-list (get* state $classes class-name class:$constructors))))
 
 (define ctor-already-declared? get-constructor)
@@ -688,20 +696,20 @@
 ; all fields set to 0, before any initializers
 ; assumes valid class-name
 (define get-zero-init-instance
-  (lambda (class-name state)
+  (lambda (class-name context state)
     (instance:of #:class class-name
-                 #:fields (build-instance-fields class-name state))))
+                 #:fields (build-instance-fields class-name context state))))
 ; 0 is used as the default val for 
 (define default-val 0)
 
 (define build-instance-fields
-  (lambda (class-name state)
+  (lambda (class-name context state)
     (if class-name
         (cons (foldl (lambda (k vt)
                        (var-table:declare-with-box k (box default-val) vt))
                      new-var-table
-                     (class:i-field-names (get-class class-name state)))
-              (build-instance-fields (get-parent-name class-name state) state))
+                     (class:i-field-names (get-class class-name context state)))
+              (build-instance-fields (get-parent-name class-name context state) context state))
         null)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -714,103 +722,107 @@
 
   ;; variables
   (let* ([s1  (push-new-layer new-state)]
-         [s2  (declare-var 'a s1)])
-    (check-true (var-declared? 'a s2))
-    (check-false (var-initialized? 'a s2))
-    (let* ([s3 (assign-var 'a 3 s2)]
+         [s2  (declare-var 'a PHC s1)])
+    (check-true (var-declared? 'a PHC s2))
+    (check-false (var-initialized? 'a PHC s2))
+    (let* ([s3 (assign-var 'a 3 PHC s2)]
            [s4 (push-new-layer s3)]
-           [s5 (declare-var-with-value 'a 7 s4)]
+           [s5 (declare-var-with-value 'a 7 PHC s4)]
            [s6 (pop-layer s5)]
-           [s7 (declare-var-with-box 'd (box 5)
-                                     (declare-var 'c
-                                                  (declare-var-with-value 'b #T
+           [s7 (declare-var-with-box 'd (box 5) PHC
+                                     (declare-var 'c PHC
+                                                  (declare-var-with-value 'b #T PHC
                                                                           (push-new-layer s6))))])
-      (check-true (var-initialized? 'a s3))
-      (check-eq? (get-var-value 'a s3) 3)
+      (check-true (var-initialized? 'a PHC s3))
+      (check-eq? (get-var-value 'a PHC s3) 3)
       
-      (check-false (var-already-declared? 'a s4))
-      (check-eq? (get-var-value 'a s4) 3)
+      (check-false (var-already-declared? 'a PHC s4))
+      (check-eq? (get-var-value 'a PHC s4) 3)
     
-      (check-eq? (get-var-value 'a s5) 7)
+      (check-eq? (get-var-value 'a PHC s5) 7)
     
-      (check-eq? (get-var-value 'a s6) 3)
+      (check-eq? (get-var-value 'a PHC s6) 3)
     
-      (check-eq? (get-var-value 'd s7) 5)
-      (check-false (var-initialized? 'c s7))
-      (check-eq? (get-var-value 'd s7) 5)
+      (check-eq? (get-var-value 'd PHC s7) 5)
+      (check-false (var-initialized? 'c PHC s7))
+      (check-eq? (get-var-value 'd PHC s7) 5)
       
-      (let ([s8 (assign-var 'd 10 (push-new-layer s7))])
-        (check-eq? (get-var-value 'd s8) 10))))
+      (let ([s8 (assign-var 'd 10 PHC (push-new-layer s7))])
+        (check-eq? (get-var-value 'd PHC s8) 10))))
   
   ;; local fun lookup
   (let* ([s1      new-state]
          [fmn     'main] [fma     '()]
-         [s2      (declare-fun fmn fma null s1)]
-         [fm      (get-function fmn fma s2)]
+         [s2      (declare-fun fmn fma null PHC s1)]
+         [fm      (get-function fmn fma PHC s2)]
          [fan     'a] [faa     '()]
          [fbn     'b] [fba     '()]
-         [s3      (declare-fun fan faa null (enter-fun-call-context fm (push-new-layer s2)))]
-         [s4      (declare-fun fbn fba null s3)]
+         [s3      (declare-fun fan faa null PHC (enter-fun-call-context fm (push-new-layer s2)))]
+         [s4      (declare-fun fbn fba null PHC s3)]
          [s5      (pop-layer s4)]
          )
-    (check-true (has-fun? fmn fma s4))
-    (check-true (has-fun? fan faa s4))
-    (check-true (has-fun? fbn fba s4))
+    (check-true (has-fun? fmn fma PHC s4))
+    (check-true (has-fun? fan faa PHC s4))
+    (check-true (has-fun? fbn fba PHC s4))
 
-    (check-true (not (false? (get-function fan faa s4))))
+    (check-true (not (false? (get-function fan faa PHC s4))))
 
-    (check-false (has-fun? fan faa s5))
-    (check-true (has-fun? fmn fma s5))
+    (check-false (has-fun? fan faa PHC s5))
+    (check-true (has-fun? fmn fma PHC s5))
     )
 
   ;; get all funs
   (let* ([s1      new-state]
          [fgn     'foo] [fga     '()]
-         [s2      (declare-fun fgn fga null s1)]
-         [fg      (get-function fgn fga s2)]
+         [s2      (declare-fun fgn fga null PHC s1)]
+         [fg      (get-function fgn fga PHC s2)]
          
          [fan     'foo] [faa     '(a b c)]
-         [s3      (declare-fun fan faa null (enter-fun-call-context fg (push-new-layer s2)))]
-         [fa      (get-function fan faa s3)]
+         [s3      (declare-fun fan faa null PHC (enter-fun-call-context fg (push-new-layer s2)))]
+         [fa      (get-function fan faa PHC s3)]
          
          [fbn     'bar] [fba     '()]
-         [s4      (declare-fun fbn fba null s3)]
-         [fb      (get-function fbn fba s4)]
+         [s4      (declare-fun fbn fba null PHC s3)]
+         [fb      (get-function fbn fba PHC s4)]
          
          [c1n     'Class1] [c1p    #f]
-         [s5      (declare-class c1n c1p s4)]
+         [s5      (declare-class c1n c1p PHC s4)]
          [fcn     'foo] [fca     '(a b)]
          [s6      (declare-method fcn
                                   fca
                                   '()
                                   function:scope:instance
                                   c1n
+                                  PHC
                                   s5)]
-         [fc      (get-i-a-method-rec fcn fca c1n s6)]
+         [fc      (get-i-a-method-rec fcn fca c1n PHC s6)]
 
          [c2n     'Class2] [c2p    #f]
-         [s7      (declare-class c2n c2p s6)]
+         [s7      (declare-class c2n c2p PHC s6)]
          [fdn     'foo] [fda     '(a b c d e)]
          [s8      (declare-method fdn
                                   fda
                                   '()
                                   function:scope:abstract
                                   c2n
+                                  PHC
                                   s7)]
-         [fd      (get-i-a-method-rec fdn fda c2n s8)]
+         [fd      (get-i-a-method-rec fdn fda c2n PHC s8)]
          
          [c3n     'Class3] [c3p    c2n]
-         [s9      (declare-class c3n c3p s8)]
+         [s9      (declare-class c3n c3p PHC s8)]
          [fen     'bar] [fea     '(a b c)]
          [s10     (declare-method fen
                                   fea
                                   '()
                                   function:scope:static
                                   c3n
+                                  PHC
                                   s9)]
          [fe      (get-static-method fen
                                      fea
                                      c3n
+                                     PHC
                                      s10)])
     (check-true (empty? (all-funs-with-name 'foo s1)))
     (check-true (empty? (all-funs-with-name 'x s10)))
