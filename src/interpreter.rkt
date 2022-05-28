@@ -2,7 +2,7 @@
 
 (require "conts.rkt"
          "user-errors.rkt"
-         "parse/classParser.rkt"
+         "parse/parser.rkt"
          "state/function.rkt"
          "state/instance.rkt"
          "state/state.rkt"
@@ -12,14 +12,7 @@
          racket/list
          racket/string)
 
-(provide interpret
-         interpret-parse-tree-v3
-         interpret-parse-tree-v2
-         interpret-parse-tree-v1
-
-         default-return
-         default-throw
-         default-user-exn)
+(provide interpret-parse-tree)
 
 ;;;; Interpreter
 ;; This module interprets programs parsed by the parsers
@@ -27,28 +20,18 @@
 ;; Tests for this module are in the `v{n}-tests` and `v{n}-error-tests`
 ;; files, where {n} corresponds to the version of the interpreter being tested
 
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;; High-level functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-;; takes a file name and a string class name, interprets the program,
-;; and returns the result
 (define interpret
-  (lambda (file-name class-name)
-    (let ([user-exn  (default-user-exn)])
-      (interpret-parse-tree-v3 (parser file-name)
-                               class-name
-                               default-return
-                               (default-throw user-exn)
-                               user-exn))))
+  (lambda (main-module
+           #:return [return  default-return] ; todo: if class, ignore top-level return and lookup main
+           #:user-exn [user-exn  (default-user-exn)]
+           #:throw [throw (default-throw user-exn)]
+           #:modules [mods '()])
+    0))
+; load main-module, load other modules
 
-;; interprets parse-trees produced by classParser.rkt
-(define interpret-parse-tree-v3
-  (lambda (parse-tree entry-point return throw user-exn)
+
+(define interpret-parse-tree
+  (lambda (parse-tree return user-exn throw . args)
     (Mstate-stmt-list parse-tree
                       new-state
                       (conts-of
@@ -56,35 +39,10 @@
                                 (Mstate-main s
                                              return
                                              throw
-                                             user-exn
-                                             #:class (string->symbol entry-point)))
+                                             user-exn))
                        #:throw throw
                        #:user-exn user-exn))))
-
-;;interprets parse-trees produced by functionParser.rkt
-(define interpret-parse-tree-v2
-  (lambda (parse-tree return throw user-exn)
-    (Mstate-stmt-list parse-tree
-                      new-state
-                      (conts-of ; only next and throw are actually reachable
-                       #:next (lambda (s) (Mstate-main s return throw user-exn))
-                       #:throw throw
-                       #:user-exn user-exn))))
-
-;; legacy, for testing
-;; interprets parse-trees produced by simpleParser.rkt
-(define interpret-parse-tree-v1
-  (lambda (simple-parse-tree return throw user-exn)
-    (Mstate-stmt-list simple-parse-tree
-                      new-state
-                      (conts-of
-                       #:return return
-                       #:next (lambda (s) (user-exn (ue:did-not-return) s))
-                       #:throw throw
-                       #:break (default-break user-exn)
-                       #:continue (default-continue user-exn)
-                       #:user-exn user-exn))))
-
+; main function?
 ;; takes a value and modifies it for output
 (define prep-val-for-output
   (lambda (value)
