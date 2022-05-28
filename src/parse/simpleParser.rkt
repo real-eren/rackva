@@ -18,9 +18,9 @@
 (require "lex.rkt")
 
 (define __parser
-  (lambda (input start-lex-fun)
+  (lambda (input-port)
     (begin
-      (start-lex-fun input)
+      (start-lex input-port)
       (let ((parse-tree (program-parse)))
         (end-lex)
         parse-tree))))
@@ -28,11 +28,15 @@
 ; takes a filename as a string
 (define parser
   (lambda (filename)
-    (__parser filename start-lex)))
+    (__parser (open-input-file filename))))
 ; takes a string representing a program
 (define parser-str
   (lambda (str)
-    (__parser str start-lex-str)))
+    (__parser (open-input-string str))))
+
+(define (parse-error msg)
+  (raise-user-error 'parser (format "At line ~a:\n~a"
+                                    line-number msg)))
 
 ;===============================================
 ; The recursive descent parser
@@ -76,7 +80,7 @@
               (else (begin (unget-next-symbol) (set! parse-statement (assign-parse)))))
         (if (eq? (car (get-next-symbol)) 'SEMICOLON)
             parse-statement
-            (error 'parser "Missing semicolon"))))))
+            (parse-error "Missing semicolon"))))))
 
 ; parse a compound statement.  We already saw the left brace so continue until we see a right brace.
 
@@ -100,10 +104,10 @@
 (define if-parse
   (lambda ()
     (if (not (eq? (car (get-next-symbol)) 'LEFTPAREN))
-        (error 'parser "Missing opening parenthesis")
+        (parse-error "Missing opening parenthesis")
         (let ((condition (value-parse)))  ; changed
           (if (not (eq? (car (get-next-symbol)) 'RIGHTPAREN))
-              (error 'parser "Missing closing parenthesis")
+              (parse-error "Missing closing parenthesis")
               (let ((if-statement (statement-parse)))
                 (if (eq? (car (get-next-symbol)) 'else)
                     (list 'if condition if-statement (statement-parse))
@@ -116,10 +120,10 @@
 (define while-parse
   (lambda ()
     (if (not (eq? (car (get-next-symbol)) 'LEFTPAREN))
-        (error 'parser "Missing opening parenthesis")
+        (parse-error "Missing opening parenthesis")
         (let ((condition (value-parse)))
           (if (not (eq? (car (get-next-symbol)) 'RIGHTPAREN))
-              (error 'parser "Missing closing parenthesis")
+              (parse-error "Missing closing parenthesis")
               (list 'while condition (statement-parse)))))))
 
 ; parse a try block.  The try block is a compound statement followed by catch block and/or
@@ -128,12 +132,12 @@
 (define try-parse
   (lambda ()
     (if (not (eq? (car (get-next-symbol)) 'LEFTBRACE))
-        (error 'parser "Left brace expected")
+        (parse-error "Left brace expected")
         (let* ((tryblock (compound-statement-parse))
                (catchblock (catch-parse))
                (finallyblock (finally-parse)))
           (if (and (null? catchblock) (null? finallyblock))
-              (error 'parser "try without catch of finally")
+              (parse-error "try without catch of finally")
               (list 'try tryblock catchblock finallyblock))))))
 
 ; parse a catch block.  The catch block must contain a variable (the exception) inside
@@ -150,10 +154,10 @@
                  (secondsymbol (get-next-symbol))
                  (thirdsymbol (get-next-symbol))
                  (fourthsymbol (get-next-symbol)))
-            (cond ((not (eq? (car firstsymbol) 'LEFTPAREN)) (error 'parser "Missing left parenthesis"))
-                  ((not (eq? (car secondsymbol) 'ID)) (error 'parser "Missing exception parameter"))
-                  ((not (eq? (car thirdsymbol) 'RIGHTPAREN)) (error 'parser "Missing closing parenthesis"))
-                  ((not (eq? (car fourthsymbol) 'LEFTBRACE)) (error 'parser "Missing opening brace"))
+            (cond ((not (eq? (car firstsymbol) 'LEFTPAREN)) (parse-error "Missing left parenthesis"))
+                  ((not (eq? (car secondsymbol) 'ID)) (parse-error "Missing exception parameter"))
+                  ((not (eq? (car thirdsymbol) 'RIGHTPAREN)) (parse-error "Missing closing parenthesis"))
+                  ((not (eq? (car fourthsymbol) 'LEFTBRACE)) (parse-error "Missing opening brace"))
                   (else (list 'catch (list (cdr secondsymbol)) (compound-statement-parse)))))))))
 
 ; parse a finally block.  A finally block is a compound statement that starts with "finally"
@@ -166,7 +170,7 @@
             (unget-next-symbol)
             '())
           (if (not (eq? (car (get-next-symbol)) 'LEFTBRACE))
-              (error 'parser "Missing opening parenthesis")
+              (parse-error "Missing opening parenthesis")
               (list 'finally (compound-statement-parse)))))))
 
 ; parse a condition: a value followed by a comparison operator followed by a value.
@@ -183,7 +187,7 @@
                    (eq? (cdr op) '>=)
                    (eq? (cdr op) '!=)))
           (list (cdr op) firstoperand (value-parse))
-          (error 'parser "Unknown comparison operator")))))
+          (parse-error "Unknown comparison operator")))))
 
 ; parse a variable declaration: var then left-hand-side with optional = followed by a value
 
@@ -206,7 +210,7 @@
            (op (get-next-symbol)))
       (if (and (eq? (car op) 'BINARY-OP) (eq? (cdr op) '=))
           (append (cons (cdr op) lhs) (list (value-parse)))
-          (error 'parser "Unknown assignment operator")))))
+          (parse-error "Unknown assignment operator")))))
 
 ; parse the left hand side of an assignment.  Only variables are allowed.
 
@@ -215,7 +219,7 @@
     (let ((lhs (get-next-symbol)))
       (if (eq? (car lhs) 'ID)
           (list (cdr lhs))
-          (error 'parser "Illegal left hand side of assignment")))))
+          (parse-error "Illegal left hand side of assignment")))))
 
 ; parse a value.  The top level of the parse is the assignment operator.
 
@@ -341,10 +345,10 @@
        (let ((retvalue (value-parse)))
          (if (eq? (car (get-next-symbol)) 'RIGHTPAREN)
              retvalue
-             (error 'parser "Unmatched left parenthesis"))))
+             (parse-error "Unmatched left parenthesis"))))
       ((and (eq? (car firstsymbol) 'BINARY-OP) (eq? (cdr firstsymbol) '-)) (list '- (operand-parse (get-next-symbol))))  ; this is a new line
       ((and (eq? (car firstsymbol) 'BINARY-OP) (eq? (cdr firstsymbol) '!)) (list '! (operand-parse (get-next-symbol))))  ; this is a new line
       ((eq? (car firstsymbol) 'NUMBER) (cdr firstsymbol))
       ((eq? (car firstsymbol) 'ID) (cdr firstsymbol))
       ((eq? (car firstsymbol) 'BOOLEAN) (cdr firstsymbol))
-      (else (error 'parser "Unknown statmement")))));)
+      (else (parse-error "Unknown statmement")))));)

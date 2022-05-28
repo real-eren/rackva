@@ -4,8 +4,7 @@
          end-lex
          get-next-symbol
          unget-next-symbol
-         line-number
-         col-number)
+         line-number)
 
 ;;===============================================================
 ;; The Lexical Analyzer
@@ -19,7 +18,6 @@
 (define last-symbol-saved #f)   ; is there a symbol buffered?
 (define saved-symbol #f)        ; the symbol buffer
 (define line-number 0)
-(define col-number 0)
 
 ; gets the next symbol to be processed
 ;
@@ -55,7 +53,10 @@
         (begin
           (set! saved-last-char #f)
           last-read-char)
-        (read-char port))))
+        (let ([char  (read-char port)])
+          (when (eqv? #\newline char)
+            (set! line-number (+ 1 line-number)))
+          char))))
 
 ; unread the last character from the file so it can be read again
 
@@ -154,11 +155,6 @@
 (define lex
   (lambda ()
     (let ((nextchar (readchar file-port)))
-      (if (eq? nextchar #\newline)
-          (begin
-            (set! col-number 0)
-            (set! line-number (+ 1 line-number)))
-          (set! col-number (+ 1 col-number)))
       (cond ((eof-object? nextchar) (return-eof-lex))
             ((char-whitespace? nextchar) (lex))
             ((char-alphabetic? nextchar) (return-id-lex (string->symbol (id-lex file-port (make-string 1 nextchar)))))
