@@ -20,8 +20,11 @@
 
 (module+ test
   (require rackunit)
+  (define (cross-plat-string=? str1 str2)
+    (string-locale=? (string-replace str1 "\r\n" "\n")
+                     (string-replace str2 "\r\n" "\n")))
+  (define-binary-check (cse cross-plat-string=? a e))
   (define-binary-check (ce equal? a e)))
-
 
 
 ; number | true | false
@@ -38,9 +41,9 @@
 
 (module+ test
   (let ([l  literal])
-    (ce (l 1) "1")
-    (ce (l 'true) "true")
-    (ce (l 'false) "false")))
+    (cse (l 1) "1")
+    (cse (l 'true) "true")
+    (cse (l 'false) "false")))
 
 
 ; [a-Z]+
@@ -57,10 +60,10 @@
 (define dot? (? 'dot))
 
 (module+ test
-  (ce (dot '(dot x y))
-      "x.y")
-  (ce (dot '(dot (dot X y) z))
-      "X.y.z"))
+  (cse (dot '(dot x y))
+       "x.y")
+  (cse (dot '(dot (dot X y) z))
+       "X.y.z"))
 
 
 ; simple | dot
@@ -74,12 +77,12 @@
       (dot? expr)))
 
 (module+ test
-  (ce (name 'name)
-      "name")
-  (ce (name '(dot apple banana))
-      "apple.banana")
-  (ce (name '(dot (dot apple banana) cherry))
-      "apple.banana.cherry"))
+  (cse (name 'name)
+       "name")
+  (cse (name '(dot apple banana))
+       "apple.banana")
+  (cse (name '(dot (dot apple banana) cherry))
+       "apple.banana.cherry"))
 
 
 ; '(= {name} {value})
@@ -92,12 +95,12 @@
 
 (module+ test
   (let ([ae  assign])
-    (ce (ae '(= z a))
-        "z = a")
-    (ce (ae '(= (dot x z) a))
-        "x.z = a")
-    (ce (ae '(= (dot x z) (= (dot a b) (dot (dot c d) e))))
-        "x.z = a.b = c.d.e")))
+    (cse (ae '(= z a))
+         "z = a")
+    (cse (ae '(= (dot x z) a))
+         "x.z = a")
+    (cse (ae '(= (dot x z) (= (dot a b) (dot (dot c d) e))))
+         "x.z = a.b = c.d.e")))
 
 
 ; '({value}*)
@@ -105,10 +108,10 @@
   (string-join (map value lis) ", "))
 
 (module+ test
-  (ce (arglist null)
-      "")
-  (ce (arglist '(1 (= x y) (dot x y) (funcall f)))
-      "1, x = y, x.y, f()"))
+  (cse (arglist null)
+       "")
+  (cse (arglist '(1 (= x y) (dot x y) (funcall f)))
+       "1, x = y, x.y, f()"))
 
 
 ; '(new {simple} {value}*)
@@ -120,10 +123,10 @@
 (define new? (? 'new))
 
 (module+ test
-  (ce (new '(new A))
-      "new A()")
-  (ce (new '(new A 1 a (dot a b) (funcall f)))
-      "new A(1, a, a.b, f())"))
+  (cse (new '(new A))
+       "new A()")
+  (cse (new '(new A 1 a (dot a b) (funcall f)))
+       "new A(1, a, a.b, f())"))
 
 
 ; '(funcall {name} {value}+)
@@ -137,14 +140,14 @@
 
 (module+ test
   (let ([fce  funcall-expr])
-    (ce (fce '(funcall foo))
-        "foo()")
-    (ce (fce '(funcall (dot foo bar)))
-        "foo.bar()")
-    (ce (fce '(funcall foo 1))
-        "foo(1)")
-    (ce (fce '(funcall foo 1 2))
-        "foo(1, 2)")))
+    (cse (fce '(funcall foo))
+         "foo()")
+    (cse (fce '(funcall (dot foo bar)))
+         "foo.bar()")
+    (cse (fce '(funcall foo 1))
+         "foo(1)")
+    (cse (fce '(funcall foo 1 2))
+         "foo(1, 2)")))
 
 
 ; '({unary} {value}) | '({binary} {value} {value})
@@ -165,26 +168,26 @@
               (val-wrapped-if-complex (third expr)))))
 
 (module+ test
-  (ce (op '(- 1))
-      "-1")
-  (ce (op '(! true))
-      "!true")
-  (ce (op '(! false))
-      "!false")
-  (ce (op '(+ 1 2))
-      "1 + 2")
-  (ce (op '(+ (/ a b) (- c d)))
-      "(a / b) + (c - d)")
-  (ce (op '(+ (+ (+ a 1) b) (+ c d)))
-      "((a + 1) + b) + (c + d)")
-  (ce (op '(- (* a 1)))
-      "-(a * 1)")
-  (ce (op '(\|\| a b))
-      "a || b")
-  (ce (op '(\|\| a (&& b c)))
-      "a || (b && c)")
-  (ce (op '(! (\|\| a (&& b c))))
-      "!(a || (b && c))"))
+  (cse (op '(- 1))
+       "-1")
+  (cse (op '(! true))
+       "!true")
+  (cse (op '(! false))
+       "!false")
+  (cse (op '(+ 1 2))
+       "1 + 2")
+  (cse (op '(+ (/ a b) (- c d)))
+       "(a / b) + (c - d)")
+  (cse (op '(+ (+ (+ a 1) b) (+ c d)))
+       "((a + 1) + b) + (c + d)")
+  (cse (op '(- (* a 1)))
+       "-(a * 1)")
+  (cse (op '(\|\| a b))
+       "a || b")
+  (cse (op '(\|\| a (&& b c)))
+       "a || (b && c)")
+  (cse (op '(! (\|\| a (&& b c))))
+       "!(a || (b && c))"))
 
 
 ; literal | name | assign | new | funcall | op
@@ -201,17 +204,17 @@
 
 (module+ test
   (define v value)
-  (ce (v 1) "1")
-  (ce (v 'varname) "varname")
-  (ce (v '(dot x y)) "x.y")
-  (ce (v '(= (dot x y) (= name 2)))
-      "x.y = name = 2")
-  (ce (v '(funcall f x y z))
-      "f(x, y, z)")
-  (ce (v '(+ 1 2))
-      "1 + 2")
-  (ce (v '(+ (dot x y) 2))
-      "x.y + 2"))
+  (cse (v 1) "1")
+  (cse (v 'varname) "varname")
+  (cse (v '(dot x y)) "x.y")
+  (cse (v '(= (dot x y) (= name 2)))
+       "x.y = name = 2")
+  (cse (v '(funcall f x y z))
+       "f(x, y, z)")
+  (cse (v '(+ 1 2))
+       "1 + 2")
+  (cse (v '(+ (dot x y) 2))
+       "x.y + 2"))
 
 
 ; ; ; ; statements
@@ -226,8 +229,8 @@
 (define continue? (? 'continue))
 
 (module+ test
-  (ce (break '(return)) "break;")
-  (ce (continue '(continue)) "continue;"))
+  (cse (break '(return)) "break;")
+  (cse (continue '(continue)) "continue;"))
 
 
 ; '(return {value}), '(throw {value})
@@ -240,8 +243,8 @@
 (define throw? (? 'throw))
 
 (module+ test
-  (ce (return '(return (+ 3 x))) "return 3 + x;")
-  (ce (throw '(throw (+ 3 x))) "throw 3 + x;"))
+  (cse (return '(return (+ 3 x))) "return 3 + x;")
+  (cse (throw '(throw (+ 3 x))) "throw 3 + x;"))
 
 ; see assign
 (define (assign-stmt stmt [depth 0] [ind-width default-indent-width])
@@ -249,12 +252,12 @@
 
 (module+ test
   (let ([as  assign-stmt])
-    (ce (as '(= z a))
-        "z = a;")
-    (ce (as '(= (dot x z) a))
-        "x.z = a;")
-    (ce (as '(= (dot x z) (= (dot a b) (dot (dot c d) e))))
-        "x.z = a.b = c.d.e;")))
+    (cse (as '(= z a))
+         "z = a;")
+    (cse (as '(= (dot x z) a))
+         "x.z = a;")
+    (cse (as '(= (dot x z) (= (dot a b) (dot (dot c d) e))))
+         "x.z = a.b = c.d.e;")))
 
 
 ; '(var {simple} {value}?)
@@ -269,12 +272,12 @@
 
 (module+ test
   (let ([d  var-decl])
-    (ce (d '(var a))
-        "var a;")
-    (ce (d '(var varname 2))
-        "var varname = 2;")
-    (ce (d '(var varname (= x 2)))
-        "var varname = x = 2;")))
+    (cse (d '(var a))
+         "var a;")
+    (cse (d '(var varname 2))
+         "var varname = 2;")
+    (cse (d '(var varname (= x 2)))
+         "var varname = x = 2;")))
 
 
 ; '(static-var {simple} {value}?)
@@ -289,12 +292,12 @@
 
 (module+ test
   (let ([d  st-var-decl])
-    (ce (d '(var a))
-        "static var a;")
-    (ce (d '(var varname 2))
-        "static var varname = 2;")
-    (ce (d '(var varname (= x 2)))
-        "static var varname = x = 2;")))
+    (cse (d '(var a))
+         "static var a;")
+    (cse (d '(var varname 2))
+         "static var varname = 2;")
+    (cse (d '(var varname (= x 2)))
+         "static var varname = x = 2;")))
 
 
 ; shared by block, fundecl, static fundecl, class
@@ -314,17 +317,17 @@
 
 (module+ test
   (let ([b  block])
-    (ce (b '(begin))
-        "{}")
-    (ce (b '(begin (= a 2)))
-        (ind "{\n_a = 2;\n}"))
-    (ce (b '(begin (= a 2) (var b c)))
-        (ind "{
+    (cse (b '(begin))
+         "{}")
+    (cse (b '(begin (= a 2)))
+         (ind "{\n_a = 2;\n}"))
+    (cse (b '(begin (= a 2) (var b c)))
+         (ind "{
 _a = 2;
 _var b = c;
 }"))
-    (ce (b '(begin (begin (begin (= a 2)) (var b c))))
-        (ind "{
+    (cse (b '(begin (begin (begin (= a 2)) (var b c))))
+         (ind "{
 _{
 __{
 ___a = 2;
@@ -353,11 +356,11 @@ _}
 
 (module+ test
   (let ([w  while])
-    (ce (w '(while (== a b) (= a (+ a 1))))
-        (ind "while (a == b)
+    (cse (w '(while (== a b) (= a (+ a 1))))
+         (ind "while (a == b)
 _a = a + 1;"))
-    (ce (w '(while (== a b) (begin (= a (+ a 1)))))
-        (ind "while (a == b) {
+    (cse (w '(while (== a b) (begin (= a (+ a 1)))))
+         (ind "while (a == b) {
 _a = a + 1;
 }"))))
 
@@ -375,21 +378,21 @@ _a = a + 1;
 (define if? (? 'if))
 
 (module+ test
-  (ce (_if '(if (== a b) (= a (+ a 2))))
-      (ind "if (a == b)
+  (cse (_if '(if (== a b) (= a (+ a 2))))
+       (ind "if (a == b)
 _a = a + 2;"))
-  (ce (_if '(if (== a b) (if (== c 2) (= a (+ a 2)))))
-      (ind "if (a == b)
+  (cse (_if '(if (== a b) (if (== c 2) (= a (+ a 2)))))
+       (ind "if (a == b)
 _if (c == 2)
 __a = a + 2;"))
-  (ce (_if '(if (== a 1)
-                (begin (if (== a 2)
-                           (= y 3)))
-                (begin (if (== b 3)
-                           (= z 4)
-                           (begin (= v 5)))
-                       (= z 0))))
-      (ind "if (a == 1) {
+  (cse (_if '(if (== a 1)
+                 (begin (if (== a 2)
+                            (= y 3)))
+                 (begin (if (== b 3)
+                            (= z 4)
+                            (begin (= v 5)))
+                        (= z 0))))
+       (ind "if (a == 1) {
 _if (a == 2)
 __y = 3;
 }
@@ -401,30 +404,30 @@ __v = 5;
 _}
 _z = 0;
 }"))
-  (ce (_if '(if (== a b)
-                (begin (= a (+ a 2)))))
-      (ind "if (a == b) {
+  (cse (_if '(if (== a b)
+                 (begin (= a (+ a 2)))))
+       (ind "if (a == b) {
 _a = a + 2;
 }"))
-  (ce (_if '(if (== a b)
-                (= a (+ a 2))
-                (= a 0)))
-      (ind "if (a == b)
+  (cse (_if '(if (== a b)
+                 (= a (+ a 2))
+                 (= a 0)))
+       (ind "if (a == b)
 _a = a + 2;
 else
 _a = 0;"))
-  (ce (_if '(if (== a b)
-                (= a (+ a 2))
-                (begin (= a 0))))
-      (ind "if (a == b)
+  (cse (_if '(if (== a b)
+                 (= a (+ a 2))
+                 (begin (= a 0))))
+       (ind "if (a == b)
 _a = a + 2;
 else {
 _a = 0;
 }"))
-  (ce (_if '(if (== a b)
-                (begin (= a (+ a 2)))
-                (begin (= a 0))))
-      (ind "if (a == b) {
+  (cse (_if '(if (== a b)
+                 (begin (= a (+ a 2)))
+                 (begin (= a 0))))
+       (ind "if (a == b) {
 _a = a + 2;
 }
 else {
@@ -452,19 +455,19 @@ _a = 0;
 (define try? (? 'try))
 
 (module+ test
-  (ce (try '(try () (catch (e) ()) ()))
-      (ind "try {}
+  (cse (try '(try () (catch (e) ()) ()))
+       (ind "try {}
 catch(e) {}"))
-  (ce (try '(try () () (finally ())))
-      (ind "try {}
+  (cse (try '(try () () (finally ())))
+       (ind "try {}
 finally {}"))
-  (ce (try '(try ((var a)) () (finally ())))
-      (ind "try {
+  (cse (try '(try ((var a)) () (finally ())))
+       (ind "try {
 _var a;
 }
 finally {}"))
-  (ce (try '(try ((var a)) (catch (a) ()) (finally ())))
-      (ind "try {
+  (cse (try '(try ((var a)) (catch (a) ()) (finally ())))
+       (ind "try {
 _var a;
 }
 catch(a) {}
@@ -477,10 +480,10 @@ finally {}")))
 
 (module+ test
   (let ([fcs  funcall-stmt])
-    (ce (fcs '(funcall foo 1))
-        "foo(1);")
-    (ce (fcs '(funcall foo 1 2))
-        "foo(1, 2);")))
+    (cse (fcs '(funcall foo 1))
+         "foo(1);")
+    (cse (fcs '(funcall foo 1 2))
+         "foo(1, 2);")))
 
 
 ; '(function {simplename} ({fun-param}*) ({stmt}*))
@@ -495,10 +498,10 @@ finally {}")))
 
 (module+ test
   (let ([f  fun-params])
-    (ce (f '()) "")
-    (ce (f '(a)) "a")
-    (ce (f '(& a & b & c)) "&a, &b, &c")
-    (ce (f '(a & b & c)) "a, &b, &c")))
+    (cse (f '()) "")
+    (cse (f '(a)) "a")
+    (cse (f '(& a & b & c)) "&a, &b, &c")
+    (cse (f '(a & b & c)) "a, &b, &c")))
 
 
 (define (fun-decl stmt [depth 0] [ind-width default-indent-width])
@@ -511,14 +514,14 @@ finally {}")))
 
 (module+ test
   (let ([fd  fun-decl])
-    (ce (fd '(function foo () ()))
-        "function foo() {}")
-    (ce (fd '(function foo () ((var a 2))))
-        (ind "function foo() {
+    (cse (fd '(function foo () ()))
+         "function foo() {}")
+    (cse (fd '(function foo () ((var a 2))))
+         (ind "function foo() {
 _var a = 2;
 }"))
-    (ce (fd '(function foo () ((var a 2) (function bar () ((= a 2))))))
-        (ind "function foo() {
+    (cse (fd '(function foo () ((var a 2) (function bar () ((= a 2))))))
+         (ind "function foo() {
 _var a = 2;
 _function bar() {
 __a = 2;
@@ -536,10 +539,10 @@ _}
 
 (module+ test
   (let ([a  ab-fun-decl])
-    (ce (a '(abstract-function fname (a b c)))
-        "function fname(a, b, c);")
-    (ce (a '(abstract-function fname ()))
-        "function fname();")))
+    (cse (a '(abstract-function fname (a b c)))
+         "function fname(a, b, c);")
+    (cse (a '(abstract-function fname ()))
+         "function fname();")))
 
 
 ; '(static-function {simplename} ({fun-param}*) ({stmt}*))
@@ -553,13 +556,13 @@ _}
 
 (module+ test
   (let ([sfd  st-fun-decl])
-    (ce (sfd '(static-function fname () ()))
-        "static function fname() {}")
-    (ce (sfd '(static-function funname
-                               (a b c & d)
-                               ((var a)
-                                (begin))))
-        (ind "static function funname(a, b, c, &d) {
+    (cse (sfd '(static-function fname () ()))
+         "static function fname() {}")
+    (cse (sfd '(static-function funname
+                                (a b c & d)
+                                ((var a)
+                                 (begin))))
+         (ind "static function funname(a, b, c, &d) {
 _var a;
 _{}
 }"))))
@@ -580,14 +583,14 @@ _{}
 
 (module+ test
   (let ([c  constructor])
-    (ce (c '(constructor () ()) #:class 'A)
-        "A() {}")
-    (ce (c '(constructor (a b & c)
-                         ((funcall this)
-                          (var a)
-                          (= a 2)))
-           #:class 'LongName)
-        (ind "LongName(a, b, &c) {
+    (cse (c '(constructor () ()) #:class 'A)
+         "A() {}")
+    (cse (c '(constructor (a b & c)
+                          ((funcall this)
+                           (var a)
+                           (= a 2)))
+            #:class 'LongName)
+         (ind "LongName(a, b, &c) {
 _this();
 _var a;
 _a = 2;
@@ -629,23 +632,23 @@ _a = 2;
 
 (module+ test
   (let ([c  class-decl])
-    (ce (c '(class A () ()))
-        "class A {}")
-    (ce (c '(class A (extends B) ()))
-        "class A extends B {}")
-    (ce (c '(class A () ((var a))))
-        (ind "class A {
+    (cse (c '(class A () ()))
+         "class A {}")
+    (cse (c '(class A (extends B) ()))
+         "class A extends B {}")
+    (cse (c '(class A () ((var a))))
+         (ind "class A {
 _var a;
 }"))
-    (ce (c '(class A
-              (extends Base)
-              ((static-var b 3)
-               (var a)
-               (= b a)
-               (constructor () ((funcall super a b)
-                                (if false (begin (throw (new Error))))))
-               (function method () ((= a 2))))))
-        (ind "class A extends Base {
+    (cse (c '(class A
+               (extends Base)
+               ((static-var b 3)
+                (var a)
+                (= b a)
+                (constructor () ((funcall super a b)
+                                 (if false (begin (throw (new Error))))))
+                (function method () ((= a 2))))))
+         (ind "class A extends Base {
 _static var b = 3;
 _var a;
 _b = a;
@@ -693,25 +696,25 @@ _}
 ; correctness of each construct is tested in the respective test suite
 (module+ test
   (let ([s  statement])
-    (ce (s '(= a b)) "a = b;")
-    (ce (s '(var a)) "var a;")
-    (ce (s '(static-var a)) "static var a;")
-    (ce (s '(begin)) "{}")
-    (ce (s '(begin (var a) (begin)))
-        (ind "{
+    (cse (s '(= a b)) "a = b;")
+    (cse (s '(var a)) "var a;")
+    (cse (s '(static-var a)) "static var a;")
+    (cse (s '(begin)) "{}")
+    (cse (s '(begin (var a) (begin)))
+         (ind "{
 _var a;
 _{}
 }"))
-    (ce (s '(while (== a b) (= a (+ a 1))))
-        (ind "while (a == b)
+    (cse (s '(while (== a b) (= a (+ a 1))))
+         (ind "while (a == b)
 _a = a + 1;"))
-    (ce (s '(if (== a b) (= a (+ a 1))))
-        (ind "if (a == b)
+    (cse (s '(if (== a b) (= a (+ a 1))))
+         (ind "if (a == b)
 _a = a + 1;"))
-    (ce (s '(funcall foo a b))
-        "foo(a, b);")
-    (ce (s '(class A () ()))
-        "class A {}")
+    (cse (s '(funcall foo a b))
+         "foo(a, b);")
+    (cse (s '(class A () ()))
+         "class A {}")
     ))
 
 
@@ -724,28 +727,28 @@ _a = a + 1;"))
 
 (module+ test
   (let ([sl  stmt-list])
-    (ce (sl '())
-        "")
-    (ce (sl '((var a)))
-        "var a;")
-    (ce (sl '((var a)
-              (= a 2)))
-        "var a;
+    (cse (sl '())
+         "")
+    (cse (sl '((var a)))
+         "var a;")
+    (cse (sl '((var a)
+               (= a 2)))
+         "var a;
 a = 2;")
-    (ce (sl '((var a)
-              (begin (= a 2))
-              (= a 2)))
-        (ind "var a;
+    (cse (sl '((var a)
+               (begin (= a 2))
+               (= a 2)))
+         (ind "var a;
 {
 _a = 2;
 }
 a = 2;"))
-    (ce (sl '((var a)
-              (= a 2)
-              (begin (var b)
-                     (begin (var c)
-                            (begin (= c 2))))))
-        (ind "var a;
+    (cse (sl '((var a)
+               (= a 2)
+               (begin (var b)
+                      (begin (var c)
+                             (begin (= c 2))))))
+         (ind "var a;
 a = 2;
 {
 _var b;
