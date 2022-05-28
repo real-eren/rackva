@@ -1,14 +1,12 @@
 #lang racket/base
 (require rackunit
-         (prefix-in simple- "../../src/parse/simpleParser.rkt")
-         (prefix-in function- "../../src/parse/functionParser.rkt")
-         (prefix-in class- "../../src/parse/classParser.rkt"))
+         "../../src/parse/parser.rkt")
 
 ; ; v1
 
 (test-not-exn
  "v1, comprehensive"
- (λ () (simple-parser-str "
+ (λ () (parse-str "
 var x = 0;
 while(x < 12) {
   try{
@@ -27,7 +25,7 @@ return x;
 
 (test-not-exn
  "v2, comprehensive"
- (λ () (function-parser-str "
+ (λ () (parse-str "
 function divide(x, y) {
   if (y == 0)
     throw 1000000;
@@ -63,7 +61,7 @@ function divide(x, y) {
 
 (test-not-exn
  "v3, comprehensive"
- (λ () (class-parser-str "
+ (λ () (parse-str "
 class A extends Bclass {
   static var sfield;
   var ifield = c;
@@ -81,3 +79,77 @@ class A extends Bclass {
     throw 3 + 3;
   }
 }")))
+
+; ; Mixture
+
+(test-not-exn
+ "v1+v2+v3, comprehensive"
+ (λ () (parse-str "
+var a = 3;
+function foo() { return 3; }
+
+while (false) {
+  a = a + foo();
+}
+class B {}
+
+return false;
+throw 0;
+try {} finally {}
+if (false) {}
+
+class A { }")))
+
+
+; ; Illegal usages that should be caught
+(define-check (test-parser-exn msg prog-str)
+  (test-exn msg exn:fail:user? (λ () (parse-str prog-str))))
+
+(test-case
+ "control flow in class body"
+ (test-parser-exn
+  "`if` in class body"
+  "class A { if (true) { } }")
+ (test-parser-exn
+  "`while` in class body"
+  "class A { while (true) { } }")
+ (test-parser-exn
+  "`try` in class body"
+  "class A { try { } catch {} }")
+ (test-parser-exn
+  "return in class body"
+  "class A { return 0; }"))
+
+(test-case
+ "class in nested statement list"
+ (test-parser-exn
+  "class in `if`"
+  "if (true) { class A {} }")
+ (test-parser-exn
+  "class in `while`"
+  "while (true) { class A {} }")
+ (test-parser-exn
+  "class in `block`"
+  "{ class A {} }")
+ (test-parser-exn
+  "class in class"
+  "class AA { class A {} }")
+ (test-parser-exn
+  "class in function"
+  "function foo() { class A {} }"))
+
+(test-case
+ "class members outside class"
+ (test-parser-exn
+  "static var in global"
+  "static var a;")
+ (test-parser-exn
+  "static fun in global"
+  "static function a(){ }")
+ (test-parser-exn
+  "abstract function in global"
+  "function a();")
+ (test-parser-exn
+  "abstract function in block"
+  "{ function a(); }"))
+
