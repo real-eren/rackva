@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require "class.rkt"
+         "context.rkt"
          "function.rkt"
          "function-table.rkt"
          "instance.rkt"
@@ -17,18 +18,12 @@
                      (combine-out push-new-layer
                                   pop-layer
                                   
-                                  context-stack
-                                  push-context
-                                  copy-context-stack
+                                  call-stack
+                                  push-call
+                                  copy-call-stack
                                   
                                   enter-fun-call-context
-                                  instance-context?
-                                  set-static-scope
-                                  set-instance-scope
-                                  set-this-scope
-                                  set-super-scope
-                                  restore-scope
-
+                                  
                                   declare-var-with-box
                                   declare-var-with-value
                                   declare-var
@@ -48,6 +43,7 @@
                                   declare-class
                                   has-class?
                                   get-class
+                                  current-type-parent-name
                                   current-type-has-parent?
                                   get-parent-name
                                   get-parents-abstract-methods
@@ -67,13 +63,12 @@
                                   declare-constructor
                                   ctor-already-declared?)))
 
-(define PHC 'place-holder-context)
 ;;;; State
 ;; Entire (global + local) state of a program being interpreted
 ;; map w/ entries for
 ;; global vars and funs
 ;; local vars and funs    (layered)
-;; context
+;; call-stack
 ;; classes
 
 (define $global-vars 'global-vars)
@@ -88,25 +83,12 @@
 (define $local-funs 'local-funs)
 (define local-funs (map:getter $local-funs))
 
-(define $context-stack 'context-stack)
-(define context-stack (map:getter $context-stack))
+(define $call-stack 'call-stack)
+(define call-stack (map:getter $call-stack))
 
-;; current class. Name / #F. affects what bindings are in scope
-(define $current-type 'current-type)
-(define current-type (map:getter $current-type))
-
-;; current function body. closure / #F. used for nested fun decls
-(define $current-fun-call 'current-fun-call)
 
 ;; current instance. instance / #F
 (define $this 'this)
-(define this (map:getter $this))
-
-;; flag that affects lookup. if true, limited to bindings available to instance and type
-(define $dotted 'dotted)
-(define dotted? (map:getter $dotted))
-(define $super 'super)
-(define super (map:getter $super))
 
 ; map of class names to class closures
 (define $classes 'classes)
@@ -130,12 +112,7 @@
                       $global-vars  new-var-table
                       $global-funs  new-function-table
                       $classes      map:empty
-                      $current-type     #F
-                      $current-fun-call #F
-                      $this             #F
-                      $dotted           #F
-                      $super            #F
-                      $context-stack    null))
+                      $call-stack   null))
 
 
 ;; State with the top scope removed from the stack and function table
@@ -154,15 +131,6 @@
            $local-funs  (curry stack:push new-function-table))))
 
 
-;; T/F whether the current context is of type `top-level`
-(define top-level?
-  (lambda (state)
-    (not (current-type state))))
-
-;; instance / F 
-(define instance-context?
-  (lambda (state)
-    (this state)))
 
 ;; Whether declarations should go to the local tables
 ; blocks, fun-calls
@@ -174,31 +142,26 @@
     (< 0 (height (local-vars state)))))
 
 
-(define (push-context context state)
+(define (push-call context state)
   (withf state
-         $context-stack  (curry cons context)))
+         $call-stack  (curry cons context)))
 
-(define (copy-context-stack #:src old-state #:dest new-state)
+(define (copy-call-stack #:src old-state #:dest new-state)
   (withv new-state
-         $context-stack  (context-stack old-state)))
+         $call-stack  (call-stack old-state)))
 
 ;; called in interpreter before entering a function body
 ; needed to correctly handle local function definitions
 (define enter-fun-call-context
   (lambda (fun state)
     (withv state
-           $context-stack  (cons (function->string fun) (context-stack state))
-           $current-fun-call  fun)))
-;; Function Closure / F whether the current context is of type `fun-call`
-(define fun-call-context?
-  (lambda (state)
-    (map:get $current-fun-call state)))
+           $call-stack        (cons (function->string fun) (call-stack state)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define bottom-layers take-right) ; get the bottom/last layers of a function table
-(define height length) ; count the number of layers in a function table
+(define bottom-layers take-right) ; get the bottom/last layers of local vars / funs
+(define height length) ; count the number of layers in local vars / funs
 
 
 ;; Given a state, creates a function that takes a state
@@ -209,54 +172,11 @@
 ; 3) all of invoke state's classes and global tables belong in scope
 ; why height and not copy? to capture bindings declared later in the same layer
 (define make-scoper
-  (lambda (declare-state class instance-context?)
+  (lambda (declare-state)
     (lambda (invoke-state)
       (withv invoke-state
              $local-vars  (bottom-layers (local-vars invoke-state) (height (local-vars declare-state)))
-             $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))
-             $current-type  class
-             $this          (if instance-context? (this invoke-state) #F)
-             $dotted        #F))))
-
-;;;; Used by `Mstate-dot` to make state perform the correct lookups
-(define set-static-scope
-  (lambda (class-name state)
-    (withv state
-           $current-type  class-name
-           $this          #F
-           $super         #F
-           $dotted        #T)))
-
-(define set-instance-scope
-  (lambda (this state)
-    (withv state
-           $current-type  (instance:class this)
-           $this          this
-           $super         #F
-           $dotted        #T)))
-
-(define set-this-scope
-  (lambda (state)
-    (withv state
-           $super         #F
-           $dotted        #T)))
-
-(define set-super-scope
-  (lambda (state)
-    (withv state
-           $current-type  (get-parent-name (current-type state) PHC state)
-           $super         #T
-           $dotted        #T)))
-
-;; copies scope related data from src onto dest
-(define restore-scope
-  (lambda (#:src old-state
-           #:dest new-state)
-    (withv new-state
-           $current-type  (current-type old-state)
-           $current-fun-call  (map:get $current-fun-call old-state)
-           $dotted        (map:get $dotted old-state)
-           $this          (this old-state))))
+             $local-funs  (bottom-layers (local-funs invoke-state) (height (local-funs declare-state)))))))
 
 
 
@@ -273,7 +193,7 @@
       [(local-context? state)     (withf state
                                          $local-vars  (curry stack:update-front
                                                              (curry var-table:declare-with-box name box)))]
-      [(top-level? state)         (withf state
+      [(ctxt:free? context)       (withf state
                                          $global-vars (curry var-table:declare-with-box name box))]
       [else                       (error "logical error, exhausted cases in declare-var")])))
 
@@ -304,17 +224,17 @@
 (define get-var-box
   (lambda (name context state)
     (or
-     (and (not (dotted? state))
+     (and (not (ctxt:dotted? context))
           (ormap (curry var-table:get-box name)
                  (local-vars state)))
-     (and (this state)
+     (and (ctxt:this context)
           (eq? 'this name)
-          (box (this state)))
-     (and (this state)
-          (get-instance-field-box name (this state) (current-type state) context state))
-     (and (current-type state)
-          (get-static-field-box name (current-type state) context state))
-     (and (not (dotted? state))
+          (box (ctxt:this context)))
+     (and (ctxt:this context)
+          (get-instance-field-box name (ctxt:this context) (ctxt:current-type context) context state))
+     (and (ctxt:current-type context)
+          (get-static-field-box name (ctxt:current-type context) context state))
+     (and (not (ctxt:dotted? context))
           (var-table:get-box name (global-vars state))))))
 
 ;; Assumes `this` is an instance of `class-name` (same or sub-class)
@@ -351,7 +271,7 @@
   (lambda (name context state)
     (cond
       [(local-context? state)  (var-table:declared? name (stack:peek (local-vars state)))]
-      [(top-level? state)      (var-table:declared? name (global-vars state))])))
+      [(ctxt:free? context)    (var-table:declared? name (global-vars state))])))
 
 
 ;; Is the in-scope variable with this name and initialized?
@@ -380,7 +300,7 @@
   (lambda (f-name context state)
     (cond
       [(local-context? state)  (stack:peek (local-funs state))]
-      [(top-level? state)      (global-funs state)]
+      [(ctxt:free? context)    (global-funs state)]
       [else                    (error "exhausted cases in fun lookup. logical error?")])))
 
 ;; Is a function with this signature in scope (reachable)?
@@ -409,8 +329,8 @@
 (define get-function
   (lambda (name arg-list context state)
     (or (ormap (curry fun-table:get name arg-list) (local-funs state))
-        (get-inst/abst-method name arg-list (this state) (current-type state) context state)
-        (get-static-method name arg-list (current-type state) context state)
+        (get-inst/abst-method name arg-list (ctxt:this context) (ctxt:current-type context) context state)
+        (get-static-method name arg-list (ctxt:current-type context) context state)
         (fun-table:get name arg-list (global-funs state)))))
 
 ;; list of all the methods declared in this class
@@ -426,7 +346,7 @@
          (class-has-i-a-method? name arg-list class-name context state)
          (get-i-a-method-rec name
                              arg-list
-                             (if (super state)
+                             (if (ctxt:super? context)
                                  class-name
                                  (instance:class this))
                              context
@@ -521,7 +441,8 @@
   (lambda (name params body context state)
     (cond
       ; special case of local - inherit `type` of enclosing function
-      [(fun-call-context? state)  =>   (lambda (fc-fun)
+      [(ctxt:current-fun-call
+        context)                   =>  (lambda (fc-fun)
                                          (declare-fun-local name
                                                             params
                                                             body
@@ -539,11 +460,11 @@
                                                           context
                                                           state)]
       ; not in funcall or class body, not in block etc
-      [(top-level? state)              (declare-fun-global name
-                                                           params
-                                                           body
-                                                           context
-                                                           state)]
+      [(ctxt:free? context)              (declare-fun-global name
+                                                             params
+                                                             body
+                                                             context
+                                                             state)]
       ; todo, replace with separate declare-method function
       [else                            (error "exhausted cases in declare-fun -> logical error")])))
 
@@ -555,7 +476,7 @@
                                 name
                                 params
                                 body
-                                (make-scoper state #F #F)
+                                (make-scoper state)
                                 function:scope:free
                                 #F))))
 
@@ -568,7 +489,7 @@
                                       name
                                       params
                                       body
-                                      (make-scoper state class (eq? function:scope:instance scope))
+                                      (make-scoper state)
                                       scope
                                       class)))))
 
@@ -586,11 +507,15 @@
 ; given name of class, returns closure. #F if absent
 (define get-class
   (lambda (class-name context state)
-    (map:get* state $classes class-name)))
+    (get* state $classes class-name)))
+
+(define current-type-parent-name
+  (lambda (context state)
+    (get-parent-name (ctxt:current-type context) context state)))
 
 (define current-type-has-parent?
   (lambda (context state)
-    (has-parent? (current-type state) context state)))
+    (has-parent? (ctxt:current-type context) context state)))
 ;; returns name and closure of the parent of this class
 ; assumes valid class-name. assumes get* returns false on miss. #F if no parent
 (define has-parent?
@@ -599,7 +524,7 @@
 
 (define get-parent-name
   (lambda (class-name context state)
-    (map:get* state $classes class-name class:$parent)))
+    (get* state $classes class-name class:$parent)))
 
 (define get-parent
   (lambda (class-name context state)
@@ -615,8 +540,7 @@
 (define declare-class
   (lambda (class-name parent-name context state)
     (withf state
-           $classes  (curry map:put class-name (class:of #:name class-name #:parent parent-name))
-           $current-type  (lambda (v) class-name))))
+           $classes  (curry map:put class-name (class:of #:name class-name #:parent parent-name)))))
 
 ; declare an instance field for a class (just name, no initializer)
 (define declare-instance-field
@@ -641,7 +565,7 @@
                     name
                     params
                     body
-                    (make-scoper state class (eq? function:scope:instance scope))
+                    (make-scoper state)
                     scope
                     class)
              state $classes class class:$methods)))
@@ -658,7 +582,7 @@
     (put* (function:of #:name 'init
                        #:params '()
                        #:body body
-                       #:scoper (make-scoper state class #T)
+                       #:scoper (make-scoper state)
                        #:scope function:scope:init
                        #:class class)
           state $classes class class:$init)))
@@ -677,7 +601,7 @@
                     class
                     params
                     body
-                    (make-scoper state class #T)
+                    (make-scoper state)
                     function:scope:constructor
                     class)
              state $classes class class:$constructors)))
@@ -720,6 +644,7 @@
 (module+ test
   (require rackunit)
 
+  (define PHC ctxt:default)
   ;; variables
   (let* ([s1  (push-new-layer new-state)]
          [s2  (declare-var 'a PHC s1)])
