@@ -22,7 +22,7 @@
                                   push-call
                                   copy-call-stack
                                   
-                                  enter-fun-call-context
+                                  push-fun-call
                                   
                                   declare-var-with-box
                                   declare-var-with-value
@@ -86,11 +86,6 @@
 (define $call-stack 'call-stack)
 (define call-stack (map:getter $call-stack))
 
-
-;; current instance. instance / #F
-(define $this 'this)
-
-; map of class names to class closures
 (define $classes 'classes)
 (define classes (map:getter $classes))
 
@@ -137,14 +132,14 @@
 ; Assumptions:
 ; 1) local-var-tables stack is empty when not in a local context
 ; 2) a layer is always pushed when calling a function, entering a block
-(define local-context?
+(define local?
   (lambda (state)
     (< 0 (height (local-vars state)))))
 
 
-(define (push-call context state)
+(define (push-call call state)
   (withf state
-         $call-stack  (curry cons context)))
+         $call-stack  (curry cons call)))
 
 (define (copy-call-stack #:src old-state #:dest new-state)
   (withv new-state
@@ -152,10 +147,10 @@
 
 ;; called in interpreter before entering a function body
 ; needed to correctly handle local function definitions
-(define enter-fun-call-context
+(define push-fun-call
   (lambda (fun state)
     (withv state
-           $call-stack        (cons (function->string fun) (call-stack state)))))
+           $call-stack  (cons (function->string fun) (call-stack state)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -190,12 +185,12 @@
 (define declare-var-with-box
   (lambda (name box context state)
     (cond
-      [(local-context? state)     (withf state
-                                         $local-vars  (curry stack:update-front
-                                                             (curry var-table:declare-with-box name box)))]
-      [(ctxt:free? context)       (withf state
-                                         $global-vars (curry var-table:declare-with-box name box))]
-      [else                       (error "logical error, exhausted cases in declare-var")])))
+      [(local? state)          (withf state
+                                      $local-vars  (curry stack:update-front
+                                                     (curry var-table:declare-with-box name box)))]
+      [(ctxt:free? context)    (withf state
+                                      $global-vars (curry var-table:declare-with-box name box))]
+      [else                    (error "logical error, exhausted cases in declare-var")])))
 
 ;; State with this varname declared in the current scope and initialized to this values
 (define declare-var-with-value
@@ -270,8 +265,8 @@
 (define var-already-declared?
   (lambda (name context state)
     (cond
-      [(local-context? state)  (var-table:declared? name (stack:peek (local-vars state)))]
-      [(ctxt:free? context)    (var-table:declared? name (global-vars state))])))
+      [(local? state)         (var-table:declared? name (stack:peek (local-vars state)))]
+      [(ctxt:free? context)   (var-table:declared? name (global-vars state))])))
 
 
 ;; Is the in-scope variable with this name and initialized?
@@ -299,9 +294,9 @@
 (define get-current-fun-table
   (lambda (f-name context state)
     (cond
-      [(local-context? state)  (stack:peek (local-funs state))]
-      [(ctxt:free? context)    (global-funs state)]
-      [else                    (error "exhausted cases in fun lookup. logical error?")])))
+      [(local? state)         (stack:peek (local-funs state))]
+      [(ctxt:free? context)   (global-funs state)]
+      [else                   (error "exhausted cases in fun lookup. logical error?")])))
 
 ;; Is a function with this signature in scope (reachable)?
 ; Assumptions:
@@ -442,31 +437,31 @@
     (cond
       ; special case of local - inherit `type` of enclosing function
       [(ctxt:current-fun-call
-        context)                   =>  (lambda (fc-fun)
-                                         (declare-fun-local name
-                                                            params
-                                                            body
-                                                            (function:scope fc-fun)
-                                                            (function:class fc-fun)
-                                                            context
-                                                            state))]
+        context)           =>  (lambda (fc-fun)
+                                 (declare-fun-local name
+                                                    params
+                                                    body
+                                                    (function:scope fc-fun)
+                                                    (function:class fc-fun)
+                                                    context
+                                                    state))]
       ; general case of local - if not in fun-call, assume free
       ; ex: in top-level block statement. free but not global
-      [(local-context? state)          (declare-fun-local name
-                                                          params
-                                                          body
-                                                          function:scope:free
-                                                          #F
-                                                          context
-                                                          state)]
+      [(local? state)          (declare-fun-local name
+                                                  params
+                                                  body
+                                                  function:scope:free
+                                                  #F
+                                                  context
+                                                  state)]
       ; not in funcall or class body, not in block etc
-      [(ctxt:free? context)              (declare-fun-global name
-                                                             params
-                                                             body
-                                                             context
-                                                             state)]
+      [(ctxt:free? context)    (declare-fun-global name
+                                                   params
+                                                   body
+                                                   context
+                                                   state)]
       ; todo, replace with separate declare-method function
-      [else                            (error "exhausted cases in declare-fun -> logical error")])))
+      [else                    (error "exhausted cases in declare-fun -> logical error")])))
 
 ; global case of declare-fun
 (define declare-fun-global
@@ -682,7 +677,7 @@
          [fm      (get-function fmn fma PHC s2)]
          [fan     'a] [faa     '()]
          [fbn     'b] [fba     '()]
-         [s3      (declare-fun fan faa null PHC (enter-fun-call-context fm (push-new-layer s2)))]
+         [s3      (declare-fun fan faa null PHC (push-fun-call fm (push-new-layer s2)))]
          [s4      (declare-fun fbn fba null PHC s3)]
          [s5      (pop-layer s4)]
          )
@@ -703,7 +698,7 @@
          [fg      (get-function fgn fga PHC s2)]
          
          [fan     'foo] [faa     '(a b c)]
-         [s3      (declare-fun fan faa null PHC (enter-fun-call-context fg (push-new-layer s2)))]
+         [s3      (declare-fun fan faa null PHC (push-fun-call fg (push-new-layer s2)))]
          [fa      (get-function fan faa PHC s3)]
          
          [fbn     'bar] [fba     '()]

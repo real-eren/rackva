@@ -936,7 +936,7 @@
                                                    (read-var-box n
                                                                  s
                                                                  c
-                                                                 (λ (v s) ((return conts) v state))
+                                                                 (return conts)
                                                                  (user-exn conts)))))))
 
 (define Mvalue-var
@@ -949,10 +949,10 @@
 (define read-var-box
   (lambda (name state context return user-exn)
     (cond
-      [(eq? 'super name)                             (user-exn (ue:keyword-as-identifier 'super 'variable) state)]
-      [(not (state:var-declared? name context state))        (user-exn (ue:reference-undeclared-var name) state)]
-      [(not (state:var-initialized? name context state))     (user-exn (ue:access-uninitialized-var name) state)]
-      [else                                          (return (state:get-var-box name context state) state)])))
+      [(eq? 'super name)                                  (user-exn (ue:keyword-as-identifier 'super 'variable) state)]
+      [(not (state:var-declared? name context state))     (user-exn (ue:reference-undeclared-var name) state)]
+      [(not (state:var-initialized? name context state))  (user-exn (ue:access-uninitialized-var name) state)]
+      [else                                               (return (state:get-var-box name context state) state)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; LITERALS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1006,21 +1006,19 @@
     (define (on-hit n s c)
       (Mvalue-fun-impl (state:get-function n arg-list c s)
                        arg-list
-                       state
                        s
                        context c
-                       ;; todo review comment. added `context`. replaces old usage of state:context
                        ; passing state in next, throw and return,
                        ; because the s returned from fun call was scoped
                        ; aka the continuations that leave the fun-body (return to call-site)
                        ; boxes handle the side-effects from the function body
                        ; however s2 has the call-stack during fun body, needed for error messages
-                       ; continue, break and throw need s2's context stack
+                       ; continue, break and throw need s2's call stack. s2's cs only escapes via throw
                        (conts-of
-                        #:next     (lambda (s2) ((next conts) state))
+                        #:next     (lambda (s2) ((next conts) s))
                         #:throw    (lambda (e s2)
-                                     ((throw conts) e (state:copy-call-stack #:src s2 #:dest state)))
-                        #:return   (lambda (v s2) ((return conts) v state))
+                                     ((throw conts) e (state:copy-call-stack #:src s2 #:dest s)))
+                        #:return   (lambda (v s2) ((return conts) v s))
                         #:break    (default-break (user-exn conts))
                         #:continue (default-continue (user-exn conts))
                         #:user-exn (user-exn conts))))
@@ -1030,12 +1028,12 @@
            (conts-of conts
                      #:return (lambda (n s c)
                                 (cond
-                                  [(super-or-this? n)               ((user-exn conts) (ue:ctor-chain-outside-ctor n) state)]
+                                  [(super-or-this? n)               ((user-exn conts) (ue:ctor-chain-outside-ctor n) s)]
                                   [(state:has-fun? n arg-list c s)  (on-hit n s c)]
                                   [else                             ((user-exn conts) (ue:function-not-in-scope name
                                                                                                                 (length arg-list)
-                                                                                                                (similar-funs n state))
-                                                                                      state)]))))))
+                                                                                                                (similar-funs n s))
+                                                                                      s)]))))))
 (define similar-funs
   (lambda (name state)
     (let ([similar-funs  (state:all-funs-with-name name state)])
@@ -1047,34 +1045,33 @@
                        #:after-last "\n----------\n")))))
 
 (define Mvalue-fun-impl
-  (lambda (fun-closure fun-inputs eval-state state arg-eval-context context conts)
+  (lambda (fun-closure fun-inputs state arg-eval-context run-context conts)
     (if (function:abstract? fun-closure)
         ((user-exn conts) (ue:invoke-abstract-method (function->string fun-closure)) state)
         (get-environment fun-closure
                          fun-inputs
-                         eval-state
-                         (state:enter-fun-call-context fun-closure state)
+                         state
                          arg-eval-context
                          (conts-of conts
                                    #:next (lambda (s)
                                             (Mstate-stmt-list (function:body fun-closure)
-                                                              s
-                                                              (ctxt:in-fun-call fun-closure context)
+                                                              (state:push-fun-call fun-closure s)
+                                                              (ctxt:in-fun-call fun-closure run-context)
                                                               conts)))))))
 
 
 ;; Evaluates parameters and produces the state in which the function body will be evaluated
 (define get-environment
-  (lambda (fun inputs eval-state out-state context conts)
+  (lambda (fun inputs state context conts)
     (boxed-arg-list-cps (function:params fun)
                         inputs
-                        eval-state
+                        state
                         context
                         conts
                         (lambda (p l)
                           ((next conts) (bind-boxed-params p
                                                            l
-                                                           (state:push-new-layer ((function:scoper fun) out-state))
+                                                           (state:push-new-layer ((function:scoper fun) state))
                                                            context)))
                         (lambda (p s)
                           ((user-exn conts) (ue:non-var-in-ref-param (function->string fun) p) s)))))
@@ -1144,15 +1141,15 @@
   (lambda (expr state context conts)
     (define (name-return n s c)
       (define (value-return v s2)
-        ; n is valid in s, but not s2 or state
+        ; n is valid w/ `c` but not `context`
         ((return conts) v (state:assign-var n v c s2)))
       (cond
-        [(super-or-this? n)              ((user-exn conts) (ue:assigning-to-this/super n) state)]
+        [(super-or-this? n)              ((user-exn conts) (ue:assigning-to-this/super n) s)]
         [(state:var-declared? n c s)     (Mvalue (assign-expr expr)
                                                  s
                                                  context
                                                  (conts-of conts #:return value-return))]
-        [else                            ((user-exn conts) (ue:reference-undeclared-var n) state)]))
+        [else                            ((user-exn conts) (ue:reference-undeclared-var n) s)]))
     (Mname (assign-var expr)
            state
            context
@@ -1182,10 +1179,9 @@
                               arg-list
                               '()
                               state
-                              state
                               context
                               (ctxt:of-instance inst context)
-                              (conts-of
+                              (conts-of ;see Mshared-fun-impl for reasoning on which state is being used
                                #:next (lambda (s) ((return conts) inst state))
                                #:return (lambda (v s) ((return conts) inst state))
                                #:throw (lambda (e s) ((throw conts) e (state:copy-call-stack #:src s #:dest state)))
@@ -1196,42 +1192,40 @@
 
 ;; Search for constructor and run. Error if absent
 (define construct-instance
-  (lambda (class-name arg-list ctor-chain arg-eval-state run-state arg-eval-context context conts)
-    (if (state:get-constructor class-name arg-list context arg-eval-state)
-        (ctor-rec (state:get-constructor class-name arg-list arg-eval-context arg-eval-state)
+  (lambda (class-name arg-list ctor-chain state arg-eval-context run-context conts)
+    (if (state:get-constructor class-name arg-list arg-eval-context state)
+        (ctor-rec (state:get-constructor class-name arg-list arg-eval-context state)
                   arg-list
                   class-name
                   ctor-chain
-                  arg-eval-state
-                  run-state
+                  state
                   arg-eval-context
-                  context
+                  run-context
                   conts)
         ((user-exn conts) (ue:ctor-DNE class-name 
                                        (string-join (map (curry format "~a") arg-list)
                                                     ", "
                                                     #:before-first "("
                                                     #:after-last ")"))
-                          arg-eval-state))))
+                          state))))
 
 ;; Evaluate constructor closure. Recurses into other constructors if necessary
 (define ctor-rec
-  (lambda (ctor args class-name ctor-chain arg-eval-state run-state arg-eval-context context conts)
+  (lambda (ctor args class-name ctor-chain state arg-eval-context run-context conts)
     (if (member ctor ctor-chain)
-        ((user-exn conts) (ue:cyclic-ctor-chaining) run-state)
+        ((user-exn conts) (ue:cyclic-ctor-chaining) state)
         (get-environment ctor
                          args
-                         arg-eval-state
-                         (state:enter-fun-call-context ctor run-state)
+                         state
                          arg-eval-context
                          (conts-of conts
                                    #:next (lambda (s)
                                             (ctor-rec-impl (function:body ctor)
                                                            class-name
-                                                           (state:get-parent-name class-name arg-eval-context arg-eval-state)
+                                                           (state:get-parent-name class-name arg-eval-context s)
                                                            (cons ctor ctor-chain)
-                                                           s
-                                                           (ctxt:in-fun-call ctor context)
+                                                           (state:push-fun-call ctor s)
+                                                           (ctxt:in-fun-call ctor run-context)
                                                            conts)))))))
 
 (define ctor-rec-impl
@@ -1272,7 +1266,6 @@
         (Mvalue-fun-impl (state:get-init class-name context state)
                          '()
                          state
-                         state
                          context context
                          conts)))
     (cond
@@ -1280,7 +1273,6 @@
       [(start-this? body)               (construct-instance class-name
                                                             (fun-inputs (first body))
                                                             ctor-chain
-                                                            chain-state
                                                             chain-state
                                                             context context
                                                             chain-conts)]
@@ -1291,7 +1283,6 @@
       [(not parent)                     (Mvalue-fun-impl (state:get-init class-name context state)
                                                          '()
                                                          state
-                                                         state
                                                          context context
                                                          conts)]
       ; else parent -> super (default if not specified), then init
@@ -1301,7 +1292,6 @@
                                                                 '())
                                                             '() ; empty chain because going up class heirarchy,
                                                             ; can't revisit ctors of this class
-                                                            chain-state
                                                             chain-state
                                                             context context
                                                             (conts-of chain-conts
@@ -1423,24 +1413,20 @@
       [(or (not (symbol? LHS))
            (state:var-declared? LHS
                                 context
-                                state)) (Mvalue LHS
-                                                state
-                                                context
-                                                (conts-of conts
-                                                          #:return (lambda (v s)
-                                                                     (assert-instance v
-                                                                                      s
-                                                                                      (λ (v s)
-                                                                                        ((return conts) RHS s (ctxt:of-instance v context)))
-                                                                                      (user-exn conts)))))]
-      [(state:has-class? LHS context state)     ((return conts) RHS state (ctxt:in-static LHS context))]
-      [else                             ((user-exn conts) (ue:unknown-LHS-dot LHS) state)])))
+                                state))       (Mvalue LHS
+                                                      state
+                                                      context
+                                                      (conts-of conts
+                                                                #:return (lambda (v s)
+                                                                           (if (is-instance? v)
+                                                                               ((return conts) RHS s (ctxt:of-instance v context))
+                                                                               ((user-exn conts) (ue:non-instance-dot (prep-val-for-output v)) s)))))]
+      [(state:has-class? LHS context state)   ((return conts) RHS state (ctxt:in-static LHS context))]
+      [else                                   ((user-exn conts) (ue:unknown-LHS-dot LHS) state)])))
 
-(define assert-instance 
-  (lambda (v s return user-exn) 
-    (if (is-instance? v) 
-        (return v s)
-        (user-exn (ue:non-instance-dot (prep-val-for-output v)) s))))
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
