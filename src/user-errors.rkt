@@ -101,6 +101,17 @@
             "uncaught exception: ~a"
             'exn-val))
 
+(define type:expected-boolean-val 'expected-boolean-val)
+(define expected-boolean-val
+  (exn:ctor type:expected-boolean-val
+            "expected a boolean, got: `~a`"
+            'val))
+
+(define type:expected-boolean-expr 'expected-boolean-expr)
+(define expected-boolean-expr
+  (exn:ctor type:expected-boolean-expr
+            "expected a boolean expression, got: `~a`"
+            'expr))
 
 
 (define type:non-var-in-ref-param 'non-variable-in-reference-param)

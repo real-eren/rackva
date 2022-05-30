@@ -275,3 +275,22 @@ finally {
                    ue:type:did-not-return
                    '()))
 
+; ; non-bool in if/while condition
+
+(test-case
+ "int in if cond"
+ (check-exn-result (i "if (1) return 0;")
+                   ue:type:expected-boolean-val
+                   '(if))
+ (check-exn-result (i "if (1 + 1) return 0;")
+                   ue:type:expected-boolean-expr
+                   '(if)))
+
+(test-case
+ "int in while cond"
+ (check-exn-result (i "while (1) return 0;")
+                   ue:type:expected-boolean-val
+                   '(while))
+ (check-exn-result (i "while (1 + 1) return 0;")
+                   ue:type:expected-boolean-expr
+                   '(while)))
