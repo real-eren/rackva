@@ -858,14 +858,17 @@
 ;; error if not bool
 (define Mbool
   (lambda (expr state context conts)
-    (Mbool-impl expr state context (w/preproc conts #:map-value assert-bool)))) ; todo, refactor assert-bool to use user-exn
+    (Mbool-impl expr state context (conts-of conts
+                                             #:return (λ (v s)
+                                                        (if (boolean? v)
+                                                            ((return conts) v s)
+                                                            ((user-exn conts) (ue:expected-boolean-val v) s)))))))
+
 ; Like Mvalue, but produces bool else error, and handles short-circuiting
 (define Mbool-impl
   (lambda (expr state context conts)
     (cond
-      [(or (number? expr)
-           (eq? 'true expr)
-           (eq? 'false expr))    (Mvalue-literal expr state conts)]
+      [(literal? expr)           (Mvalue-literal expr state conts)]
       [(name? expr)              (Mvalue-var expr state context conts)]
       [(is-||? expr)             (Mbool (bool-left-op expr)
                                         state
@@ -893,15 +896,7 @@
       [(is-nested-boolean-expr?
         expr)                    (Mvalue-op expr state context conts)]
       [(is-fun-call? expr)       (Mvalue-fun expr state context conts)]
-      [else                      (error "not considered to be a boolean type expr: " expr)])))
-
-
-; error if not bool, else allows through
-(define assert-bool
-  (lambda (val)
-    (if (boolean? val)
-        val
-        (error "value is not a bool:" val))))
+      [else                      ((user-exn conts) (ue:expected-boolean-expr expr) state)])))
 
 
 
@@ -916,16 +911,13 @@
 (define Mvalue
   (lambda (expr state context conts)
     (cond
-      [(or (number? expr)
-           (eq? 'true expr)
-           (eq? 'false expr))               (Mvalue-literal expr state conts)]
+      [(literal? expr)                      (Mvalue-literal expr state conts)]
       [(name? expr)                         (Mvalue-var expr state context conts)]
       [(is-new? expr)                       (Mvalue-new expr state context conts)]
       [(is-fun-call? expr)                  (Mvalue-fun expr state context conts)]
       [(is-assign? expr)                    (Mvalue-assign expr state context conts)]
       [(is-nested-boolean-expr? expr)       (Mbool expr state context conts)]
-      [(has-op? expr)                       (Mvalue-op expr state context conts)]
-      [else                                 (error "unreachable in Mvalue")])))
+      [(has-op? expr)                       (Mvalue-op expr state context conts)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; VARS & FIELDS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -970,6 +962,9 @@
       [(eq? 'true token)          #t]
       [(eq? 'false token)         #f]
       [else                       (error "not a bool/int literal" token)])))
+
+(define (literal? v)
+  (or (number? v) (eq? 'true v) (eq? 'false v)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

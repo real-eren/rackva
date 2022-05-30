@@ -393,3 +393,43 @@ function main() { functor(); }")])
    (check-exn-result result
                      ue:type:duplicate-parameter
                      '(function "functor()" funcall "main()"))))
+
+
+; ; Boolean type errors
+(test-case
+ "Int returning function in || / &&"
+ (check-exn-result (i "function foo() { return 1; }  function main() { return foo() || true; }")
+                   ue:type:expected-boolean-val
+                   '(return "main()"))
+ (check-exn-result (i "function foo() { return 1; }  function main() { return  true && foo(); }")
+                   ue:type:expected-boolean-val
+                   '(return "main()")))
+
+(test-case
+ "Int returning function in if/while cond"
+ (check-exn-result (i "function foo() { return 1; }  function main() { if (foo()) return 0; }")
+                   ue:type:expected-boolean-val
+                   '(if "main()"))
+ (check-exn-result (i "function foo() { return 1; }  function main() { while (foo()) return 0; }")
+                   ue:type:expected-boolean-val
+                   '(while "main()")))
+
+(test-case
+ "Int returning function in || / && in fun arg"
+ (check-exn-result (i "function foo(b) { return b; }  function main() { return foo(1 || 2); }")
+                   ue:type:expected-boolean-val
+                   '(return "main()"))
+ (check-exn-result (i "function foo(b) { return b; }  function main() { return foo((1 + 1) && 2); }")
+                   ue:type:expected-boolean-expr
+                   '(return "main()")))
+
+(test-case
+ "int val/ref param used in if/while cond"
+ (check-exn-result (i "function foo(b) { if (b) return 0; }  function main() { return foo(1); }")
+                   ue:type:expected-boolean-val
+                   '(if "foo(b)" return "main()"))
+ (check-exn-result (i "function foo(&b) { while (b) return 0; }  function main() { var a = 1; return foo(a); }")
+                   ue:type:expected-boolean-val
+                   '(while "foo(&b)" return "main()")))
+ 
+ 
