@@ -82,6 +82,25 @@ class A {
                    ue:type:uncaught-exception
                    '(throw "A::main()")))
 
+; ; Instance where boolean expected
+
+(test-case
+ "instance in if/while cond"
+ (check-exn-result (i "class A { static function main() { var a = new A(); if (a) return 0; } }" "A")
+                   ue:type:expected-boolean-val
+                   '(if "A::main()"))
+ (check-exn-result (i "class A { static function main() { if (new A()) return 0; } }" "A")
+                   ue:type:expected-boolean-expr
+                   '(if "A::main()")))
+
+(test-case
+ "instance in || / &&"
+ (check-exn-result (i "class A { static function main() { var a = new A(); return a || true; } }" "A")
+                   ue:type:expected-boolean-val
+                   '(return "A::main()"))
+ (check-exn-result (i "class A { static function main() { return new B() || false; } }" "A")
+                   ue:type:expected-boolean-expr
+                   '(return "A::main()")))
 
 ; ; CLASSES
 
@@ -674,7 +693,7 @@ class A {
     return 5;
   }
   A() {
-    x = this();
+    x = 0;
   }
   static function main() { return new A(); }
 }" "A"))
@@ -691,7 +710,7 @@ class A {
     return 5;
   }
   A() {
-    x = super();
+    x = 0;
   }
   static function main() { return new A(); }
 }" "A"))
@@ -881,6 +900,32 @@ class A {
  (check-exn-result result
                    ue:type:ctor-chain-outside-ctor
                    '(funcall "A::A()" return "A::main()")))
+
+(test-case
+ "Calling this(...) as value fun in ctor first line var decl"
+ (define result (i "
+class A {
+  var x;
+  A() { x = this(1); }
+  A(v) { this.x = v; }
+  static function main() { return new A(); }
+}" "A"))
+ (check-exn-result result
+                   ue:type:ctor-chain-outside-ctor
+                   '(= "A::A()" return "A::main()")))
+
+(test-case
+ "Calling this(...) in ctor first line if statement"
+ (define result (i "
+class A {
+  var x;
+  A() { if (true) x = this(1); }
+  A(v) { this.x = v; }
+  static function main() { return new A(); }
+}" "A"))
+ (check-exn-result result
+                   ue:type:ctor-chain-outside-ctor
+                   '(= if "A::A()" return "A::main()")))
 
 (test-case
  "Calling super() after first line in constructor"

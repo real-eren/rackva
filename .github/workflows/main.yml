@@ -30,7 +30,7 @@ jobs:
         run: raco pkg install --auto cover
         
       - name: Run Tests
-        run: raco test -e --timeout 120 --table --jobs 10 src test
+        run: raco test -e --timeout 120 -q --table --jobs 10 src test
         
       - run: raco cover src test
       - name: Archive code coverage reports

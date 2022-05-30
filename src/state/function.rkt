@@ -42,6 +42,7 @@
 
 (define static? (scope-checker scope:static))
 (define constructor? (scope-checker scope:constructor))
+(define init? (scope-checker scope:init))
 (define instance? (scope-checker scope:instance))
 (define abstract? (scope-checker scope:abstract))
 
