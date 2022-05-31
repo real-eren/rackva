@@ -2,6 +2,7 @@
 #lang racket/base
 (provide start-lex
          end-lex
+         peek-next-symbol
          get-next-symbol
          unget-next-symbol
          line-number)
@@ -11,25 +12,47 @@
 ;;
 ;; CSDS 345
 ;=======================================
+
 ; get and unget the next symbol from the lexical analyzer
 ; A 1 symbol buffer is used so the last read symbol can be pushed
 ; back to the analyzer
-
-(define last-symbol-saved #f)   ; is there a symbol buffered?
+(define last-symbol-saved? #f)   ; is there a symbol buffered?
 (define saved-symbol #f)        ; the symbol buffer
 (define line-number 0)
 
-; gets the next symbol to be processed
-;
+(define in-port '())
+
+;; A 1 character buffer is used so the last read character can be
+;; pushed back
+(define saved-last-char #f)    ; is the last character buffered?
+(define last-read-char #f)     ; the character buffer
+
+(define (reset-global-vars)
+  (set! last-symbol-saved? #F)
+  (set! saved-symbol #F)
+  (set! line-number 0)
+  (set! saved-last-char #F)
+  (set! last-read-char #F)
+  (set! in-port '()))
+
+; get the next symbol without consuming it
+(define (peek-next-symbol)
+  (when (not last-symbol-saved?)
+    (begin
+      (set! saved-symbol (lex))
+      (set! last-symbol-saved? #t)))
+  saved-symbol)
+
+; get and consume the next symbol to be processed
 (define get-next-symbol
   (lambda ()
-    (if last-symbol-saved
-       (begin
-          (set! last-symbol-saved #f)
+    (if last-symbol-saved?
+        (begin
+          (set! last-symbol-saved? #f)
           saved-symbol)
-       (begin
+        (begin
           (set! saved-symbol (lex))
-          (set! last-symbol-saved #f)
+          (set! last-symbol-saved? #f)
           saved-symbol))))
 
 ; mark the last symbol sent as unread so that it can be read again
@@ -37,15 +60,9 @@
 (define unget-next-symbol
   (lambda ()
     (begin
-      (set! last-symbol-saved #t))))
+      (set! last-symbol-saved? #t))))
 
-;; A 1 character buffer is used so the last read character can be
-;; pushed back
-
-(define saved-last-char #f)    ; is the last character buffered?
-(define last-read-char #f)     ; the character buffer
-
-; read the next character from the file
+; read the next character from the port
 
 (define readchar 
   (lambda (port)
@@ -58,29 +75,27 @@
             (set! line-number (+ 1 line-number)))
           char))))
 
-; unread the last character from the file so it can be read again
+; unread the last character from the port so it can be read again
 
 (define unreadchar
   (lambda (lastchar port)
     (begin (set! last-read-char lastchar)
            (set! saved-last-char #t))))
 
-; save the port to the input file
-
-(define file-port '())
-
 ; set the input port
 
 (define start-lex
   (lambda (port)
-     (set! file-port port)))
+    (reset-global-vars)
+    (set! in-port port)))
 
 
-; close the input file
+; close the input port, in case it's a fileport
 
 (define end-lex
   (lambda ()
-    (close-input-port file-port)))
+    (close-input-port in-port)
+    (reset-global-vars)))
 
 ; the current list of reserved words and operator characters
 
@@ -97,69 +112,41 @@
             (cons id '()))
         (cons 'ID id))))
 
-(define return-num-lex
-  (lambda (value)
-    (cons 'NUMBER value)))
+(define (return-num-lex value) (cons 'NUMBER value))
 
-(define return-symbol-lex
-  (lambda (symbol)
-    (cons 'BINARY-OP symbol)))
+(define (return-symbol-lex symbol) (cons 'BINARY-OP symbol))
 
-;(define return-add-lex
-;  (lambda (symbol)
-;    (cons 'MATHOP symbol)))
+(define (return-left-paren-lex) (cons 'LEFTPAREN '()))
 
-(define return-left-paren-lex
-   (lambda ()
-     (cons 'LEFTPAREN '())))
+(define (return-right-paren-lex) (cons 'RIGHTPAREN '()))
 
-(define return-right-paren-lex
-  (lambda ()
-    (cons 'RIGHTPAREN '())))
+(define (return-assign-lex symbol) (cons 'ASSIGN symbol))
 
-(define return-assign-lex
-  (lambda (symbol)
-     (cons 'ASSIGN symbol)))
+(define (return-null-lex symbol) (cons 'UNKNOWN symbol))
 
-(define return-null-lex
-  (lambda (symbol)
-    (cons 'UNKNOWN symbol)))
+(define (return-semicolon-lex) (cons 'SEMICOLON '()))
 
-(define return-semicolon-lex
-  (lambda ()
-    (cons 'SEMICOLON '())))
+(define (return-leftbrace-lex) (cons 'LEFTBRACE '()))
 
-(define return-leftbrace-lex
-  (lambda ()
-    (cons 'LEFTBRACE '())))
+(define (return-rightbrace-lex) (cons 'RIGHTBRACE '()))
 
-(define return-rightbrace-lex
-  (lambda ()
-    (cons 'RIGHTBRACE '())))
+(define (return-comma-lex) (cons 'COMMA '()))
 
-(define return-comma-lex
-  (lambda ()
-    (cons 'COMMA '())))
+(define (return-eof-lex) (cons 'EOF '()))
 
-(define return-eof-lex
-  (lambda ()
-    (cons 'EOF '())))
-
-(define return-period-lex
-  (lambda ()
-    (cons 'BINARY-OP 'dot)))
+(define (return-period-lex) (cons 'BINARY-OP 'dot))
 
 ; The lexical analyer.  Keep reading characters until the next symbol is found.
 ; then return that symbol
 
 (define lex
   (lambda ()
-    (let ((nextchar (readchar file-port)))
+    (let ((nextchar (readchar in-port)))
       (cond ((eof-object? nextchar) (return-eof-lex))
             ((char-whitespace? nextchar) (lex))
-            ((char-alphabetic? nextchar) (return-id-lex (string->symbol (id-lex file-port (make-string 1 nextchar)))))
-            ((char-numeric? nextchar) (return-num-lex (num-lex file-port (addtointeger 0 nextchar))))
-            ((memq nextchar reserved-operator-list) (return-symbol-lex (string->symbol (symbol-lex file-port (make-string 1 nextchar)))))
+            ((char-alphabetic? nextchar) (return-id-lex (string->symbol (id-lex in-port (make-string 1 nextchar)))))
+            ((char-numeric? nextchar) (return-num-lex (num-lex in-port (addtointeger 0 nextchar))))
+            ((memq nextchar reserved-operator-list) (return-symbol-lex (string->symbol (symbol-lex in-port (make-string 1 nextchar)))))
             ((char=? #\( nextchar) (return-left-paren-lex))
             ((char=? #\) nextchar) (return-right-paren-lex))
             ((char=? #\; nextchar) (return-semicolon-lex))
@@ -171,29 +158,29 @@
 
 
 (define id-lex
-   (lambda (fport idstring)
-      (let ((nextchar (readchar fport)))
-        (if (or (char-alphabetic? nextchar) (char-numeric? nextchar) (char=? #\_ nextchar))
-            (id-lex fport (string-append idstring (make-string 1 nextchar)))
-            (begin (unreadchar nextchar fport)
-                   idstring)))))
+  (lambda (fport idstring)
+    (let ((nextchar (readchar fport)))
+      (if (or (char-alphabetic? nextchar) (char-numeric? nextchar) (char=? #\_ nextchar))
+          (id-lex fport (string-append idstring (make-string 1 nextchar)))
+          (begin (unreadchar nextchar fport)
+                 idstring)))))
 
 (define addtointeger
   (lambda (val nextdigit)
-     (+ (* val 10) (- (char->integer nextdigit) (char->integer #\0)))))
+    (+ (* val 10) (- (char->integer nextdigit) (char->integer #\0)))))
 
 (define num-lex
   (lambda (fport value)
     (let ((nextchar (readchar fport)))
       (if (char-numeric? nextchar)
-         (num-lex fport (addtointeger value nextchar))
-         (begin (unreadchar nextchar fport)
-                value)))))
+          (num-lex fport (addtointeger value nextchar))
+          (begin (unreadchar nextchar fport)
+                 value)))))
 
 (define symbol-lex
   (lambda (fport idstring)
     (let ((nextchar (readchar fport)))
       (if (memq nextchar reserved-operator-list)
-         (symbol-lex fport (string-append idstring (make-string 1 nextchar)))
-         (begin (unreadchar nextchar fport)
-                idstring)))))
+          (symbol-lex fport (string-append idstring (make-string 1 nextchar)))
+          (begin (unreadchar nextchar fport)
+                 idstring)))))
