@@ -9,26 +9,56 @@
          "state/state.rkt"
          "util/map.rkt"
          racket/bool
-         racket/function
          racket/list
          racket/string)
 
 (provide interpret-parse-tree
-         interpret)
+         interpret
+         string-module
+         file-module
+         mode:class
+         mode:script
+         mode:main-func)
 
 ;;;; Interpreter
 ;; This module interprets programs parsed by `parser.rkt`
 ;; Tests for this module are in the `v{n}-tests` and `v{n}-error-tests`
 ;; files in `../test/`, where {n} corresponds to the version of the interpreter being tested
-
 (define interpret
   (lambda (main-module
+           #:mode [mode  mode:main-func]
            #:return [return  default-return] ; todo: if class, ignore top-level return and lookup main
            #:user-exn [user-exn  (default-user-exn)]
-           #:throw [throw (default-throw user-exn)]
-           #:modules [mods '()])
-    0))
+           #:throw [throw  (default-throw user-exn)]
+           #:modules [mods  '()])
+    (interpret-parse-tree (parse-module main-module);todo str or file
+                          return
+                          user-exn
+                          throw)))
+;; expects a class `class-name` with a static main() method in the main module
+(define (mode:class class-name)
+  (cons 'class class-name))
+;; expects a top-level return
+(define mode:script (cons 'script null))
+;; expects for a top-level main() function in the main module
+;; default run mode
+(define mode:main-func (cons 'main-func null))
+
+(define string-module
+  (lambda (str)
+    (cons 'string str)))
+
+(define file-module
+  (lambda (filepath)
+    (cons 'file filepath)))
+
 ; load main-module, load other modules
+; flag for how to treat main module: top-level script vs main function vs class' main function
+(define parse-module
+  (lambda (module)
+    (if (eq? (car module) 'file)
+        (parse-file (cdr module))
+        (parse-str (cdr module)))))
 
 
 (define interpret-parse-tree
@@ -1154,7 +1184,7 @@
                   run-context
                   conts)
         ((user-exn conts) (ue:ctor-DNE class-name 
-                                       (string-join (map (curry format "~a") arg-list)
+                                       (string-join (map (λ (arg) (format "~a" arg)) arg-list)
                                                     ", "
                                                     #:before-first "("
                                                     #:after-last ")"))
