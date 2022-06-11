@@ -94,6 +94,7 @@ function divide(x, y) {
 (test-equal?
  "v3, comprehensive"
  (parse-str "
+class NoParent {}
 class A extends Bclass {
   static var sfield;
   var ifield = c;
@@ -111,7 +112,10 @@ class A extends Bclass {
     throw 3 + 3;
   }
 }")
- '((class A
+ '((class NoParent
+     ()
+     ())
+   (class A
      (extends Bclass)
      ((static-var sfield)
       (var ifield c)
