@@ -1,9 +1,11 @@
 #lang racket/base
 
-(require "../src/interpreter-extension.rkt"
+(require "test-shared.rkt"
+         "../src/interpreter.rkt"
          rackunit)
 
-(define i interpret-v2-str)
+(define (i prog-str)
+  (i-str prog-str mode:main-func))
 
 ; ; Simple Tests
 

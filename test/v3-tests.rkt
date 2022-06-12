@@ -1,11 +1,10 @@
 #lang racket/base
-(require "../src/interpreter-extension.rkt"
+(require "test-shared.rkt"
+         "../src/interpreter.rkt"
          rackunit)
 
-; white space / newlines do not affect the parser,
-; but are included for readability
-
-(define i interpret-v3-str)
+(define (i prog-str class)
+  (i-str prog-str (mode:class class)))
 
 ; ; INSTANCE CREATION AND INSTANCE FIELDS
 

@@ -12,8 +12,7 @@
          racket/list
          racket/string)
 
-(provide interpret-parse-tree
-         interpret
+(provide interpret
          string-module
          file-module
          mode:class
@@ -27,14 +26,23 @@
 (define interpret
   (lambda (main-module
            #:mode [mode  mode:main-func]
-           #:return [return  default-return] ; todo: if class, ignore top-level return and lookup main
+           #:return [return  default-return]
            #:user-exn [user-exn  (default-user-exn)]
            #:throw [throw  (default-throw user-exn)]
            #:modules [mods  '()])
-    (interpret-parse-tree (parse-module main-module);todo str or file
+    (interpret-parse-tree (parse-module main-module)
+                          mode
                           return
-                          user-exn
-                          throw)))
+                          throw
+                          user-exn)))
+
+(define interpret-parse-tree
+  (lambda (parse-tree mode return throw user-exn . args)
+    (Mstate-stmt-list parse-tree
+                      new-state
+                      ctxt:default
+                      (conts-for-mode mode return throw user-exn))))
+
 ;; expects a class `class-name` with a static main() method in the main module
 (define (mode:class class-name)
   (cons 'class class-name))
@@ -44,16 +52,14 @@
 ;; default run mode
 (define mode:main-func (cons 'main-func null))
 
+;; tag a program with its format type
 (define string-module
   (lambda (str)
     (cons 'string str)))
-
 (define file-module
   (lambda (filepath)
     (cons 'file filepath)))
 
-; load main-module, load other modules
-; flag for how to treat main module: top-level script vs main function vs class' main function
 (define parse-module
   (lambda (module)
     (if (eq? (car module) 'file)
@@ -61,21 +67,36 @@
         (parse-str (cdr module)))))
 
 
-(define interpret-parse-tree
-  (lambda (parse-tree return user-exn throw . args)
-    (Mstate-stmt-list parse-tree
-                      new-state
-                      ctxt:default
-                      (conts-of
-                       #:next (lambda (s)
-                                (Mstate-main s
-                                             ctxt:default
-                                             return
-                                             throw
-                                             user-exn))
-                       #:throw throw
-                       #:user-exn user-exn))))
-; main function?
+(define conts-for-mode
+  (lambda (mode return throw user-exn)
+    (define common-conts
+      (conts-of #:throw throw
+                #:user-exn user-exn
+                #:break (default-break user-exn)
+                #:continue (default-continue user-exn)))
+    (case (car mode)
+      [(class)     (conts-of common-conts
+                             #:next (lambda (s)
+                                      (Mstate-main s
+                                                   ctxt:default
+                                                   return
+                                                   throw
+                                                   user-exn
+                                                   #:class (string->symbol (cdr mode))))
+                             #:return (λ (v s) (user-exn (ue:unexpected-return) s)))]
+      [(script)    (conts-of common-conts
+                             #:next (λ (s) (user-exn (ue:did-not-return) s))
+                             #:return return)]
+      [(main-func) (conts-of common-conts
+                             #:next (λ (s)
+                                      (Mstate-main s
+                                                   ctxt:default
+                                                   return
+                                                   throw
+                                                   user-exn))
+                             #:return (λ (v s) (user-exn (ue:unexpected-return) s)))])))
+
+
 ;; takes a value and modifies it for output
 (define prep-val-for-output
   (lambda (value)
@@ -960,7 +981,7 @@
     (Mshared-fun expr
                  state
                  context
-                 (conts-of conts ; todo: refactor funcall arg, move to context stack
+                 (conts-of conts
                            #:next (lambda (s) ((user-exn conts) (ue:no-return-value-fun (funcall->string expr)) state))
                            #:return (lambda (v s) ((return conts) v state))))))
 

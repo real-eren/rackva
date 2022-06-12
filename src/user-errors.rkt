@@ -95,6 +95,11 @@
   (exn:ctor type:did-not-return
             "Program did not reach a return statement"))
 
+(define type:unexpected-return 'unexpected-return)
+(define unexpected-return
+  (exn:ctor type:unexpected-return
+            "Encountered top-level return, but not in `script` mode"))
+
 (define type:uncaught-exception 'uncaught-exception)
 (define uncaught-exception
   (exn:ctor type:uncaught-exception

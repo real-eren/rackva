@@ -1,17 +1,13 @@
 #lang racket/base
 
-(require "error-test-shared.rkt"
-         "../src/interpreter-extension.rkt"
+(require "test-shared.rkt"
+         "../src/interpreter.rkt"
          "../src/user-errors.rkt"
          rackunit)
 
 
 (define (i program)
-  (interpret-v1-str program
-                    #:return (λ (v s) (fail-check "expected an error"))
-                    #:user-exn test-user-exn
-                    #:throw (λ (e s)
-                              (test-user-exn (ue:uncaught-exception e) s))))
+  (i-exn-str program mode:script))
 
 
 ; ; SHORT-CIRCUIT ||, &&

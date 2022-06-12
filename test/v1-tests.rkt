@@ -1,12 +1,14 @@
 #lang racket/base
 
-(require "../src/interpreter-extension.rkt"
+(require "test-shared.rkt"
+         "../src/interpreter.rkt"
          rackunit)
 
 ; white space / newlines do not affect the parser,
 ; but are included for readability
 
-(define i interpret-v1-str)
+(define (i prog-str)
+  (i-str prog-str mode:script))
 
 ; ; Literal Tests
 (test-equal? "return a positive literal"
