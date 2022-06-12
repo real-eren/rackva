@@ -5,7 +5,7 @@
          peek-next-symbol
          get-next-symbol
          unget-next-symbol
-         line-number)
+         parsing-error)
 
 ;;===============================================================
 ;; The Lexical Analyzer
@@ -62,7 +62,7 @@
     (begin
       (set! last-symbol-saved? #t))))
 
-; read the next character from the port
+; read and consume the next character from the port
 
 (define readchar 
   (lambda (port)
@@ -74,6 +74,17 @@
           (when (eqv? #\newline char)
             (set! line-number (+ 1 line-number)))
           char))))
+
+; read, without consuming, the next character
+(define peekchar
+  (lambda (port)
+    (when (not saved-last-char)
+      (set! saved-last-char #T)
+      (set! last-read-char (read-char port))
+      (when (eqv? #\newline last-read-char)
+        (set! line-number (+ 1 line-number))))
+    last-read-char))
+          
 
 ; unread the last character from the port so it can be read again
 
@@ -96,6 +107,10 @@
   (lambda ()
     (close-input-port in-port)
     (reset-global-vars)))
+
+(define (parsing-error msg)
+  (raise-user-error 'parser (format "near line ~a:\n~a"
+                                    line-number msg)))
 
 ; the current list of reserved words and operator characters
 
@@ -142,19 +157,30 @@
 (define lex
   (lambda ()
     (let ((nextchar (readchar in-port)))
-      (cond ((eof-object? nextchar) (return-eof-lex))
-            ((char-whitespace? nextchar) (lex))
-            ((char-alphabetic? nextchar) (return-id-lex (string->symbol (id-lex in-port (make-string 1 nextchar)))))
-            ((char-numeric? nextchar) (return-num-lex (num-lex in-port (addtointeger 0 nextchar))))
-            ((memq nextchar reserved-operator-list) (return-symbol-lex (string->symbol (symbol-lex in-port (make-string 1 nextchar)))))
-            ((char=? #\( nextchar) (return-left-paren-lex))
-            ((char=? #\) nextchar) (return-right-paren-lex))
-            ((char=? #\; nextchar) (return-semicolon-lex))
-            ((char=? #\{ nextchar) (return-leftbrace-lex))
-            ((char=? #\} nextchar) (return-rightbrace-lex))
-            ((char=? #\, nextchar) (return-comma-lex))
-            ((char=? #\. nextchar) (return-period-lex))
-            (else (return-null-lex nextchar))))))
+      (cond
+        ((eof-object? nextchar) (return-eof-lex))
+        ((char-whitespace? nextchar) (lex))
+        ((char-alphabetic? nextchar) (return-id-lex (string->symbol (id-lex in-port (make-string 1 nextchar)))))
+        ((char-numeric? nextchar) (return-num-lex (num-lex in-port (addtointeger 0 nextchar))))
+        ((char=? #\* nextchar) (if (char=? (peekchar in-port) #\/)
+                                   (parsing-error "")
+                                   (return-symbol-lex (string->symbol (symbol-lex in-port (make-string 1 nextchar))))))
+        ; comments. if /, peek next * -> */ or / -> /n
+        ((char=? #\/ nextchar) (let ([nextnextchar (readchar in-port)])
+                                 (case nextnextchar
+                                   [(#\/)    (line-comment-lex) (lex)]
+                                   [(#\*)    (block-comment-lex) (lex)]
+                                   [else     (unreadchar nextnextchar in-port)
+                                             (return-symbol-lex (string->symbol (symbol-lex in-port (make-string 1 nextchar))))])))
+        ((memq nextchar reserved-operator-list) (return-symbol-lex (string->symbol (symbol-lex in-port (make-string 1 nextchar)))))
+        ((char=? #\( nextchar) (return-left-paren-lex))
+        ((char=? #\) nextchar) (return-right-paren-lex))
+        ((char=? #\; nextchar) (return-semicolon-lex))
+        ((char=? #\{ nextchar) (return-leftbrace-lex))
+        ((char=? #\} nextchar) (return-rightbrace-lex))
+        ((char=? #\, nextchar) (return-comma-lex))
+        ((char=? #\. nextchar) (return-period-lex))
+        (else (return-null-lex nextchar))))))
 
 
 (define id-lex
@@ -184,3 +210,22 @@
           (symbol-lex fport (string-append idstring (make-string 1 nextchar)))
           (begin (unreadchar nextchar fport)
                  idstring)))))
+
+; returns nothing. consumes characters until newline or eof
+(define line-comment-lex
+  (lambda ()
+    (let ([nextchar (readchar in-port)])
+      (if (or (eqv? #\newline nextchar)
+              (eof-object? nextchar))
+          (unreadchar nextchar in-port)
+          (line-comment-lex)))))
+
+; returns nothing. consumes characters until */
+(define block-comment-lex
+  (lambda ([saw-star? #F])
+    (let ([nextchar (readchar in-port)])
+      (cond
+        [(eof-object? nextchar)   (parsing-error "unclosed comment")]
+        [(and saw-star? (eqv? #\/ nextchar))]
+        [(eqv? #\* nextchar)      (block-comment-lex #T)]
+        [else                     (block-comment-lex #F)]))))

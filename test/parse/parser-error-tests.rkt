@@ -105,3 +105,36 @@
   "abstract function in block"
   "{ function a(); }"))
 
+(test-case
+ "block comment inside identifiers"
+ (test-parser-exn
+  "block comment in var keyword"
+  "va/* comment */r x = 1; return 1;")
+ (test-parser-exn
+  "block comment in var name"
+  "var lon/* comment */gName = 2; return longName;"))
+
+(test-case
+ "unclosed block comments"
+ (test-parser-exn
+  "unclosed block comment in beginning of prog"
+  "/* this is a block comment
+var x;
+return x;")
+ (test-parser-exn
+  "unclosed block comment in end of prog"
+  "var x = 1;
+return x;
+/* this is a block comment")
+ (test-parser-exn
+  "unclosed block comment in middle of prog"
+  "var x;
+/* this is a block comment
+return x;")
+ (test-parser-exn
+  "start and end delimiter can't share *"
+  "var a; /*/")
+ (test-parser-exn
+  "block comments don't nest"
+  "var a; /* /* */ */"))
+
