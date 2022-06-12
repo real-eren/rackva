@@ -153,6 +153,45 @@ class A {
 }" "A")
              765)
 
+(test-equal? "return statement in this-chain-ctor, still runs original ctor"
+             (i "
+class A {
+  var a;
+  A(n) {
+    return 5;
+    var shouldNotRun = 1/0;
+  }
+  A() {
+    this(0);
+    a = 10;
+  }
+  static function main() {
+    var v = new A();
+    return v.a;
+  }
+}" "A")
+             10)
+
+(test-equal? "return statement in parent ctor, still runs child ctor"
+             (i "
+class A {
+  A(n) {
+    return 5;
+    var shouldNotRun = 1/0;
+  }
+}
+class B extends A {
+  var b;
+  B() {
+    super(0);
+    b = 10;
+  }
+  static function main() {
+    var v = new B();
+    return v.b;
+  }
+}" "B")
+             10)
 
 
 ; ; STATIC METHODS
