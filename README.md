@@ -14,71 +14,70 @@ Apart from variables and fields being boxed, within the intepreter, values are i
 
 
 ## Parsers and lexer:
-The 3 parsers and lexer are lightly modified copies of those given in the assignment.
-They were modified to also support string-form programs.
+The parser and lexer are lightly modified copies of those given in the assignment.
+
 
 # Language Features:
 - Dynamic typing
-- Stack trace for user errors (shown later)
-
-
-## V1
 - Int and Bool literals, expressions
-- Basic Arithmetic and Logical operators
-- Short-circuiting || and &&
+- Basic Arithmetic and Logical operators  
+  `+ - * / %`  
+  `== !=`  
+  `< <= > >=`  
+  `! -`  
+- Short-circuiting `||` and `&&`
 - Variables
 - If, While, Try, block statements
 
-### Sample
-```js
-var x = 0;
-var y;
-y = true;
-while(x < 12) {
-  try {
-    x = x + 10;
-    {
-      var x = (1 - 2 / 3 % 4 * 5) == 1 || !((x = 1 / 0) != 0);
+  -  Sample
+  ```js
+  var x = 0;
+  var y;
+  y = true;
+  while (x < 12) {
+    try {
+      x = x + 10;
+      {
+        var x = (1 - 2 / 3 % 4 * 5) == 1 || !((x = 1 / 0) != 0);
+      }
+      continue;
+    } catch(e) {
+      y = e;
+    } finally {
+      x = x + 1;
     }
-    continue;
-  } catch(e) {
-    y = e;
-  } finally {
-     x = x + 1;
+    throw 2+2;
   }
-  throw 2+2;
-}
-return x;
-```
-returns 22
+  return x;
+  // returns 22
+  ```
 
-## V2
-- V1 features
 - functions
   - top-level and nested
   - pass-by-value and pass-by-reference parameters
   - w/ or w/out return value
   - overloading by # parameters
 
-### Sample
-```js
-function foo() {
-  return 1;
-}
+  -  Sample
+  ```js
+  function foo() {
+    var v = 0;
+    function inner(&x) { x = 1; }
+    inner(v);
+    return v;
+  }
 
-function foo(x, y) {
-  return x + y;
-}
-var globalVar = foo();
+  function foo(x, y) {
+    return x + y;
+  }
+  var globalVar = foo();
 
-function main() {
-  return globalVar + foo(100 * foo(), 1000);
-}
-```
-returns 1101
+  function main() {
+    return globalVar + foo(100 * foo(), 1000);
+  }
+  // returns 1101
+  ```
 
-## V3
-- V2 features
 - classes
   - static members
   - instance members
@@ -87,45 +86,43 @@ returns 1101
   - polymorphism
   - abstract methods
 - dot operator
+  -  Sample
+  ```js
+  class A {
+      var instField1;
+      var instField2 = true;
+      var instField3 = foo();
 
-### Sample
-```js
-class A {
-    var instField1;
-    var instField2 = true;
-    var instField3 = foo();
+      static var staticField = new A();
 
-    static var staticField = new A();
+      A() {}
+      A(a, b) {}
 
-    A() {}
-    A(a, b) {}
+      static function staticFun(valueParam, &refParam) {}
+  }
 
-    static function staticFun(valueParam, &refParam) {}
-}
+  class B extends A {
+      var instField1;
 
-class B extends A {
-    var instField1;
+      B() {
+        this(1, false);
+      }
+      B(x, y) {
+        super(x, y);
+        if (y) throw this.instField1;
+      }
 
-    B() {
-      this(1, false);
-    }
-    B(x, y) {
-      super(x, y);
-      if (y) throw this.instField1;
-    }
-
-    static function main() {
-        A.staticField = a.b().c.d();
-        var b = new B();
-        return b.instField3;
-    }
-}
-```
-
+      static function main() {
+          A.staticField = a.b().c.d();
+          var b = new B();
+          return b.instField3;
+      }
+  }
+  ```
 
 
-## Stack trace examples:
-(called in `racket` with `interpret-v3-str` and `interpret-v2-str`)
+
+- Stack trace for user errors
 
 ---
 ```js
