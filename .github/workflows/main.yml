@@ -18,6 +18,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Cache Racket dependencies
+        uses: actions/cache@v2
+        with:
+          path: |
+            ~/.cache/racket
+            ~/.local/share/racket
+          key: ${{ runner.os }}-racket-8.2
+
       - name: Install Racket
         uses: Bogdanp/setup-racket@v1.6.1
         with:
@@ -25,14 +33,15 @@ jobs:
           distribution: 'full'
           variant: 'CS'
           version: '8.2'
-          
+
       - name: Install Dependencies
-        run: raco pkg install --auto cover
+        run: raco pkg install --auto --skip-installed cover
         
       - name: Run Tests
         run: raco test -e --timeout 120 -q --table --jobs 10 src test
         
-      - run: raco cover src test
+      - run: raco cover -Q src test
+      
       - name: Archive code coverage reports
         uses: actions/upload-artifact@v3
         with:
