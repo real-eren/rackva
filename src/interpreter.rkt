@@ -967,8 +967,7 @@
     (cond
       [(number? token)            token]
       [(eq? 'true token)          #t]
-      [(eq? 'false token)         #f]
-      [else                       (error "not a bool/int literal" token)])))
+      [(eq? 'false token)         #f])))
 
 (define (literal? v)
   (or (number? v) (eq? 'true v) (eq? 'false v)))
@@ -1479,34 +1478,25 @@
              (not (null? expr))
              (is-dotted? expr)))))
 
-;; keys are symbols representative of a construct type
-;; values are the corresponding constructs (type of statement)
-(define constructs-table
-  (map:of
-   'return   Mstate-return
-   'while    Mstate-while
-   'if       Mstate-if
-   'class    Mstate-class-decl
-   'var      Mstate-var-decl
-   'function Mstate-fun-decl
-   'funcall  Mstate-fun-call
-   '=        Mstate-assign
-   'begin    Mstate-block
-   'try      Mstate-try
-   'throw    Mstate-throw
-   'break    Mstate-break
-   'continue Mstate-continue))
-
-;; returns whether the statement is a recognized construct
-(define is-construct?
-  (lambda (statement)
-    (map:contains? (action statement) constructs-table)))
 
 ;; returns the Mstate function that goes with this statement,
 ;; assuming it is a valid construct
 (define get-Mstate
   (lambda (statement)
-    (map:get (action statement) constructs-table)))
+    (case (action statement)
+      [(return)   Mstate-return]
+      [(while)    Mstate-while]
+      [(if)       Mstate-if]
+      [(class)    Mstate-class-decl]
+      [(var)      Mstate-var-decl]
+      [(function) Mstate-fun-decl]
+      [(funcall)  Mstate-fun-call]
+      [(=)        Mstate-assign]
+      [(begin)    Mstate-block]
+      [(try)      Mstate-try]
+      [(throw)    Mstate-throw]
+      [(break)    Mstate-break]
+      [(continue) Mstate-continue])))
 
 
 ;; returns whether a nested expression is of the boolean variety
