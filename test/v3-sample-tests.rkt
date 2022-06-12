@@ -1,9 +1,12 @@
 #lang racket/base
-(require "../src/interpreter-extension.rkt"
+(require "test-shared.rkt"
+         "../src/interpreter.rkt"
          rackunit)
+
 ;; Tests provided in the assignment
 
-(define i interpret-v3-str)
+(define (i prog-str class)
+  (i-str prog-str (mode:class class)))
 
 (test-equal? "Test 1"
              (i "

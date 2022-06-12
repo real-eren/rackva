@@ -1,8 +1,9 @@
-; If you are using scheme instead of racket, comment these two lines, uncomment the (load "lex.scm") line and comment the (require "lex.scm") line
 #lang racket/base
-(provide (all-defined-out))
+(provide parse-file
+         parse-str)
 
-; A simple parser for a Java style language
+; A simple parser for a Python/Java style language
+; Modified copy of `classParser` from the copy given in
 ; EECS 345: Programming Languages Concepts
 ;
 ; A recursive descent parser and a lexical analyzer for simple Java statements.
@@ -16,10 +17,9 @@
 ;
 ; The return value is a parse tree in list format
 
-; (load "lex.scm")
 (require "lex.rkt")
 
-(define __parser
+(define parse-port
   (lambda (input-port)
     (begin
       (start-lex input-port)
@@ -28,13 +28,13 @@
         parse-tree))))
 
 ; takes a filename as a string
-(define parser
+(define parse-file
   (lambda (filename)
-    (__parser (open-input-file filename))))
+    (parse-port (open-input-file filename))))
 ; takes a string representing a program
-(define parser-str
+(define parse-str
   (lambda (str)
-    (__parser (open-input-string str))))
+    (parse-port (open-input-string str))))
 
 (define (parse-error msg)
   (raise-user-error 'parser (format "at line ~a:\n~a"
@@ -46,26 +46,34 @@
 (define program-parse
   (lambda ()
     (if (eq? (car (get-next-symbol)) 'EOF)
-       '()
-       (begin
-         (unget-next-symbol)
-         (let ((parsetree (class-parse)))
-           (cons parsetree (program-parse)))))))
+        '()
+        (begin
+          (unget-next-symbol)
+          (let ((parsetree (program-top-level-parse)))
+            (cons parsetree (program-parse)))))))
 
-; a program is made up of classes.  Each class should be a name, the class that is extended,
+; a program is made up of global members, top-level if/while/try statements, and classes. 
+(define program-top-level-parse
+  (lambda ()
+    (let ([nextsymbol  (car (get-next-symbol))])
+      (if (eq? nextsymbol 'class)
+          (class-parse)
+          (begin
+            (unget-next-symbol)
+            (statement-parse))))))
+
+; Each class should be a name, the class that is extended,
 ; and a body nested in braces
 
 (define class-parse
   (lambda ()
-    (if (not (eq? (car (get-next-symbol)) 'class))
-        (parse-error "Illegal start of class")
-        (let* ((classname (get-next-symbol))
-               (extendclass (extend-parse)))
-          (if (not (eq? (car classname) 'ID))
-              (parse-error "Illegal class name")
-              (if (not (eq? (car (get-next-symbol)) 'LEFTBRACE))
-                  (parse-error "Missing left brace at start of class")
-                  (list 'class (cdr classname) extendclass (class-body-parse (cdr classname)))))))))
+    (let* ((classname (get-next-symbol))
+           (extendclass (extend-parse)))
+      (if (not (eq? (car classname) 'ID))
+          (parse-error "Illegal class name")
+          (if (not (eq? (car (get-next-symbol)) 'LEFTBRACE))
+              (parse-error "Missing left brace at start of class")
+              (list 'class (cdr classname) extendclass (class-body-parse (cdr classname))))))))
 
 ; parse the extends statement on a class, if it exists
 
@@ -74,8 +82,7 @@
     (if (not (eq? (car (get-next-symbol)) 'extends))
         (begin
           (unget-next-symbol)
-          '()
-          )
+          '())
         (let ((extendclass (get-next-symbol)))
           (if (not (eq? (car extendclass) 'ID))
               (parse-error "Illegal superclass name")
@@ -86,11 +93,11 @@
 (define class-body-parse
   (lambda (classname)
     (if (eq? (car (get-next-symbol)) 'RIGHTBRACE)
-       '()
-       (begin
-         (unget-next-symbol)
-         (let ((parsetree (top-level-parse classname)))
-           (cons parsetree (class-body-parse classname)))))))
+        '()
+        (begin
+          (unget-next-symbol)
+          (let ((parsetree (top-level-parse classname)))
+            (cons parsetree (class-body-parse classname)))))))
 
 ; parse the top level of a class.  The top level is a function definition (an identifier followed by a left
 ; parenthesis) or is a variable declaration.  Functions and variables can be static (class) or non-static (instance).
@@ -112,18 +119,18 @@
       (cond
         ((eq? (car firstsymbol) 'function) (top-function-parse static))
         ((eq? (car firstsymbol) 'var)
-            (let ((parse-statement '()))
-              (begin 
-                (set! parse-statement (top-declare-parse static))
-                (if (eq? (car (get-next-symbol)) 'SEMICOLON)
-                    parse-statement
-                    (parse-error "Missing semicolon")))))
+         (let ((parse-statement '()))
+           (begin 
+             (set! parse-statement (top-declare-parse static))
+             (if (eq? (car (get-next-symbol)) 'SEMICOLON)
+                 parse-statement
+                 (parse-error "Missing semicolon")))))
         ((eq? (car firstsymbol) 'ID)
-           (cond
-	      ((not (equal? (cdr firstsymbol) classname)) (parse-error "Illegal language structure or constructor with different name as class"))
-	      ((not (eq? (car (get-next-symbol)) 'LEFTPAREN)) (parse-error "Illegal start of constructor definition"))
-              (static (parse-error "Constructor can not be static"))
-	      (else (constructor-parse)))) 
+         (cond
+           ((not (equal? (cdr firstsymbol) classname)) (parse-error "Illegal language structure or constructor with different name as class"))
+           ((not (eq? (car (get-next-symbol)) 'LEFTPAREN)) (parse-error "Illegal start of constructor definition"))
+           (static (parse-error "Constructor can not be static"))
+           (else (constructor-parse)))) 
         (else (parse-error "Illegal start of function definition or variable declaration"))))))
 
 ; calls function-parse to parse a function name.  It is a static function, replaces the operator
@@ -153,23 +160,23 @@
 (define function-parse
   (lambda (toplevel)
     (let ((name (get-next-symbol)))
-       (if (and (eq? (car name) 'ID) (eq? (car (get-next-symbol)) 'LEFTPAREN))
-           (let* ((paramlist (get-formalparameter-list))
-                  (nextsymbol (car (get-next-symbol))))
-              (if (not (eq? nextsymbol 'LEFTBRACE))
-                  (if (and (eq? nextsymbol 'SEMICOLON) toplevel)
-                      (list 'abstract-function (cdr name) paramlist)
-                      (parse-error "Missing left brace"))
-                  (list 'function (cdr name) paramlist (compound-statement-parse))))
-           (parse-error "Illegal start of function definition")))))
+      (if (and (eq? (car name) 'ID) (eq? (car (get-next-symbol)) 'LEFTPAREN))
+          (let* ((paramlist (get-formalparameter-list))
+                 (nextsymbol (car (get-next-symbol))))
+            (if (not (eq? nextsymbol 'LEFTBRACE))
+                (if (and (eq? nextsymbol 'SEMICOLON) toplevel)
+                    (list 'abstract-function (cdr name) paramlist)
+                    (parse-error "Missing left brace"))
+                (list 'function (cdr name) paramlist (compound-statement-parse))))
+          (parse-error "Illegal start of function definition")))))
 
 ; parse a constructor.  Very similar to a function parse but uses "constructor" instead of "function name" as the header
 (define constructor-parse
   (lambda ()
     (let ((paramlist (get-formalparameter-list)))
-       (if (not (eq? (car (get-next-symbol)) 'LEFTBRACE))
-           (parse-error "Missing left brace")
-           (list 'constructor paramlist (compound-statement-parse))))))
+      (if (not (eq? (car (get-next-symbol)) 'LEFTBRACE))
+          (parse-error "Missing left brace")
+          (list 'constructor paramlist (compound-statement-parse))))))
 
 ; parse the formal parameter list.  The list is a sequence of identifiers separated by commas
 
@@ -179,20 +186,20 @@
       (cond
         ((eq? (car nextsymbol) 'RIGHTPAREN) '())
         ((eq? (car nextsymbol) 'ID)
-          (let ((separator (car (get-next-symbol))))
-            (cond
-              ((eq? separator 'COMMA) (cons (cdr nextsymbol) (get-formalparameter-list)))
-              ((eq? separator 'RIGHTPAREN) (list (cdr nextsymbol)))
-              (else (parse-error "Missing comma")))))
+         (let ((separator (car (get-next-symbol))))
+           (cond
+             ((eq? separator 'COMMA) (cons (cdr nextsymbol) (get-formalparameter-list)))
+             ((eq? separator 'RIGHTPAREN) (list (cdr nextsymbol)))
+             (else (parse-error "Missing comma")))))
         ((and (eq? (car nextsymbol) 'BINARY-OP) (eq? (cdr nextsymbol) '&))
-	   (let* ((id (get-next-symbol))
-                  (separator (car (get-next-symbol))))
-             (if (eq? (car id) 'ID)
-                 (cond
-                   ((eq? separator 'COMMA) (cons '& (cons (cdr id) (get-formalparameter-list))))
-                   ((eq? separator 'RIGHTPAREN) (list '& (cdr id)))
-                   (else (parse-error "Missing comma")))
-                 (parse-error "Missing identifier after reference operator"))))
+         (let* ((id (get-next-symbol))
+                (separator (car (get-next-symbol))))
+           (if (eq? (car id) 'ID)
+               (cond
+                 ((eq? separator 'COMMA) (cons '& (cons (cdr id) (get-formalparameter-list))))
+                 ((eq? separator 'RIGHTPAREN) (list '& (cdr id)))
+                 (else (parse-error "Missing comma")))
+               (parse-error "Missing identifier after reference operator"))))
         (else (parse-error "Illegal function parameter, missing right parenthesis?"))))))
 
 ; parse a statement that can be an if-statement, a while-statement, or a compound statement
@@ -204,7 +211,7 @@
       (cond
         ((eq? nextsymbol 'if) (if-parse))
         ((eq? nextsymbol 'while) (while-parse))
-	((eq? nextsymbol 'function) (function-parse #f))
+        ((eq? nextsymbol 'function) (function-parse #f))
         ((eq? nextsymbol 'try) (try-parse))
         ((eq? nextsymbol 'LEFTBRACE) (cons 'begin (compound-statement-parse)))
         (else (begin
@@ -225,9 +232,9 @@
               ((eq? (car nextsymbol) 'throw) (set! parse-statement (list 'throw (value-parse))))
               ((eq? (car nextsymbol) 'ID) (begin (unget-next-symbol) (set! parse-statement (function-or-assign-parse))))
               (else (parse-error "language feature not implemented")))
-         (if (eq? (car (get-next-symbol)) 'SEMICOLON)
-             parse-statement
-             (parse-error "Missing semicolon"))))))
+        (if (eq? (car (get-next-symbol)) 'SEMICOLON)
+            parse-statement
+            (parse-error "Missing semicolon"))))))
 
 ; parse a compound statement.  We already saw the left brace so continue until we see a right brace.
 
@@ -253,14 +260,14 @@
     (if (not (eq? (car (get-next-symbol)) 'LEFTPAREN))
         (parse-error "Missing opening parenthesis")
         (let ((condition (value-parse)))  ; changed
-           (if (not (eq? (car (get-next-symbol)) 'RIGHTPAREN))
-               (parse-error "Missing closing parenthesis")
-               (let ((if-statement (statement-parse)))
-                  (if (eq? (car (get-next-symbol)) 'else)
-                      (list 'if condition if-statement (statement-parse))
-                      (begin
-                        (unget-next-symbol)
-                        (list 'if condition if-statement)))))))))
+          (if (not (eq? (car (get-next-symbol)) 'RIGHTPAREN))
+              (parse-error "Missing closing parenthesis")
+              (let ((if-statement (statement-parse)))
+                (if (eq? (car (get-next-symbol)) 'else)
+                    (list 'if condition if-statement (statement-parse))
+                    (begin
+                      (unget-next-symbol)
+                      (list 'if condition if-statement)))))))))
 
 ; parse a try block.  The try block is a compound statement followed by catch block and/or
 ; a finally block
@@ -341,7 +348,7 @@
       (cond
         ((eq? (car nextsymbol) 'LEFTPAREN) (id-parse (funcall-parse leftvalue)))
         ((and (eq? (car nextsymbol) 'BINARY-OP) (eq? (cdr nextsymbol) 'dot))
-           (id-parse (list 'dot leftvalue (variable-parse (get-next-symbol)))))
+         (id-parse (list 'dot leftvalue (variable-parse (get-next-symbol)))))
         (else (begin
                 (unget-next-symbol)
                 leftvalue))))))
@@ -523,34 +530,36 @@
 
 (define multterm-parse-helper
   (lambda (firstoperand)
-     (let ((op (get-next-symbol)))
-       (if (and (eq? (car op) 'BINARY-OP) (or (eq? (cdr op) '*) (eq? (cdr op) '/) (eq? (cdr op) '%)))
-           (multterm-parse-helper (list (cdr op) firstoperand (operand-parse (get-next-symbol))))
-           (begin
-             (unget-next-symbol)
-             firstoperand)))))
+    (let ((op (get-next-symbol)))
+      (if (and (eq? (car op) 'BINARY-OP) (or (eq? (cdr op) '*) (eq? (cdr op) '/) (eq? (cdr op) '%)))
+          (multterm-parse-helper (list (cdr op) firstoperand (operand-parse (get-next-symbol))))
+          (begin
+            (unget-next-symbol)
+            firstoperand)))))
 
 ; continue parsing the value.  The final level is the unary operators, variables, numbers, and nested parentheses.
 
 (define operand-parse
   (lambda (firstsymbol)
     (cond
-      ((eq? (car firstsymbol) 'LEFTPAREN)
-          (let ((retvalue (value-parse)))
-            (if (eq? (car (get-next-symbol)) 'RIGHTPAREN)
-                retvalue
-                (parse-error "Unmatched left parenthesis"))))
-      ((and (eq? (car firstsymbol) 'BINARY-OP) (eq? (cdr firstsymbol) '-)) (list '- (operand-parse (get-next-symbol))))  ; this is a new line
-      ((and (eq? (car firstsymbol) 'BINARY-OP) (eq? (cdr firstsymbol) '!)) (list '! (operand-parse (get-next-symbol))))  ; this is a new line
-      ((eq? (car firstsymbol) 'NUMBER) (cdr firstsymbol))
-      ((eq? (car firstsymbol) 'ID) (id-parse (variable-parse firstsymbol)))
-      ((eq? (car firstsymbol) 'BOOLEAN) (cdr firstsymbol))
-      ((eq? (car firstsymbol) 'new) (let* ((classid (get-next-symbol))
-                                           (nextsymbol (get-next-symbol)))
-                                      (cond ((not (eq? (car classid) 'ID)) (parse-error "Illegal class name in new"))
-                                            ((not (eq? (car nextsymbol) 'LEFTPAREN)) (parse-error "Missing left parenthesis"))
-                                            (else (id-parse (cons 'new (cdr (funcall-parse (cdr classid)))))))))
-      (else (parse-error "Unknown statmement")))));)
+      ((eq? (car firstsymbol) 'LEFTPAREN)       (let ((retvalue (value-parse)))
+                                                  (if (eq? (car (get-next-symbol)) 'RIGHTPAREN)
+                                                      retvalue
+                                                      (parse-error "Unmatched left parenthesis"))))
+      ((and (eq? (car firstsymbol) 'BINARY-OP)
+            (eq? (cdr firstsymbol) '-))         (list '- (operand-parse (get-next-symbol))))
+      ((and (eq? (car firstsymbol) 'BINARY-OP)
+            (eq? (cdr firstsymbol) '!))         (list '! (operand-parse (get-next-symbol))))
+      ((eq? (car firstsymbol) 'NUMBER)          (cdr firstsymbol))
+      ((eq? (car firstsymbol) 'ID)              (id-parse (variable-parse firstsymbol)))
+      ((eq? (car firstsymbol) 'BOOLEAN)         (cdr firstsymbol))
+      ((eq? (car firstsymbol) 'new)             (let* ((classid (get-next-symbol))
+                                                       (nextsymbol (get-next-symbol)))
+                                                  (cond
+                                                    ((not (eq? (car classid) 'ID))           (parse-error "Illegal class name in new"))
+                                                    ((not (eq? (car nextsymbol) 'LEFTPAREN)) (parse-error "Missing left parenthesis"))
+                                                    (else                                    (id-parse (cons 'new (cdr (funcall-parse (cdr classid)))))))))
+      (else (parse-error "Unknown statmement")))))
 
 ; parse a variable name.
 

@@ -1,29 +1,27 @@
 #lang racket/base
 
-(require "error-test-shared.rkt"
-         "../src/interpreter-extension.rkt"
+(require "test-shared.rkt"
+         "../src/interpreter.rkt"
          "../src/user-errors.rkt"
          rackunit)
 
 (define (i program class)
-  (interpret-v3-str program
-                    class
-                    #:return (λ (v s) (fail-check "expected an error"))
-                    #:user-exn test-user-exn
-                    #:throw (λ (e s)
-                              (test-user-exn (ue:uncaught-exception e) s))))
+  (i-exn-str program (mode:class class)))
+
+(define (i-throw program class)
+  (i-str program (mode:class class)))
 
 (test-case
  "user-exns raised as user errors in normal interpret"
  (check-exn exn:fail:user?
-            (λ () (interpret-v3-str "
+            (λ () (i-throw "
 class A {
   static function main() {
     return 5;
   }
 }" "NotAClass")))
  (check-exn exn:fail:user?
-            (λ () (interpret-v3-str "
+            (λ () (i-throw "
 class A {
   A(a, &b, c) {
     throw 5;
@@ -47,7 +45,7 @@ class C {
 }
 " "C")))
  (check-exn exn:fail:user?
-            (λ () (interpret-v3-str "
+            (λ () (i-throw "
 class A {
   function foo() { return 3; }
   static function foo(a) { return 4; }

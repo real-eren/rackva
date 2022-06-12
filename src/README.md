@@ -8,11 +8,11 @@
  - `Mboolean`s
  - `Mname`s
 
-`interpreter-extension.rkt` contains overloads for interpret, including legacy versions
-
 `conts.rkt` contains the continuation mapping
 
-`src-gen.rkt` converts AST from parsers -> source code
+`src-gen.rkt` converts AST -> source code
+
+`user-errors.rkt` defines user-facing errors for the interpreter
 
 ### state
 | file | desc |
@@ -26,8 +26,6 @@
 
 ### utils
 `map.rkt` contains an implementation of a map (associative list)
-
-`testing.rkt` contains helpers for creating concise unit tests
 
 
 ## Map Keys

@@ -2,93 +2,100 @@
 
 (require "conts.rkt"
          "user-errors.rkt"
-         "parse/classParser.rkt"
+         "parse/parser.rkt"
          "state/context.rkt"
          "state/function.rkt"
          "state/instance.rkt"
          "state/state.rkt"
          "util/map.rkt"
          racket/bool
-         racket/function
          racket/list
          racket/string)
 
 (provide interpret
-         interpret-parse-tree-v3
-         interpret-parse-tree-v2
-         interpret-parse-tree-v1
-
-         default-return
-         default-throw
-         default-user-exn)
+         string-module
+         file-module
+         mode:class
+         mode:script
+         mode:main-func)
 
 ;;;; Interpreter
-;; This module interprets programs parsed by the parsers
-;; `simpleParser.rkt`, `functionParser.rkt`, `classParser.rkt`
+;; This module interprets programs parsed by `parser.rkt`
 ;; Tests for this module are in the `v{n}-tests` and `v{n}-error-tests`
-;; files, where {n} corresponds to the version of the interpreter being tested
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;; High-level functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-;; takes a file name and a string class name, interprets the program,
-;; and returns the result
+;; files in `../test/`, where {n} corresponds to the version of the interpreter being tested
 (define interpret
-  (lambda (file-name class-name)
-    (let ([user-exn  (default-user-exn)])
-      (interpret-parse-tree-v3 (parser file-name)
-                               class-name
-                               default-return
-                               (default-throw user-exn)
-                               user-exn))))
+  (lambda (main-module
+           #:mode [mode  mode:main-func]
+           #:return [return  default-return]
+           #:user-exn [user-exn  (default-user-exn)]
+           #:throw [throw  (default-throw user-exn)]
+           #:modules [mods  '()])
+    (interpret-parse-tree (parse-module main-module)
+                          mode
+                          return
+                          throw
+                          user-exn)))
 
-;; interprets parse-trees produced by classParser.rkt
-(define interpret-parse-tree-v3
-  (lambda (parse-tree entry-point return throw user-exn)
+(define interpret-parse-tree
+  (lambda (parse-tree mode return throw user-exn . args)
     (Mstate-stmt-list parse-tree
                       new-state
                       ctxt:default
-                      (conts-of
-                       #:next (lambda (s)
-                                (Mstate-main s
-                                             ctxt:default
-                                             return
-                                             throw
-                                             user-exn
-                                             #:class (string->symbol entry-point)))
-                       #:throw throw
-                       #:user-exn user-exn))))
+                      (conts-for-mode mode return throw user-exn))))
 
-;;interprets parse-trees produced by functionParser.rkt
-(define interpret-parse-tree-v2
-  (lambda (parse-tree return throw user-exn)
-    (Mstate-stmt-list parse-tree
-                      new-state
-                      ctxt:default
-                      (conts-of ; only next and throw are actually reachable
-                       #:next (lambda (s) (Mstate-main s ctxt:default return throw user-exn))
-                       #:throw throw
-                       #:user-exn user-exn))))
+;; expects a class `class-name` with a static main() method in the main module
+(define (mode:class class-name)
+  (cons 'class class-name))
+;; expects a top-level return
+(define mode:script (cons 'script null))
+;; expects for a top-level main() function in the main module
+;; default run mode
+(define mode:main-func (cons 'main-func null))
 
-;; legacy, for testing
-;; interprets parse-trees produced by simpleParser.rkt
-(define interpret-parse-tree-v1
-  (lambda (simple-parse-tree return throw user-exn)
-    (Mstate-stmt-list simple-parse-tree
-                      new-state
-                      ctxt:default
-                      (conts-of
-                       #:return return
-                       #:next (lambda (s) (user-exn (ue:did-not-return) s))
-                       #:throw throw
-                       #:break (default-break user-exn)
-                       #:continue (default-continue user-exn)
-                       #:user-exn user-exn))))
+;; tag a program with its format type
+(define string-module
+  (lambda (str)
+    (cons 'string str)))
+(define file-module
+  (lambda (filepath)
+    (cons 'file filepath)))
+
+(define parse-module
+  (lambda (module)
+    (if (eq? (car module) 'file)
+        (parse-file (cdr module))
+        (parse-str (cdr module)))))
+
+
+(define conts-for-mode
+  (lambda (mode return throw user-exn)
+    (define common-conts
+      (conts-of #:throw throw
+                #:user-exn user-exn
+                #:break (default-break user-exn)
+                #:continue (default-continue user-exn)))
+    (case (car mode)
+      [(class)     (conts-of common-conts
+                             #:next (lambda (s)
+                                      (Mstate-main s
+                                                   ctxt:default
+                                                   return
+                                                   throw
+                                                   user-exn
+                                                   #:class (string->symbol (cdr mode))))
+                             #:return (λ (v s) (user-exn (ue:unexpected-return) s)))]
+      [(script)    (conts-of common-conts
+                             #:next (λ (s) (user-exn (ue:did-not-return) s))
+                             #:return return)]
+      [(main-func) (conts-of common-conts
+                             #:next (λ (s)
+                                      (Mstate-main s
+                                                   ctxt:default
+                                                   return
+                                                   throw
+                                                   user-exn))
+                             #:return (λ (v s) (user-exn (ue:unexpected-return) s)))])))
+
 
 ;; takes a value and modifies it for output
 (define prep-val-for-output
@@ -960,8 +967,7 @@
     (cond
       [(number? token)            token]
       [(eq? 'true token)          #t]
-      [(eq? 'false token)         #f]
-      [else                       (error "not a bool/int literal" token)])))
+      [(eq? 'false token)         #f])))
 
 (define (literal? v)
   (or (number? v) (eq? 'true v) (eq? 'false v)))
@@ -974,7 +980,7 @@
     (Mshared-fun expr
                  state
                  context
-                 (conts-of conts ; todo: refactor funcall arg, move to context stack
+                 (conts-of conts
                            #:next (lambda (s) ((user-exn conts) (ue:no-return-value-fun (funcall->string expr)) state))
                            #:return (lambda (v s) ((return conts) v state))))))
 
@@ -1198,7 +1204,7 @@
                   run-context
                   conts)
         ((user-exn conts) (ue:ctor-DNE class-name 
-                                       (string-join (map (curry format "~a") arg-list)
+                                       (string-join (map (λ (arg) (format "~a" arg)) arg-list)
                                                     ", "
                                                     #:before-first "("
                                                     #:after-last ")"))
@@ -1472,34 +1478,25 @@
              (not (null? expr))
              (is-dotted? expr)))))
 
-;; keys are symbols representative of a construct type
-;; values are the corresponding constructs (type of statement)
-(define constructs-table
-  (map:of
-   'return   Mstate-return
-   'while    Mstate-while
-   'if       Mstate-if
-   'class    Mstate-class-decl
-   'var      Mstate-var-decl
-   'function Mstate-fun-decl
-   'funcall  Mstate-fun-call
-   '=        Mstate-assign
-   'begin    Mstate-block
-   'try      Mstate-try
-   'throw    Mstate-throw
-   'break    Mstate-break
-   'continue Mstate-continue))
-
-;; returns whether the statement is a recognized construct
-(define is-construct?
-  (lambda (statement)
-    (map:contains? (action statement) constructs-table)))
 
 ;; returns the Mstate function that goes with this statement,
 ;; assuming it is a valid construct
 (define get-Mstate
   (lambda (statement)
-    (map:get (action statement) constructs-table)))
+    (case (action statement)
+      [(return)   Mstate-return]
+      [(while)    Mstate-while]
+      [(if)       Mstate-if]
+      [(class)    Mstate-class-decl]
+      [(var)      Mstate-var-decl]
+      [(function) Mstate-fun-decl]
+      [(funcall)  Mstate-fun-call]
+      [(=)        Mstate-assign]
+      [(begin)    Mstate-block]
+      [(try)      Mstate-try]
+      [(throw)    Mstate-throw]
+      [(break)    Mstate-break]
+      [(continue) Mstate-continue])))
 
 
 ;; returns whether a nested expression is of the boolean variety

@@ -1,26 +1,22 @@
 #lang racket/base
 
-(require "error-test-shared.rkt"
-         "../src/interpreter-extension.rkt"
+(require "test-shared.rkt"
+         "../src/interpreter.rkt"
          "../src/user-errors.rkt"
          rackunit)
 
 (define (i program)
-  (interpret-v2-str program
-                    #:return (λ (v s) (fail-check "expected an error"))
-                    #:user-exn test-user-exn
-                    #:throw (λ (e s)
-                              (test-user-exn (ue:uncaught-exception e) s))))
+  (i-exn-str program mode:main-func))
 
 (test-case
  "user-exn raised as user error in normal interpret"
  (check-exn exn:fail:user?
-            (λ () (interpret-v2-str "
+            (λ () (i-str "
 var x = f();
 
 function main() {
   return x;
-}"))))
+}" mode:main-func))))
 
 ; ; FUNCTIONS
 (test-case

@@ -3,7 +3,7 @@
          racket/string)
 (provide AST-path->stack-trace)
 
-;;;; Takes AST nodes from simpleParser/functionParser/classParser
+;;;; Takes AST nodes from parser
 ;;;; and produces equivalent source code
 
 (define ((? symbl) expr)
@@ -669,7 +669,7 @@ _}
 ;; | block | while | if | try
 ;; | funcall | fundecl | abstract fundecl | static fundecl
 ;; | class
-; less strict than actual CFG because the input comes from the parsers,
+; less strict than actual CFG because the input comes from the parser,
 ; which already validate the syntax
 (define stmt-preds
   (list break?  continue?  return?  throw?
@@ -765,17 +765,14 @@ _}
 ; generated code should be semantically equivalent to input
 ; parse identity is a sufficiently strong property
 (module+ test
-  (require (prefix-in simple- "parse/simpleParser.rkt")
-           (prefix-in function- "parse/functionParser.rkt")
-           (prefix-in class- "parse/classParser.rkt"))
+  (require "parse/parser.rkt")
   
-  (define ((_ce parser) src)
-    (ce (parser (stmt-list (parser src)))
-        (parser src)))
+  (define (cpe src)
+    (ce (parse-str (stmt-list (parse-str src)))
+        (parse-str src)))
   
-  (define sce (_ce simple-parser-str))
-  (sce "var z;")
-  (sce "
+  (cpe "var z;")
+  (cpe "
 var z = (1 + 2) + (4 - 5);
 while (false && !false)
   if (false) {
@@ -796,8 +793,7 @@ while (false && !false)
 return 5 + 5;
 ")
   
-  (define fce (_ce function-parser-str))
-  (fce "
+  (cpe "
 var apple;
 var banana = f1(f2(3), apple);
 function main() {
@@ -830,8 +826,8 @@ function main() {
   return 5 + 5;
 }
 ")
-  (define cce (_ce class-parser-str))
-  (cce "
+
+  (cpe "
 class A extends Base {
 
   static var x;
