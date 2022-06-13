@@ -1,6 +1,5 @@
 #lang racket/base
-(require "test-shared.rkt"
-         "../src/interpreter.rkt"
+(require "../test-shared.rkt"
          rackunit)
 
 ;; Tests provided in the assignment

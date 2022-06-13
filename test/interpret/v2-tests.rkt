@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require "test-shared.rkt"
-         "../src/interpreter.rkt"
+(require "../test-shared.rkt"
          rackunit)
 
 (define (i prog-str)

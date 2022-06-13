@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "../util/map.rkt"
+(require "../../util/map.rkt"
          "function-table.rkt"
          "var-table.rkt")
 (provide (prefix-out class: (all-defined-out)))

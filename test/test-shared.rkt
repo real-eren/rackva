@@ -1,7 +1,7 @@
 #lang racket/base
-(require "../src/state/state.rkt"
-         "../src/interpreter.rkt"
-         "../src/user-errors.rkt"
+(require "../src/interpret/state/state.rkt"
+         "../src/interpret/interpreter.rkt"
+         "../src/interpret/user-errors.rkt"
          rackunit
          racket/list)
 
@@ -9,7 +9,10 @@
          i-exn-str
          cs-types
          testing-user-exn
-         check-exn-result)
+         check-exn-result
+	 mode:script
+	 mode:class
+	 mode:main-func)
 
 ;; for regular testing
 (define (i-str prog-str mode)

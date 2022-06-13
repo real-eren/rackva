@@ -1,7 +1,7 @@
 #lang racket/base
 (require "function.rkt"
          "instance.rkt"
-         "../util/map.rkt")
+         "../../util/map.rkt")
 
 (provide (prefix-out ctxt: (all-defined-out)))
 

@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "../util/map.rkt"
+(require "../../util/map.rkt"
          racket/list
          racket/string)
 

@@ -1,8 +1,8 @@
 #lang racket/base
 
-(require "test-shared.rkt"
-         "../src/interpreter.rkt"
-         "../src/user-errors.rkt"
+(require "../test-shared.rkt"
+         "../../src/interpret/interpreter.rkt"
+         "../../src/interpret/user-errors.rkt"
          rackunit)
 
 

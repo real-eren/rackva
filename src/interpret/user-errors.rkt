@@ -1,6 +1,6 @@
 #lang racket/base
-(require "src-gen.rkt"
-         "util/map.rkt")
+(require "../src-gen.rkt"
+         "../util/map.rkt")
 
 (provide (prefix-out ue: (except-out (all-defined-out)
                                      exn:of
