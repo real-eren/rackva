@@ -24,7 +24,7 @@ jobs:
           path: |
             ~/.cache/racket
             ~/.local/share/racket
-          key: ${{ runner.os }}-racket-8.2
+          key: ${{ runner.os }}-racket-8.5
 
       - name: Install Racket
         uses: Bogdanp/setup-racket@v1.8.1
@@ -32,13 +32,13 @@ jobs:
           architecture: 'x64'
           distribution: 'full'
           variant: 'CS'
-          version: '8.2'
+          version: '8.5'
 
       - name: Install Dependencies
         run: raco pkg install --auto --skip-installed cover
         
       - name: Run Tests
-        run: raco test -e --timeout 120 -q --table --jobs 10 src test
+        run: raco test -e --timeout 120 -q --table --jobs 6 src test
         
       - run: raco cover -Q src test
       
