@@ -1,5 +1,6 @@
 #lang racket/base
 (require rackunit
+         racket/string
          "../../src/parse/parser.rkt")
 
 ; ; v1
@@ -160,3 +161,58 @@ class A { }")
    (if false (begin))
    (class A () ())))
 
+; ; Comments
+; replacing the comment with white space should produce identical parse-trees
+(define-check (test-cmnt-parse msg str)
+  (test-equal?
+   msg
+   (parse-str str)
+   (parse-str (string-replace str #rx"//.*?\n|/\\*.*?\\*/" " "))))
+
+(test-cmnt-parse
+ "line comment at end of var decl line, spaces"
+ "var x; // important variable")
+
+(test-cmnt-parse
+ "line comment at end of var decl line, no spaces"
+ "var x;//important variable")
+
+(test-cmnt-parse
+ "block comment between tokens, chars adjacent to delimiters"
+ "var /**/ x;")
+
+(test-cmnt-parse
+ "block comment between tokens, with spaces"
+ "var /*abcd*/ x;")
+
+(test-cmnt-parse
+ "block comment between tokens, without spaces"
+ "var/**/x;")
+
+(test-cmnt-parse
+ "block comment between tokens, 3 stars"
+ "var/***/x;")
+
+(test-cmnt-parse
+ "block comment between tokens, 4 stars"
+ "var/****/x;")
+
+(test-cmnt-parse
+ "block comment between tokens, multiple start delimiters"
+ "var/*/* /* */x;")
+
+(test-cmnt-parse
+ "block comment between token and semicolon, without spaces"
+ "var x/**/;")
+
+(test-cmnt-parse
+ "line comment only spans one line"
+ "var x; // comment
+var y;
+var z;")
+
+(test-cmnt-parse
+ "line comment inside block comment doesn't ignore end */"
+ "var x; /* block start
+ // line-comment block-end */
+var y;")
