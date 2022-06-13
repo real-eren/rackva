@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require "test-shared.rkt"
-         "../src/interpreter.rkt"
+(require "../test-shared.rkt"
          rackunit)
 
 ; white space / newlines do not affect the parser,

@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require "../util/map.rkt")
+(require "../../util/map.rkt")
 (provide is-instance?
          (prefix-out instance:
                      (except-out (all-defined-out)

@@ -6,9 +6,9 @@
          "function-table.rkt"
          "instance.rkt"
          "var-table.rkt"
-         "../util/map.rkt"
-         "../util/predicates.rkt"
-         "../util/stack.rkt"
+         "../../util/map.rkt"
+         "../../util/predicates.rkt"
+         "../../util/stack.rkt"
          racket/bool
          racket/function
          racket/list)

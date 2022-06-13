@@ -2,12 +2,12 @@
 
 (require "conts.rkt"
          "user-errors.rkt"
-         "parse/parser.rkt"
+         "../parse/parser.rkt"
          "state/context.rkt"
          "state/function.rkt"
          "state/instance.rkt"
          "state/state.rkt"
-         "util/map.rkt"
+         "../util/map.rkt"
          racket/bool
          racket/list
          racket/string)
