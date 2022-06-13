@@ -27,7 +27,7 @@ jobs:
           key: ${{ runner.os }}-racket-8.2
 
       - name: Install Racket
-        uses: Bogdanp/setup-racket@v1.6.1
+        uses: Bogdanp/setup-racket@v1.8.1
         with:
           architecture: 'x64'
           distribution: 'full'
