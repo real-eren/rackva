@@ -42,7 +42,7 @@
 
                                   declare-class
                                   has-class?
-                                  get-class
+                                  subclass?
                                   current-type-parent-name
                                   current-type-has-parent?
                                   get-parent-name
@@ -530,6 +530,13 @@
     (if (has-parent? class-name context state)
         (+ 1 (get-class-height (get-parent-name class-name context state) context state))
         1)))
+
+; class1 instanceof class2
+(define subclass?
+  (lambda (class1 class2 context state)
+    (or (eq? class1 class2)
+        (and (has-parent? class1 context state)
+             (get-parent-name class1 context state)))))
 
 ;; declares an empty class
 (define declare-class
