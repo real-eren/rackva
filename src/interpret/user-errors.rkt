@@ -106,10 +106,11 @@
             "uncaught exception: ~a"
             'exn-val))
 
-(define type:expected-boolean-val 'expected-boolean-val)
-(define expected-boolean-val
-  (exn:ctor type:expected-boolean-val
-            "expected a boolean, got: `~a`"
+(define type:type-mismatch 'type-mismatch)
+(define type-mismatch
+  (exn:ctor type:type-mismatch
+            "expected a value of type `~a`, got: `~a`"
+            'expected-type
             'val))
 
 (define type:expected-boolean-expr 'expected-boolean-expr)
