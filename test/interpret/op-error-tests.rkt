@@ -9,6 +9,10 @@
 (define (i program)
   (i-exn-str program mode:script))
 
+(define-check (check-bool-expr-exn exn-result expr-string)
+  (check-equal? (ue:exn:type (car exn-result)) ue:type:expected-boolean-expr)
+  (check-equal? (ue:exn:property 'expr (car exn-result)) expr-string))
+
 (define-check (check-type-error exn-result expected-type expected-val)
   (define exn (car exn-result))
   (check-equal? (ue:exn:type exn) ue:type:type-mismatch)
@@ -21,63 +25,35 @@
 
 (test-case
  "int literal in ||"
- (check-type-error (i "return 1 || false;")
-                   type:bool
-                   1)
- (check-type-error (i "return false || 1;")
-                   type:bool
-                   1))
+ (check-bool-expr-exn (i "return 1 || false;") "1")
+ (check-bool-expr-exn (i "return false || 1;") "1"))
 
 (test-case
  "int literal in &&"
- (check-type-error (i "return 1 && true;")
-                   type:bool
-                   1)
- (check-type-error (i "return true && 1;")
-                   type:bool
-                   1))
+ (check-bool-expr-exn (i "return 1 && true;") "1")
+ (check-bool-expr-exn (i "return true && 1;") "1"))
 
 (test-case
  "int expression in ||"
- (check-exn-result (i "return (1 + 2) || false;")
-                   ue:type:expected-boolean-expr
-                   '(return))
- (check-exn-result (i "return false || (2 + 1);")
-                   ue:type:expected-boolean-expr
-                   '(return)))
+ (check-bool-expr-exn (i "return (1 + 2) || false;") "1 + 2")
+ (check-bool-expr-exn (i "return false || (2 + 1);") "2 + 1"))
 
 (test-case
  "int expression in &&"
- (check-exn-result (i "return (1 + 2) && false;")
-                   ue:type:expected-boolean-expr
-                   '(return))
- (check-exn-result (i "return true && (2 + 1);")
-                   ue:type:expected-boolean-expr
-                   '(return)))
+ (check-bool-expr-exn (i "return (1 + 2) && false;") "1 + 2")
+ (check-bool-expr-exn (i "return true && (2 + 1);") "2 + 1"))
 
 (test-case
  "LHS type error in || detected before RHS"
- (check-type-error (i "return 1 || (1 + 1);")
-                   type:bool
-                   1)
- (check-exn-result (i "return (1 + 1) || 1;")
-                   ue:type:expected-boolean-expr
-                   '(return)))
+ (check-bool-expr-exn (i "return 1 || (1 + 1);") "1")
+ (check-bool-expr-exn (i "return (1 + 1) || 1;") "1 + 1"))
 
 (test-case
  "LHS type error in && detected before RHS"
- (check-type-error (i "return 1 || (1 + 1);")
-                   type:bool
-                   1)
- (check-exn-result (i "return (1 + 1) || 1;")
-                   ue:type:expected-boolean-expr
-                   '(return)))
+ (check-bool-expr-exn (i "return 1 || (1 + 1);") "1")
+ (check-bool-expr-exn (i "return (1 + 1) || 1;") "1 + 1"))
 
 (test-case
  "chained || and &&"
- (check-type-error (i "return 1 || 1/0 || 1/0;")
-                   type:bool
-                   1)
- (check-type-error (i "return 1 && 1/0 && 1/0;")
-                   type:bool
-                   1))
+ (check-bool-expr-exn (i "return 1 || 1/0 || 1/0;") "1")
+ (check-bool-expr-exn (i "return 1 && 1/0 && 1/0;") "1"))
