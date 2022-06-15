@@ -3,6 +3,7 @@
          "state/state.rkt")
 (provide type-of
          compatible?
+         operator-type-signature-list
          (prefix-out type: (combine-out any bool int)))
 
 ;;;; constants and functions related to the type system
@@ -56,3 +57,18 @@
                   '(5 0 -5 #T #F sample-object-2))
   (check-all-true (λ (v) (compatible? v any #F new-state))
                   '(5 0 -5 #T #F sample-object-1 sample-object-2)))
+
+
+;; each operator has a list of valid signatures. each signature is a list of types
+(define (operator-type-signature-list op-symbol)
+  (let ([any-any    (list (list any any))]
+        [bool-bool  (list (list bool bool))]
+        [int-int    (list (list int int))]
+        [bool       (list (list bool))]
+        [int        (list (list int))])
+    (case op-symbol
+      [(&& ||)               bool-bool]
+      [(!)                   bool]
+      [(== !=)               any-any]
+      [(< <= > >= + / * %)   int-int]
+      [(-)                   (append int-int int)])))
