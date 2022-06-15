@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require "conts.rkt"
+         "type.rkt"
          "user-errors.rkt"
          "../parse/parser.rkt"
          "state/context.rkt"
@@ -99,7 +100,7 @@
 
 ;; takes a value and modifies it for output
 (define prep-val-for-output
-  (lambda (value)
+  (lambda (value state)
     (cond
       [(eq? #t value)         'true]
       [(eq? #f value)         'false]
@@ -869,7 +870,7 @@
                                              #:return (λ (v s)
                                                         (if (boolean? v)
                                                             ((return conts) v s)
-                                                            ((user-exn conts) (ue:expected-boolean-val v) s)))))))
+                                                            ((user-exn conts) (ue:type-mismatch type:bool (prep-val-for-output v s)) s)))))))
 
 ; Like Mvalue, but produces bool else error, and handles short-circuiting
 (define Mbool-impl
@@ -1421,7 +1422,7 @@
                                                                 #:return (lambda (v s)
                                                                            (if (is-instance? v)
                                                                                ((return conts) RHS s (ctxt:of-instance v context))
-                                                                               ((user-exn conts) (ue:non-instance-dot (prep-val-for-output v)) s)))))]
+                                                                               ((user-exn conts) (ue:non-instance-dot (prep-val-for-output v s)) s)))))]
       [(state:has-class? LHS context state)   ((return conts) RHS state (ctxt:in-static LHS context))]
       [else                                   ((user-exn conts) (ue:unknown-LHS-dot LHS) state)])))
 
@@ -1536,6 +1537,8 @@
    '*  *
    '%  modulo))
 
+
+
 ; symbol n is 'this or 'super
 (define super-or-this?
   (lambda (sym)
@@ -1543,7 +1546,7 @@
 
 ;;;;;;;; Common Continuations
 
-(define default-return (lambda (v s) (prep-val-for-output v)))
+(define default-return prep-val-for-output)
 ; interpret-parse functions should use the throw cont parameter
 ; false -> Mstate-throw throws a user-exn, needs conts for user-exn's context stack
 (define default-throw
