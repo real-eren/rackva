@@ -109,7 +109,7 @@
 (define type:type-mismatch 'type-mismatch)
 (define type-mismatch
   (exn:ctor type:type-mismatch
-            "expected a value of type `~a`, got: `~a`"
+            "expected type(s) `~a`, given value(s): `~a`"
             'expected-type
             'val))
 

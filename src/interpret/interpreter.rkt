@@ -3,11 +3,12 @@
 (require "conts.rkt"
          "type.rkt"
          "user-errors.rkt"
-         "../parse/parser.rkt"
          "state/context.rkt"
          "state/function.rkt"
          "state/instance.rkt"
          "state/state.rkt"
+         "../parse/parser.rkt"
+         "../src-gen.rkt"
          "../util/map.rkt"
          racket/bool
          racket/list
@@ -866,11 +867,11 @@
 ;; error if not bool
 (define Mbool
   (lambda (expr state context conts)
-    (Mbool-impl expr state context (conts-of conts
-                                             #:return (λ (v s)
-                                                        (if (boolean? v)
-                                                            ((return conts) v s)
-                                                            ((user-exn conts) (ue:type-mismatch type:bool (prep-val-for-output v s)) s)))))))
+    (define (bool-return v s)
+      (if (boolean? v)
+          ((return conts) v s)
+          ((user-exn conts) (ue:expected-boolean-expr (value-AST->src-string expr)) s)))
+    (Mbool-impl expr state context (conts-of conts #:return bool-return))))
 
 ; Like Mvalue, but produces bool else error, and handles short-circuiting
 (define Mbool-impl
@@ -904,7 +905,8 @@
       [(is-nested-boolean-expr?
         expr)                    (Mvalue-op expr state context conts)]
       [(is-fun-call? expr)       (Mvalue-fun expr state context conts)]
-      [else                      ((user-exn conts) (ue:expected-boolean-expr expr) state)])))
+      ; else not bool-expr, 0 gets caught by check in return continuation, produces appropriate exn
+      [else                      ((return conts) 0 state)])))
 
 
 
@@ -1342,8 +1344,14 @@
                     context
                     (conts-of conts
                               #:return (lambda (val-list s)
-                                         ((return conts) (apply (op-of-symbol (op-op expr)) val-list) s))))))
+                                         (apply-op (op-op expr) val-list s context conts))))))
 
+(define apply-op
+  (lambda (op-symbol vals state context conts)
+    (let ([sig-list  (operator-type-signature-list op-symbol)])
+      (if (member (map type-of vals) sig-list)
+          ((return conts) (apply (op-symbol->proc op-symbol) vals) state)
+          ((user-exn conts) (ue:type-mismatch sig-list vals) state)))))
 
 ;; takes a list of exprs and maps them to values,
 ;; propagating the state changes (so that they evaluate correctly)
@@ -1364,7 +1372,7 @@
                                                                           ((return conts) (cons v1 v2) s2))))))))))
 
 ;; assuming the atom is an op-symbol, returns the associated function
-(define op-of-symbol
+(define op-symbol->proc
   (lambda (op-symbol)
     (or (map:get op-symbol arithmetic-op-table)
         (map:get op-symbol boolean-op-table))))
