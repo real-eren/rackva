@@ -1,7 +1,10 @@
 #lang racket/base
 (require racket/list
          racket/string)
-(provide AST-path->stack-trace)
+(provide AST-path->stack-trace
+         (rename-out [statement  statement-AST->src-string]
+                     [value      value-AST->src-string]
+                     [stmt-list  stmt-list-AST->src-string]))
 
 ;;;; Takes AST nodes from parser
 ;;;; and produces equivalent source code
