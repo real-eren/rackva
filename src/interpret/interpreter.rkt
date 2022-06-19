@@ -1340,10 +1340,12 @@
 (define apply-op
   (lambda (op-symbol vals state context conts)
     (let ([sig-list  (operator-type-signature-list op-symbol)])
-      (if (memf (λ (sig) (vals-match-sig? vals sig state context))
-                sig-list)
-          ((return conts) (apply (op-symbol->proc op-symbol) vals) state)
-          ((user-exn conts) (ue:type-mismatch op-symbol sig-list vals) state)))))
+      (cond
+        [(and (eq? op-symbol '/)
+              (eq? (second vals) 0)) ((user-exn conts) (ue:divide-by-zero) state)]
+        [(memf (λ (sig) (vals-match-sig? vals sig state context))
+               sig-list)             ((return conts) (apply (op-symbol->proc op-symbol) vals) state)]
+        [else                        ((user-exn conts) (ue:type-mismatch op-symbol sig-list vals) state)]))))
 
 (define vals-match-sig?
   (lambda (vals sig state context)

@@ -85,6 +85,12 @@
                    (list (list type:int type:int))
                    '(#F 0)))
 
+(test-case
+ "divide by zero"
+ (check-exn-result (i "return 1 / 0;")
+                   ue:type:divide-by-zero
+                   '(return)))
+
 ; ; NUM COMPARISON
 
 (test-case

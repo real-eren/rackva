@@ -137,6 +137,11 @@
             "expected a boolean expression, got: `~a`"
             'expr))
 
+(define type:divide-by-zero 'divide-by-zero)
+(define divide-by-zero
+  (exn:ctor type:divide-by-zero
+            "attempted to divide by zero"))
+
 
 
 (define type:non-var-in-ref-param 'non-variable-in-reference-param)
