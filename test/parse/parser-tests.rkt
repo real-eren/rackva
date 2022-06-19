@@ -27,7 +27,7 @@ return x;
     (begin
       (try
        ((= x (+ x 10)) (break))
-       (catch (e) ((if (|| true false) (return 0))))
+       (catch (e) ((if (\|\| true false) (return 0))))
        (finally ((= x (+ x 1)))))))
    (return x)))
 

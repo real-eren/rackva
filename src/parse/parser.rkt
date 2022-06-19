@@ -443,7 +443,7 @@
   (lambda (firstoperand)
     (let ((op (get-next-symbol)))
       (if (and (eq? (car op) 'BINARY-OP) (eq? (cdr op) '\|\|))
-          (orterm-parse-helper (list '|| firstoperand (andterm-parse (get-next-symbol))))
+          (orterm-parse-helper (list '\|\| firstoperand (andterm-parse (get-next-symbol))))
           (begin
             (unget-next-symbol)
             firstoperand)))))

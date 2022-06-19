@@ -1526,7 +1526,7 @@
     (map:contains? (action nested-expr) boolean-op-table)))
 
 (define is-&&? (checker-of '&&))
-(define is-||? (checker-of '||))
+(define is-||? (checker-of '\|\|))
 
 ;; Takes a nested expression and returns whether it contains a recognized operation
 (define has-op?
@@ -1540,7 +1540,7 @@
 (define boolean-op-table
   (map:of
    '&& error ; short-circuit ops must be handled as a special case
-   '|| error
+   '\|\| error
    '!  not
    '== eq?
    '!= (lambda (a b) (not (eq? a b)))
