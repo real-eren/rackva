@@ -275,7 +275,7 @@ finally {
 (test-case
  "int in if cond"
  (check-exn-result (i "if (1) return 0;")
-                   ue:type:type-mismatch
+                   ue:type:expected-boolean-expr
                    '(if))
  (check-exn-result (i "if (1 + 1) return 0;")
                    ue:type:expected-boolean-expr
@@ -284,7 +284,7 @@ finally {
 (test-case
  "int in while cond"
  (check-exn-result (i "while (1) return 0;")
-                   ue:type:type-mismatch
+                   ue:type:expected-boolean-expr
                    '(while))
  (check-exn-result (i "while (1 + 1) return 0;")
                    ue:type:expected-boolean-expr

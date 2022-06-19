@@ -1349,9 +1349,21 @@
 (define apply-op
   (lambda (op-symbol vals state context conts)
     (let ([sig-list  (operator-type-signature-list op-symbol)])
-      (if (member (map type-of vals) sig-list)
+      (if (memf (λ (sig) (vals-match-sig? vals sig state context))
+                sig-list)
           ((return conts) (apply (op-symbol->proc op-symbol) vals) state)
           ((user-exn conts) (ue:type-mismatch sig-list vals) state)))))
+
+(define vals-match-sig?
+  (lambda (vals sig state context)
+    (cond
+      ; should be same length
+      [(and (null? vals)
+            (null? sig))   #T]
+      [(or (null? vals)
+           (null? sig))    #F]
+      [else                (and (compatible? (car vals) (car sig) state context)
+                                (vals-match-sig? (cdr vals) (cdr sig) state context))])))
 
 ;; takes a list of exprs and maps them to values,
 ;; propagating the state changes (so that they evaluate correctly)

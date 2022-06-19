@@ -29,7 +29,7 @@
   (check-equal? (type-of sample-object-2) 'Foo))
 
 ; is v accepted where a value of type t is required?
-(define (compatible? v t context state)
+(define (compatible? v t state context)
   (not (not (case t
               [(any)       #T]
               [(bool)      (boolean? v)]
