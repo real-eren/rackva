@@ -1,12 +1,15 @@
 #lang racket/base
 
 (require "conts.rkt"
+         "io-format.rkt"
+         "type.rkt"
          "user-errors.rkt"
-         "../parse/parser.rkt"
          "state/context.rkt"
          "state/function.rkt"
          "state/instance.rkt"
          "state/state.rkt"
+         "../parse/parser.rkt"
+         "../src-gen.rkt"
          "../util/map.rkt"
          racket/bool
          racket/list
@@ -96,16 +99,6 @@
                                                    user-exn))
                              #:return (λ (v s) (user-exn (ue:unexpected-return) s)))])))
 
-
-;; takes a value and modifies it for output
-(define prep-val-for-output
-  (lambda (value)
-    (cond
-      [(eq? #t value)         'true]
-      [(eq? #f value)         'false]
-      [(number? value)        value]
-      [(is-instance? value)   value]
-      [else                   (error "returned an unsupported type: " value)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -865,11 +858,11 @@
 ;; error if not bool
 (define Mbool
   (lambda (expr state context conts)
-    (Mbool-impl expr state context (conts-of conts
-                                             #:return (λ (v s)
-                                                        (if (boolean? v)
-                                                            ((return conts) v s)
-                                                            ((user-exn conts) (ue:expected-boolean-val v) s)))))))
+    (define (bool-return v s)
+      (if (boolean? v)
+          ((return conts) v s)
+          ((user-exn conts) (ue:expected-boolean-expr (value-AST->src-string expr)) s)))
+    (Mbool-impl expr state context (conts-of conts #:return bool-return))))
 
 ; Like Mvalue, but produces bool else error, and handles short-circuiting
 (define Mbool-impl
@@ -903,7 +896,8 @@
       [(is-nested-boolean-expr?
         expr)                    (Mvalue-op expr state context conts)]
       [(is-fun-call? expr)       (Mvalue-fun expr state context conts)]
-      [else                      ((user-exn conts) (ue:expected-boolean-expr expr) state)])))
+      ; else not bool-expr, 0 gets caught by check in return continuation, produces appropriate exn
+      [else                      ((return conts) 0 state)])))
 
 
 
@@ -1341,8 +1335,28 @@
                     context
                     (conts-of conts
                               #:return (lambda (val-list s)
-                                         ((return conts) (apply (op-of-symbol (op-op expr)) val-list) s))))))
+                                         (apply-op (op-op expr) val-list s context conts))))))
 
+(define apply-op
+  (lambda (op-symbol vals state context conts)
+    (let ([sig-list  (operator-type-signature-list op-symbol)])
+      (cond
+        [(and (eq? op-symbol '/)
+              (eq? (second vals) 0)) ((user-exn conts) (ue:divide-by-zero) state)]
+        [(memf (λ (sig) (vals-match-sig? vals sig state context))
+               sig-list)             ((return conts) (apply (op-symbol->proc op-symbol) vals) state)]
+        [else                        ((user-exn conts) (ue:type-mismatch op-symbol sig-list vals) state)]))))
+
+(define vals-match-sig?
+  (lambda (vals sig state context)
+    (cond
+      ; should be same length
+      [(and (null? vals)
+            (null? sig))   #T]
+      [(or (null? vals)
+           (null? sig))    #F]
+      [else                (and (compatible? (car vals) (car sig) state context)
+                                (vals-match-sig? (cdr vals) (cdr sig) state context))])))
 
 ;; takes a list of exprs and maps them to values,
 ;; propagating the state changes (so that they evaluate correctly)
@@ -1363,7 +1377,7 @@
                                                                           ((return conts) (cons v1 v2) s2))))))))))
 
 ;; assuming the atom is an op-symbol, returns the associated function
-(define op-of-symbol
+(define op-symbol->proc
   (lambda (op-symbol)
     (or (map:get op-symbol arithmetic-op-table)
         (map:get op-symbol boolean-op-table))))
@@ -1421,7 +1435,7 @@
                                                                 #:return (lambda (v s)
                                                                            (if (is-instance? v)
                                                                                ((return conts) RHS s (ctxt:of-instance v context))
-                                                                               ((user-exn conts) (ue:non-instance-dot (prep-val-for-output v)) s)))))]
+                                                                               ((user-exn conts) (ue:non-instance-dot (format-val-for-output v)) s)))))]
       [(state:has-class? LHS context state)   ((return conts) RHS state (ctxt:in-static LHS context))]
       [else                                   ((user-exn conts) (ue:unknown-LHS-dot LHS) state)])))
 
@@ -1505,7 +1519,7 @@
     (map:contains? (action nested-expr) boolean-op-table)))
 
 (define is-&&? (checker-of '&&))
-(define is-||? (checker-of '||))
+(define is-||? (checker-of '\|\|))
 
 ;; Takes a nested expression and returns whether it contains a recognized operation
 (define has-op?
@@ -1519,7 +1533,7 @@
 (define boolean-op-table
   (map:of
    '&& error ; short-circuit ops must be handled as a special case
-   '|| error
+   '\|\| error
    '!  not
    '== eq?
    '!= (lambda (a b) (not (eq? a b)))
@@ -1536,6 +1550,8 @@
    '*  *
    '%  modulo))
 
+
+
 ; symbol n is 'this or 'super
 (define super-or-this?
   (lambda (sym)
@@ -1543,7 +1559,7 @@
 
 ;;;;;;;; Common Continuations
 
-(define default-return (lambda (v s) (prep-val-for-output v)))
+(define default-return (λ (v s) (format-val-for-output v)))
 ; interpret-parse functions should use the throw cont parameter
 ; false -> Mstate-throw throws a user-exn, needs conts for user-exn's context stack
 (define default-throw

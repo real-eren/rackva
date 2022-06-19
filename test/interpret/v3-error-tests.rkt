@@ -84,7 +84,7 @@ class A {
 (test-case
  "instance in if/while cond"
  (check-exn-result (i "class A { static function main() { var a = new A(); if (a) return 0; } }" "A")
-                   ue:type:expected-boolean-val
+                   ue:type:expected-boolean-expr
                    '(if "A::main()"))
  (check-exn-result (i "class A { static function main() { if (new A()) return 0; } }" "A")
                    ue:type:expected-boolean-expr
@@ -93,7 +93,7 @@ class A {
 (test-case
  "instance in || / &&"
  (check-exn-result (i "class A { static function main() { var a = new A(); return a || true; } }" "A")
-                   ue:type:expected-boolean-val
+                   ue:type:expected-boolean-expr
                    '(return "A::main()"))
  (check-exn-result (i "class A { static function main() { return new B() || false; } }" "A")
                    ue:type:expected-boolean-expr

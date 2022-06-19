@@ -1,6 +1,9 @@
 #lang racket/base
-(require "../src-gen.rkt"
-         "../util/map.rkt")
+(require "io-format.rkt"
+         "../src-gen.rkt"
+         "../util/map.rkt"
+         racket/string
+         racket/format)
 
 (provide (prefix-out ue: (except-out (all-defined-out)
                                      exn:of
@@ -106,17 +109,39 @@
             "uncaught exception: ~a"
             'exn-val))
 
-(define type:expected-boolean-val 'expected-boolean-val)
-(define expected-boolean-val
-  (exn:ctor type:expected-boolean-val
-            "expected a boolean, got: `~a`"
-            'val))
+(define type:type-mismatch 'type-mismatch)
+(define (type-mismatch op-symbol valid-signatures vals)
+  (exn:of type:type-mismatch
+          (λ (exn)
+            (format "`~a` expected type(s) ~a\ngiven value~a ~a"
+                    op-symbol
+                    (string-join (map (λ (sig)
+                                        (string-join (map symbol->string sig)
+                                                     ", "
+                                                     #:before-first "<"
+                                                     #:after-last ">"))
+                                      valid-signatures)
+                                 " or ")
+                    (if (> (length vals) 1) "s" "")
+                    (string-join (map (λ (v) (~a (format-val-for-output v)))
+                                      vals)
+                                 ", "
+                                 #:before-first "`"
+                                 #:after-last "`")))
+          '(op-symbol expected-types vals)
+          (list op-symbol valid-signatures vals)))
 
 (define type:expected-boolean-expr 'expected-boolean-expr)
 (define expected-boolean-expr
   (exn:ctor type:expected-boolean-expr
             "expected a boolean expression, got: `~a`"
             'expr))
+
+(define type:divide-by-zero 'divide-by-zero)
+(define divide-by-zero
+  (exn:ctor type:divide-by-zero
+            "attempted to divide by zero"))
+
 
 
 (define type:non-var-in-ref-param 'non-variable-in-reference-param)
