@@ -71,4 +71,4 @@
       [(!)                   bool]
       [(== !=)               any-any]
       [(< <= > >= + / * %)   int-int]
-      [(-)                   (append int-int int)])))
+      [(-)                   (append int int-int)])))

@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require "conts.rkt"
+         "io-format.rkt"
          "type.rkt"
          "user-errors.rkt"
          "state/context.rkt"
@@ -98,16 +99,6 @@
                                                    user-exn))
                              #:return (λ (v s) (user-exn (ue:unexpected-return) s)))])))
 
-
-;; takes a value and modifies it for output
-(define prep-val-for-output
-  (lambda (value state)
-    (cond
-      [(eq? #t value)         'true]
-      [(eq? #f value)         'false]
-      [(number? value)        value]
-      [(is-instance? value)   value]
-      [else                   (error "returned an unsupported type: " value)])))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1352,7 +1343,7 @@
       (if (memf (λ (sig) (vals-match-sig? vals sig state context))
                 sig-list)
           ((return conts) (apply (op-symbol->proc op-symbol) vals) state)
-          ((user-exn conts) (ue:type-mismatch sig-list vals) state)))))
+          ((user-exn conts) (ue:type-mismatch op-symbol sig-list vals) state)))))
 
 (define vals-match-sig?
   (lambda (vals sig state context)
@@ -1442,7 +1433,7 @@
                                                                 #:return (lambda (v s)
                                                                            (if (is-instance? v)
                                                                                ((return conts) RHS s (ctxt:of-instance v context))
-                                                                               ((user-exn conts) (ue:non-instance-dot (prep-val-for-output v s)) s)))))]
+                                                                               ((user-exn conts) (ue:non-instance-dot (format-val-for-output v)) s)))))]
       [(state:has-class? LHS context state)   ((return conts) RHS state (ctxt:in-static LHS context))]
       [else                                   ((user-exn conts) (ue:unknown-LHS-dot LHS) state)])))
 
@@ -1566,7 +1557,7 @@
 
 ;;;;;;;; Common Continuations
 
-(define default-return prep-val-for-output)
+(define default-return (λ (v s) (format-val-for-output v)))
 ; interpret-parse functions should use the throw cont parameter
 ; false -> Mstate-throw throws a user-exn, needs conts for user-exn's context stack
 (define default-throw
